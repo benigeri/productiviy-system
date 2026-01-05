@@ -111,6 +111,64 @@ Deno.test("handleWebhook - reacts with thumbs up after creating issue", async ()
   assertEquals(reaction?.emoji, "👍");
 });
 
+Deno.test("handleWebhook - splits multiline into title and description", async () => {
+  let captured: { title: string; description?: string } | undefined;
+
+  const deps = createMockDeps({
+    cleanupContent: (text) => Promise.resolve(text),
+    createTriageIssue: (title, _apiKey, description) => {
+      captured = { title, description };
+      return Promise.resolve({
+        id: "issue-123",
+        identifier: "BEN-100",
+        url: "https://linear.app/team/issue/BEN-100",
+      });
+    },
+  });
+
+  const multilineText = `// fb - ethan - Qualification questions
+Ask about team size
+Ask about budget`;
+
+  const request = new Request("https://example.com/webhook", {
+    method: "POST",
+    headers: { "X-Telegram-Bot-Api-Secret-Token": "test_secret" },
+    body: JSON.stringify(createTextUpdate(multilineText)),
+  });
+
+  await handleWebhook(request, deps);
+
+  assertEquals(captured?.title, "// fb - ethan - Qualification questions");
+  assertEquals(captured?.description, "Ask about team size\nAsk about budget");
+});
+
+Deno.test("handleWebhook - single line message has no description", async () => {
+  let captured: { title: string; description?: string } | undefined;
+
+  const deps = createMockDeps({
+    cleanupContent: (text) => Promise.resolve(text),
+    createTriageIssue: (title, _apiKey, description) => {
+      captured = { title, description };
+      return Promise.resolve({
+        id: "issue-123",
+        identifier: "BEN-101",
+        url: "https://linear.app/team/issue/BEN-101",
+      });
+    },
+  });
+
+  const request = new Request("https://example.com/webhook", {
+    method: "POST",
+    headers: { "X-Telegram-Bot-Api-Secret-Token": "test_secret" },
+    body: JSON.stringify(createTextUpdate("Single line task")),
+  });
+
+  await handleWebhook(request, deps);
+
+  assertEquals(captured?.title, "Single line task");
+  assertEquals(captured?.description, undefined);
+});
+
 // ============================================================================
 // Voice message flow
 // ============================================================================
