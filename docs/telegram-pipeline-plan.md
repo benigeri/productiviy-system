@@ -5,45 +5,6 @@ Send voice notes or text messages from phone via Telegram → automatically crea
 
 ---
 
-## Development Workflow
-
-### TDD Approach
-1. **Write test first** - Define expected behavior before implementation
-2. **Red** - Run test, confirm it fails
-3. **Green** - Write minimal code to pass
-4. **Refactor** - Clean up while keeping tests green
-
-### Pre-commit Hooks (via lint-staged + husky)
-```bash
-# On every commit:
-- deno fmt --check      # Format check
-- deno lint             # Lint TypeScript
-- deno test             # Run all tests
-```
-
-### Pull Request Workflow
-All changes go through PRs for review - never commit directly to `main`.
-
-1. **Create feature branch**: `git checkout -b feature/description`
-2. **Make changes** following TDD process
-3. **Push branch**: `git push -u origin feature/description`
-4. **Create PR** with clear summary of changes
-5. **User reviews** - can see diff, leave comments
-6. **Merge** after approval
-
-### Agent Workflow (Beads Process)
-When working on any task:
-1. **Create feature branch** from `main`
-2. **Update todo to `in_progress`** before starting
-3. **Write/update tests first** (TDD)
-4. **Implement the feature**
-5. **Run tests locally** - confirm passing
-6. **Commit with descriptive message**
-7. **Push and create PR** for review
-8. **Update todo to `completed`** only after PR is merged
-
----
-
 ## Milestone 1: Core Pipeline (ship first)
 
 ### Architecture
@@ -163,28 +124,3 @@ Reply to a Telegram message → adds a comment to the existing Linear issue.
 ```
 
 ### Not blocking Milestone 1 - ship core first.
-
----
-
-## Task Breakdown (Beads)
-
-### Milestone 1 Tasks
-1. [ ] Create Telegram bot via @BotFather, get token
-2. [ ] Create new Supabase project
-3. [ ] Get API keys: Deepgram + Anthropic
-4. [ ] Initialize Supabase in repo
-5. [ ] Write tests for `telegram.ts`, then implement
-6. [ ] Write tests for `deepgram.ts`, then implement
-7. [ ] Write tests for `claude.ts`, then implement
-8. [ ] Write tests for `linear.ts`, then implement
-9. [ ] Write integration tests for `index.ts`, then implement
-10. [ ] Deploy function + set Telegram webhook
-11. [ ] Add secrets to Supabase
-12. [ ] Test end-to-end: text + voice → Linear triage
-13. [ ] Create iOS Shortcut to open bot chat
-
-### Milestone 2 Tasks
-14. [ ] Create `message_mappings` table in Supabase
-15. [ ] Write tests for reply handling
-16. [ ] Update Edge Function to handle replies → Linear comments
-17. [ ] Test end-to-end: reply → comment on issue
