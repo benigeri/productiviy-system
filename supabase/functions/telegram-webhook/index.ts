@@ -24,7 +24,7 @@ export interface WebhookDeps {
   transcribeAudio: (audioUrl: string, apiKey: string) => Promise<string>;
   cleanupContent: (text: string, apiKey: string) => Promise<string>;
   createTriageIssue: (title: string, apiKey: string) => Promise<LinearIssue>;
-  sendMessage: (chatId: number, text: string, botToken: string) => Promise<void>;
+  sendMessage: (chatId: number, text: string, botToken: string, replyToMessageId?: number) => Promise<void>;
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -66,9 +66,9 @@ export async function handleWebhook(
     // Create Linear issue
     const issue = await deps.createTriageIssue(content, deps.linearKey);
 
-    // Send confirmation to user
+    // Reply to user with confirmation
     const confirmationText = `✓ Created [${issue.identifier}](${issue.url})`;
-    await deps.sendMessage(parsed.chatId, confirmationText, deps.botToken);
+    await deps.sendMessage(parsed.chatId, confirmationText, deps.botToken, parsed.messageId);
 
     return jsonResponse({ ok: true, issue });
   } catch (error) {
@@ -95,7 +95,7 @@ if (import.meta.main) {
       transcribeAudio: (url, apiKey) => transcribeAudioImpl(url, apiKey),
       cleanupContent: (text, apiKey) => cleanupContentImpl(text, apiKey),
       createTriageIssue: (title, apiKey) => createTriageIssueImpl(title, apiKey),
-      sendMessage: (chatId, text, botToken) => sendMessageImpl(chatId, text, botToken),
+      sendMessage: (chatId, text, botToken, replyToMessageId) => sendMessageImpl(chatId, text, botToken, replyToMessageId),
     };
 
     return handleWebhook(req, deps);

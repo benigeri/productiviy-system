@@ -83,8 +83,8 @@ Deno.test("handleWebhook - processes text message end-to-end", async () => {
   assertEquals(body.issue.identifier, "BEN-42");
 });
 
-Deno.test("handleWebhook - sends confirmation message after creating issue", async () => {
-  let sentMessage: { chatId: number; text: string } | undefined;
+Deno.test("handleWebhook - replies to original message with confirmation", async () => {
+  let sentMessage: { chatId: number; text: string; replyToMessageId?: number } | undefined;
 
   const deps = createMockDeps({
     createTriageIssue: () => Promise.resolve({
@@ -92,8 +92,8 @@ Deno.test("handleWebhook - sends confirmation message after creating issue", asy
       identifier: "BEN-99",
       url: "https://linear.app/team/issue/BEN-99",
     }),
-    sendMessage: (chatId, text) => {
-      sentMessage = { chatId, text };
+    sendMessage: (chatId, text, _botToken, replyToMessageId) => {
+      sentMessage = { chatId, text, replyToMessageId };
       return Promise.resolve();
     },
   });
@@ -108,6 +108,7 @@ Deno.test("handleWebhook - sends confirmation message after creating issue", asy
 
   assertEquals(sentMessage?.chatId, 123);
   assertEquals(sentMessage?.text, "✓ Created [BEN-99](https://linear.app/team/issue/BEN-99)");
+  assertEquals(sentMessage?.replyToMessageId, 42);
 });
 
 // ============================================================================

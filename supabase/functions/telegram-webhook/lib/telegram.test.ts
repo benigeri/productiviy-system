@@ -207,11 +207,34 @@ Deno.test("sendMessage - sends message successfully", async () => {
     throw new Error("Unexpected URL");
   };
 
-  await sendMessage(123, "Hello world", "test_bot_token", mockFetch);
+  await sendMessage(123, "Hello world", "test_bot_token", undefined, mockFetch);
 
   assertEquals(capturedBody?.chat_id, 123);
   assertEquals(capturedBody?.text, "Hello world");
   assertEquals(capturedBody?.parse_mode, "Markdown");
+  assertEquals(capturedBody?.reply_to_message_id, undefined);
+});
+
+Deno.test("sendMessage - replies to specific message when replyToMessageId provided", async () => {
+  let capturedBody: Record<string, unknown> | undefined;
+
+  const mockFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input.toString();
+    if (url.includes("/sendMessage")) {
+      capturedBody = JSON.parse(init?.body as string);
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, result: { message_id: 100 } }),
+      } as Response);
+    }
+    throw new Error("Unexpected URL");
+  };
+
+  await sendMessage(123, "Reply text", "test_bot_token", 42, mockFetch);
+
+  assertEquals(capturedBody?.chat_id, 123);
+  assertEquals(capturedBody?.text, "Reply text");
+  assertEquals(capturedBody?.reply_to_message_id, 42);
 });
 
 Deno.test("sendMessage - throws on API error", async () => {
@@ -226,7 +249,7 @@ Deno.test("sendMessage - throws on API error", async () => {
     } as Response);
 
   await assertRejects(
-    () => sendMessage(999, "Hello", "test_bot_token", mockFetch),
+    () => sendMessage(999, "Hello", "test_bot_token", undefined, mockFetch),
     Error,
     "Telegram API error: Bad Request: chat not found"
   );
@@ -236,7 +259,7 @@ Deno.test("sendMessage - throws on network error", async () => {
   const mockFetch = () => Promise.reject(new Error("Network error"));
 
   await assertRejects(
-    () => sendMessage(123, "Hello", "test_bot_token", mockFetch),
+    () => sendMessage(123, "Hello", "test_bot_token", undefined, mockFetch),
     Error,
     "Network error"
   );

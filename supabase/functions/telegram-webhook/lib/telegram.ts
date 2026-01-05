@@ -107,6 +107,7 @@ export async function sendMessage(
   chatId: number,
   text: string,
   botToken: string,
+  replyToMessageId?: number,
   fetchFn: typeof fetch = fetch
 ): Promise<void> {
   const response = await fetchFn(
@@ -119,6 +120,7 @@ export async function sendMessage(
         text,
         parse_mode: "Markdown",
         disable_web_page_preview: true,
+        ...(replyToMessageId && { reply_to_message_id: replyToMessageId }),
       }),
     }
   );
