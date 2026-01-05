@@ -23,7 +23,7 @@ export interface WebhookDeps {
   getFileUrl: (fileId: string, botToken: string) => Promise<string>;
   transcribeAudio: (audioUrl: string, apiKey: string) => Promise<string>;
   cleanupContent: (text: string, apiKey: string) => Promise<string>;
-  createTriageIssue: (title: string, apiKey: string) => Promise<LinearIssue>;
+  createTriageIssue: (title: string, apiKey: string, description?: string) => Promise<LinearIssue>;
   reactToMessage: (chatId: number, messageId: number, emoji: string, botToken: string) => Promise<void>;
 }
 
@@ -63,8 +63,13 @@ export async function handleWebhook(
       return jsonResponse({ error: "Empty message content" }, 400);
     }
 
+    // Split into title (first line) and description (rest)
+    const lines = content.split("\n");
+    const title = lines[0].trim();
+    const description = lines.slice(1).join("\n").trim() || undefined;
+
     // Create Linear issue
-    const issue = await deps.createTriageIssue(content, deps.linearKey);
+    const issue = await deps.createTriageIssue(title, deps.linearKey, description);
 
     // React with thumbs up to confirm
     await deps.reactToMessage(parsed.chatId, parsed.messageId, "👍", deps.botToken);
@@ -93,7 +98,7 @@ if (import.meta.main) {
       getFileUrl: (fileId, botToken) => getFileUrlImpl(fileId, botToken),
       transcribeAudio: (url, apiKey) => transcribeAudioImpl(url, apiKey),
       cleanupContent: (text, apiKey) => cleanupContentImpl(text, apiKey),
-      createTriageIssue: (title, apiKey) => createTriageIssueImpl(title, apiKey),
+      createTriageIssue: (title, apiKey, description) => createTriageIssueImpl(title, apiKey, undefined, description),
       reactToMessage: (chatId, messageId, emoji, botToken) => reactToMessageImpl(chatId, messageId, emoji, botToken),
     };
 
