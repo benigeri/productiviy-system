@@ -6,6 +6,7 @@
     "jsr:@std/internal@^1.0.1": "1.0.12",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "jsr:@supabase/functions-js@*": "2.89.0",
+    "npm:@supabase/functions-js@2.4.3": "2.4.3",
     "npm:openai@^4.52.5": "4.104.0"
   },
   "jsr": {
@@ -32,6 +33,18 @@
     }
   },
   "npm": {
+    "@supabase/functions-js@2.4.3": {
+      "integrity": "sha512-sOLXy+mWRyu4LLv1onYydq+10mNRQ4rzqQxNhbrKLTLTcdcmS9hbWif0bGz/NavmiQfPs4ZcmQJp4WqOXlR4AQ==",
+      "dependencies": [
+        "@supabase/node-fetch"
+      ]
+    },
+    "@supabase/node-fetch@2.6.15": {
+      "integrity": "sha512-1ibVeYUacxWYi9i0cf5efil6adJ9WRyZBLivgjs+AUpewx1F3xPi7gLgaASI2SmIQxPoCEjAsLAzKPgMJVgOUQ==",
+      "dependencies": [
+        "whatwg-url"
+      ]
+    },
     "@types/node-fetch@2.6.13": {
       "integrity": "sha512-QGpRVpzSaUs30JBSGPjOg4Uveu384erbHBoT1zeONvyCfwQxIkUshLAOqN/k9EjGviPRmWTTe6aH2qySWKTVSw==",
       "dependencies": [
@@ -238,7 +251,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@std/assert@1.0.0",
-      "jsr:@supabase/functions-js@2.89.0"
+      "npm:@supabase/functions-js@2.4.3"
     ]
   }
 }
