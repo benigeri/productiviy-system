@@ -17,7 +17,7 @@ function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
       identifier: "BEN-42",
       url: "https://linear.app/team/issue/BEN-42",
     }),
-    sendMessage: () => Promise.resolve(),
+    reactToMessage: () => Promise.resolve(),
     ...overrides,
   };
 }
@@ -83,8 +83,8 @@ Deno.test("handleWebhook - processes text message end-to-end", async () => {
   assertEquals(body.issue.identifier, "BEN-42");
 });
 
-Deno.test("handleWebhook - replies to original message with confirmation", async () => {
-  let sentMessage: { chatId: number; text: string; replyToMessageId?: number } | undefined;
+Deno.test("handleWebhook - reacts with thumbs up after creating issue", async () => {
+  let reaction: { chatId: number; messageId: number; emoji: string } | undefined;
 
   const deps = createMockDeps({
     createTriageIssue: () => Promise.resolve({
@@ -92,8 +92,8 @@ Deno.test("handleWebhook - replies to original message with confirmation", async
       identifier: "BEN-99",
       url: "https://linear.app/team/issue/BEN-99",
     }),
-    sendMessage: (chatId, text, _botToken, replyToMessageId) => {
-      sentMessage = { chatId, text, replyToMessageId };
+    reactToMessage: (chatId, messageId, emoji) => {
+      reaction = { chatId, messageId, emoji };
       return Promise.resolve();
     },
   });
@@ -106,9 +106,9 @@ Deno.test("handleWebhook - replies to original message with confirmation", async
 
   await handleWebhook(request, deps);
 
-  assertEquals(sentMessage?.chatId, 123);
-  assertEquals(sentMessage?.text, "✓ Created [BEN-99](https://linear.app/team/issue/BEN-99)");
-  assertEquals(sentMessage?.replyToMessageId, 42);
+  assertEquals(reaction?.chatId, 123);
+  assertEquals(reaction?.messageId, 42);
+  assertEquals(reaction?.emoji, "👍");
 });
 
 // ============================================================================
@@ -143,8 +143,8 @@ Deno.test("handleWebhook - processes voice message end-to-end", async () => {
         url: "https://linear.app/team/issue/BEN-43",
       });
     },
-    sendMessage: () => {
-      callOrder.push("sendMessage");
+    reactToMessage: () => {
+      callOrder.push("reactToMessage");
       return Promise.resolve();
     },
   });
@@ -161,7 +161,7 @@ Deno.test("handleWebhook - processes voice message end-to-end", async () => {
   const body = await response.json();
   assertEquals(body.ok, true);
   assertEquals(body.issue.identifier, "BEN-43");
-  assertEquals(callOrder, ["getFileUrl", "transcribeAudio", "cleanupContent", "createTriageIssue", "sendMessage"]);
+  assertEquals(callOrder, ["getFileUrl", "transcribeAudio", "cleanupContent", "createTriageIssue", "reactToMessage"]);
 });
 
 // ============================================================================

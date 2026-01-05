@@ -2,7 +2,7 @@ import { assertEquals, assertRejects } from "@std/assert";
 import {
   parseWebhookUpdate,
   getFileUrl,
-  sendMessage,
+  reactToMessage,
   validateWebhookSecret,
   type WebhookUpdate,
 } from "./telegram.ts";
@@ -189,77 +189,54 @@ Deno.test("validateWebhookSecret - returns true when no secret configured", () =
 });
 
 // ============================================================================
-// sendMessage tests
+// reactToMessage tests
 // ============================================================================
 
-Deno.test("sendMessage - sends message successfully", async () => {
+Deno.test("reactToMessage - reacts to message successfully", async () => {
   let capturedBody: Record<string, unknown> | undefined;
 
   const mockFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
-    if (url.includes("/sendMessage")) {
+    if (url.includes("/setMessageReaction")) {
       capturedBody = JSON.parse(init?.body as string);
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ ok: true, result: { message_id: 100 } }),
+        json: () => Promise.resolve({ ok: true, result: true }),
       } as Response);
     }
     throw new Error("Unexpected URL");
   };
 
-  await sendMessage(123, "Hello world", "test_bot_token", undefined, mockFetch);
+  await reactToMessage(123, 42, "👍", "test_bot_token", mockFetch);
 
   assertEquals(capturedBody?.chat_id, 123);
-  assertEquals(capturedBody?.text, "Hello world");
-  assertEquals(capturedBody?.parse_mode, "Markdown");
-  assertEquals(capturedBody?.reply_to_message_id, undefined);
+  assertEquals(capturedBody?.message_id, 42);
+  assertEquals(capturedBody?.reaction, [{ type: "emoji", emoji: "👍" }]);
 });
 
-Deno.test("sendMessage - replies to specific message when replyToMessageId provided", async () => {
-  let capturedBody: Record<string, unknown> | undefined;
-
-  const mockFetch = (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = input.toString();
-    if (url.includes("/sendMessage")) {
-      capturedBody = JSON.parse(init?.body as string);
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ ok: true, result: { message_id: 100 } }),
-      } as Response);
-    }
-    throw new Error("Unexpected URL");
-  };
-
-  await sendMessage(123, "Reply text", "test_bot_token", 42, mockFetch);
-
-  assertEquals(capturedBody?.chat_id, 123);
-  assertEquals(capturedBody?.text, "Reply text");
-  assertEquals(capturedBody?.reply_to_message_id, 42);
-});
-
-Deno.test("sendMessage - throws on API error", async () => {
+Deno.test("reactToMessage - throws on API error", async () => {
   const mockFetch = () =>
     Promise.resolve({
       ok: true,
       json: () =>
         Promise.resolve({
           ok: false,
-          description: "Bad Request: chat not found",
+          description: "Bad Request: message not found",
         }),
     } as Response);
 
   await assertRejects(
-    () => sendMessage(999, "Hello", "test_bot_token", undefined, mockFetch),
+    () => reactToMessage(123, 999, "👍", "test_bot_token", mockFetch),
     Error,
-    "Telegram API error: Bad Request: chat not found"
+    "Telegram API error: Bad Request: message not found"
   );
 });
 
-Deno.test("sendMessage - throws on network error", async () => {
+Deno.test("reactToMessage - throws on network error", async () => {
   const mockFetch = () => Promise.reject(new Error("Network error"));
 
   await assertRejects(
-    () => sendMessage(123, "Hello", "test_bot_token", undefined, mockFetch),
+    () => reactToMessage(123, 42, "👍", "test_bot_token", mockFetch),
     Error,
     "Network error"
   );

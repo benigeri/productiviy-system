@@ -103,24 +103,22 @@ export function validateWebhookSecret(
   return providedSecret === expectedSecret;
 }
 
-export async function sendMessage(
+export async function reactToMessage(
   chatId: number,
-  text: string,
+  messageId: number,
+  emoji: string,
   botToken: string,
-  replyToMessageId?: number,
   fetchFn: typeof fetch = fetch
 ): Promise<void> {
   const response = await fetchFn(
-    `https://api.telegram.org/bot${botToken}/sendMessage`,
+    `https://api.telegram.org/bot${botToken}/setMessageReaction`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
-        text,
-        parse_mode: "Markdown",
-        disable_web_page_preview: true,
-        ...(replyToMessageId && { reply_to_message_id: replyToMessageId }),
+        message_id: messageId,
+        reaction: [{ type: "emoji", emoji }],
       }),
     }
   );
