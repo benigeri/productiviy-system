@@ -2,6 +2,7 @@ import { assertEquals, assertRejects } from "@std/assert";
 import {
   parseWebhookUpdate,
   getFileUrl,
+  reactToMessage,
   validateWebhookSecret,
   type WebhookUpdate,
 } from "./telegram.ts";
@@ -27,6 +28,7 @@ Deno.test("parseWebhookUpdate - parses text message", () => {
   assertEquals(result.type, "text");
   assertEquals(result.content, "Create a new task for the homepage redesign");
   assertEquals(result.messageId, 42);
+  assertEquals(result.chatId, 123);
 });
 
 Deno.test("parseWebhookUpdate - parses voice message", () => {
@@ -52,6 +54,7 @@ Deno.test("parseWebhookUpdate - parses voice message", () => {
   assertEquals(result.type, "voice");
   assertEquals(result.content, "AwACAgIAAxkBAAIBZ2X...");
   assertEquals(result.messageId, 43);
+  assertEquals(result.chatId, 123);
 });
 
 Deno.test("parseWebhookUpdate - throws on missing message", () => {
@@ -183,4 +186,58 @@ Deno.test("validateWebhookSecret - returns true when no secret configured", () =
   const result = validateWebhookSecret(headers, undefined);
 
   assertEquals(result, true);
+});
+
+// ============================================================================
+// reactToMessage tests
+// ============================================================================
+
+Deno.test("reactToMessage - reacts to message successfully", async () => {
+  let capturedBody: Record<string, unknown> | undefined;
+
+  const mockFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input.toString();
+    if (url.includes("/setMessageReaction")) {
+      capturedBody = JSON.parse(init?.body as string);
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, result: true }),
+      } as Response);
+    }
+    throw new Error("Unexpected URL");
+  };
+
+  await reactToMessage(123, 42, "👍", "test_bot_token", mockFetch);
+
+  assertEquals(capturedBody?.chat_id, 123);
+  assertEquals(capturedBody?.message_id, 42);
+  assertEquals(capturedBody?.reaction, [{ type: "emoji", emoji: "👍" }]);
+});
+
+Deno.test("reactToMessage - throws on API error", async () => {
+  const mockFetch = () =>
+    Promise.resolve({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          ok: false,
+          description: "Bad Request: message not found",
+        }),
+    } as Response);
+
+  await assertRejects(
+    () => reactToMessage(123, 999, "👍", "test_bot_token", mockFetch),
+    Error,
+    "Telegram API error: Bad Request: message not found"
+  );
+});
+
+Deno.test("reactToMessage - throws on network error", async () => {
+  const mockFetch = () => Promise.reject(new Error("Network error"));
+
+  await assertRejects(
+    () => reactToMessage(123, 42, "👍", "test_bot_token", mockFetch),
+    Error,
+    "Network error"
+  );
 });

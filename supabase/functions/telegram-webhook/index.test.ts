@@ -17,6 +17,7 @@ function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
       identifier: "BEN-42",
       url: "https://linear.app/team/issue/BEN-42",
     }),
+    reactToMessage: () => Promise.resolve(),
     ...overrides,
   };
 }
@@ -82,6 +83,34 @@ Deno.test("handleWebhook - processes text message end-to-end", async () => {
   assertEquals(body.issue.identifier, "BEN-42");
 });
 
+Deno.test("handleWebhook - reacts with thumbs up after creating issue", async () => {
+  let reaction: { chatId: number; messageId: number; emoji: string } | undefined;
+
+  const deps = createMockDeps({
+    createTriageIssue: () => Promise.resolve({
+      id: "issue-123",
+      identifier: "BEN-99",
+      url: "https://linear.app/team/issue/BEN-99",
+    }),
+    reactToMessage: (chatId, messageId, emoji) => {
+      reaction = { chatId, messageId, emoji };
+      return Promise.resolve();
+    },
+  });
+
+  const request = new Request("https://example.com/webhook", {
+    method: "POST",
+    headers: { "X-Telegram-Bot-Api-Secret-Token": "test_secret" },
+    body: JSON.stringify(createTextUpdate("New task")),
+  });
+
+  await handleWebhook(request, deps);
+
+  assertEquals(reaction?.chatId, 123);
+  assertEquals(reaction?.messageId, 42);
+  assertEquals(reaction?.emoji, "👍");
+});
+
 // ============================================================================
 // Voice message flow
 // ============================================================================
@@ -114,6 +143,10 @@ Deno.test("handleWebhook - processes voice message end-to-end", async () => {
         url: "https://linear.app/team/issue/BEN-43",
       });
     },
+    reactToMessage: () => {
+      callOrder.push("reactToMessage");
+      return Promise.resolve();
+    },
   });
 
   const request = new Request("https://example.com/webhook", {
@@ -128,7 +161,7 @@ Deno.test("handleWebhook - processes voice message end-to-end", async () => {
   const body = await response.json();
   assertEquals(body.ok, true);
   assertEquals(body.issue.identifier, "BEN-43");
-  assertEquals(callOrder, ["getFileUrl", "transcribeAudio", "cleanupContent", "createTriageIssue"]);
+  assertEquals(callOrder, ["getFileUrl", "transcribeAudio", "cleanupContent", "createTriageIssue", "reactToMessage"]);
 });
 
 // ============================================================================

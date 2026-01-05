@@ -3,6 +3,7 @@
 import {
   parseWebhookUpdate,
   getFileUrl as getFileUrlImpl,
+  reactToMessage as reactToMessageImpl,
   validateWebhookSecret,
   type WebhookUpdate,
 } from "./lib/telegram.ts";
@@ -23,6 +24,7 @@ export interface WebhookDeps {
   transcribeAudio: (audioUrl: string, apiKey: string) => Promise<string>;
   cleanupContent: (text: string, apiKey: string) => Promise<string>;
   createTriageIssue: (title: string, apiKey: string) => Promise<LinearIssue>;
+  reactToMessage: (chatId: number, messageId: number, emoji: string, botToken: string) => Promise<void>;
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -64,6 +66,9 @@ export async function handleWebhook(
     // Create Linear issue
     const issue = await deps.createTriageIssue(content, deps.linearKey);
 
+    // React with thumbs up to confirm
+    await deps.reactToMessage(parsed.chatId, parsed.messageId, "👍", deps.botToken);
+
     return jsonResponse({ ok: true, issue });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -89,6 +94,7 @@ if (import.meta.main) {
       transcribeAudio: (url, apiKey) => transcribeAudioImpl(url, apiKey),
       cleanupContent: (text, apiKey) => cleanupContentImpl(text, apiKey),
       createTriageIssue: (title, apiKey) => createTriageIssueImpl(title, apiKey),
+      reactToMessage: (chatId, messageId, emoji, botToken) => reactToMessageImpl(chatId, messageId, emoji, botToken),
     };
 
     return handleWebhook(req, deps);
