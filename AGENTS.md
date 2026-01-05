@@ -11,6 +11,7 @@ This document defines how AI agents should work on this codebase.
 3. **Track progress with todos** - Use the beads process for visibility
 4. **Small, focused PRs** - One feature/fix per PR for easy review
 5. **Verify before closing** - Always test/verify your work before marking a bead complete
+6. **Never use `cd` commands** - Always use absolute paths to avoid breaking the shell session
 
 ---
 
@@ -131,6 +132,34 @@ If you absolutely need to bypass hooks, the user can manually run git commands o
 
 ---
 
+## Shell Commands (Critical)
+
+**NEVER use `cd` in bash commands.** The shell session persists between commands, and changing directories breaks Claude Code hooks which expect to run from the project root.
+
+### Bad:
+```bash
+cd supabase/functions/telegram-webhook && deno test
+```
+
+### Good:
+```bash
+deno test /Users/benigeri/Projects/productiviy-system/supabase/functions/telegram-webhook/lib/telegram.test.ts
+```
+
+### If the shell breaks:
+The Claude Code shell session persists state. If you accidentally used `cd`, the session is corrupted and hooks will fail. Recovery options:
+1. **Best**: Ask user to restart Claude Code session (clears shell state)
+2. **Quick fix**: User can run `/clear` to reset the conversation
+
+### Hook Configuration (Robustness):
+The hook in `.claude/settings.json` must use `$CLAUDE_PROJECT_DIR` for the script path to work regardless of cwd:
+```json
+"command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-commit-checks.py\""
+```
+Never use relative paths like `.claude/hooks/...` - they break when cwd changes.
+
+---
+
 ## Code Style
 
 ### TypeScript (Supabase Edge Functions):
@@ -138,6 +167,73 @@ If you absolutely need to bypass hooks, the user can manually run git commands o
 - Prefer `const` over `let`
 - Use async/await over raw promises
 - Type all function parameters and returns
+
+### Supabase Edge Function Testability:
+
+**1. Don't import edge-runtime types** - They break tests:
+```typescript
+// BAD - breaks test imports
+import "@supabase/functions-js/edge-runtime.d.ts";
+
+// GOOD - skip the import, Deno.serve works without it
+// (just add a comment explaining why)
+```
+
+**2. Wrap Deno.serve in main check** - Prevents server starting during tests:
+```typescript
+// BAD - server starts when tests import this file
+Deno.serve((req) => handleRequest(req));
+
+// GOOD - only runs when executed directly
+if (import.meta.main) {
+  Deno.serve((req) => handleRequest(req));
+}
+```
+
+**3. Use dependency injection** - Makes external calls mockable:
+```typescript
+// BAD - can't test without hitting real APIs
+export async function processMessage(text: string) {
+  const result = await fetch("https://api.example.com/...");
+  return result;
+}
+
+// GOOD - inject dependencies for testability
+export interface Deps {
+  fetchApi: (url: string) => Promise<Response>;
+}
+
+export async function processMessage(text: string, deps: Deps) {
+  const result = await deps.fetchApi("https://api.example.com/...");
+  return result;
+}
+```
+
+**4. Run tests from the function directory** - deno.json imports are relative:
+```bash
+# BAD - imports won't resolve from project root
+deno test supabase/functions/telegram-webhook/
+
+# GOOD - run from function directory where deno.json lives
+cd /path/to/project/supabase/functions/telegram-webhook && deno test
+```
+
+### Deno Lint Rules:
+
+**`require-await`** - Don't use `async` without `await`:
+```typescript
+// BAD - lint error: async without await
+const mockFetch = async () => "result";
+
+// GOOD - use Promise.resolve for sync mock returns
+const mockFetch = () => Promise.resolve("result");
+
+// GOOD - if you actually await something
+const mockFetch = async () => {
+  await someAsyncOp();
+  return "result";
+};
+```
 
 ### Python (CLI tools):
 - Follow PEP 8

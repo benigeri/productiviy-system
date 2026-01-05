@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/pre-commit-checks.py",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-commit-checks.py\"",
             "timeout": 120
           }
         ]
