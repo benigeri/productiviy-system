@@ -27,7 +27,7 @@ const CREATE_ISSUE_MUTATION = `
   }
 `;
 
-const TEAM_ID = "BEN";
+const TEAM_ID = "418bd6ee-1f6d-47cc-87f2-88b7371b743a";
 
 export async function createTriageIssue(
   title: string,

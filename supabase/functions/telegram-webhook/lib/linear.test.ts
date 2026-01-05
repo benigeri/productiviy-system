@@ -16,7 +16,7 @@ Deno.test("createTriageIssue - creates issue in triage", async () => {
       const body = JSON.parse(init?.body as string);
       assertEquals(body.query.includes("issueCreate"), true);
       assertEquals(body.variables.input.title, "Homepage redesign task");
-      assertEquals(body.variables.input.teamId, "BEN");
+      assertEquals(body.variables.input.teamId, "418bd6ee-1f6d-47cc-87f2-88b7371b743a");
 
       return Promise.resolve({
         ok: true,
@@ -146,5 +146,23 @@ Deno.test("createTriageIssue - throws on GraphQL errors", async () => {
     () => createTriageIssue("Test issue", "test_api_key", mockFetch),
     Error,
     "Linear GraphQL error: Team not found"
+  );
+});
+
+Deno.test("createTriageIssue - throws on argument validation error (e.g., invalid teamId format)", async () => {
+  // This error occurs when teamId is not a valid UUID (e.g., using team key "BEN" instead of UUID)
+  const mockFetch = () =>
+    Promise.resolve({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          errors: [{ message: "Argument Validation Error" }],
+        }),
+    } as Response);
+
+  await assertRejects(
+    () => createTriageIssue("Test issue", "test_api_key", mockFetch),
+    Error,
+    "Linear GraphQL error: Argument Validation Error"
   );
 });
