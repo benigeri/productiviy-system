@@ -1,32 +1,96 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
+// Supabase edge runtime types (only needed for Deno.serve type hints)
+// @ts-ignore: Types only available in Supabase Edge Runtime
+import {
+  parseWebhookUpdate,
+  getFileUrl as getFileUrlImpl,
+  validateWebhookSecret,
+  type WebhookUpdate,
+} from "./lib/telegram.ts";
+import { transcribeAudio as transcribeAudioImpl } from "./lib/deepgram.ts";
+import { cleanupContent as cleanupContentImpl } from "./lib/claude.ts";
+import {
+  createTriageIssue as createTriageIssueImpl,
+  type LinearIssue,
+} from "./lib/linear.ts";
 
-// Setup type definitions for built-in Supabase Runtime APIs
-import "@supabase/functions-js/edge-runtime.d.ts"
+export interface WebhookDeps {
+  botToken: string;
+  deepgramKey: string;
+  anthropicKey: string;
+  linearKey: string;
+  webhookSecret?: string;
+  getFileUrl: (fileId: string, botToken: string) => Promise<string>;
+  transcribeAudio: (audioUrl: string, apiKey: string) => Promise<string>;
+  cleanupContent: (text: string, apiKey: string) => Promise<string>;
+  createTriageIssue: (title: string, apiKey: string) => Promise<LinearIssue>;
+}
 
-console.log("Hello from Functions!")
+function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
-Deno.serve(async (req) => {
-  const { name } = await req.json()
-  const data = {
-    message: `Hello ${name}!`,
+export async function handleWebhook(
+  request: Request,
+  deps: WebhookDeps
+): Promise<Response> {
+  // Validate webhook secret
+  if (!validateWebhookSecret(request.headers, deps.webhookSecret)) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
-  return new Response(
-    JSON.stringify(data),
-    { headers: { "Content-Type": "application/json" } },
-  )
-})
+  try {
+    const body: WebhookUpdate = await request.json();
+    const parsed = parseWebhookUpdate(body);
 
-/* To invoke locally:
+    let content: string;
 
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
+    if (parsed.type === "voice") {
+      // Voice: get file URL → transcribe → cleanup
+      const fileUrl = await deps.getFileUrl(parsed.content, deps.botToken);
+      const transcript = await deps.transcribeAudio(fileUrl, deps.deepgramKey);
+      content = await deps.cleanupContent(transcript, deps.anthropicKey);
+    } else {
+      // Text: just cleanup
+      content = await deps.cleanupContent(parsed.content, deps.anthropicKey);
+    }
 
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/telegram-webhook' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
+    if (content.trim() === "") {
+      return jsonResponse({ error: "Empty message content" }, 400);
+    }
 
-*/
+    // Create Linear issue
+    const issue = await deps.createTriageIssue(content, deps.linearKey);
+
+    return jsonResponse({ ok: true, issue });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+
+    if (message === "Unsupported message type" || message === "No message in update") {
+      return jsonResponse({ error: message }, 400);
+    }
+
+    return jsonResponse({ error: message }, 500);
+  }
+}
+
+// Production handler - only runs when invoked directly by Supabase Edge Functions
+if (import.meta.main) {
+  Deno.serve((req) => {
+    const deps: WebhookDeps = {
+      botToken: Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "",
+      deepgramKey: Deno.env.get("DEEPGRAM_API_KEY") ?? "",
+      anthropicKey: Deno.env.get("ANTHROPIC_API_KEY") ?? "",
+      linearKey: Deno.env.get("LINEAR_API_KEY") ?? "",
+      webhookSecret: Deno.env.get("TELEGRAM_WEBHOOK_SECRET"),
+      getFileUrl: (fileId, botToken) => getFileUrlImpl(fileId, botToken),
+      transcribeAudio: (url, apiKey) => transcribeAudioImpl(url, apiKey),
+      cleanupContent: (text, apiKey) => cleanupContentImpl(text, apiKey),
+      createTriageIssue: (title, apiKey) => createTriageIssueImpl(title, apiKey),
+    };
+
+    return handleWebhook(req, deps);
+  });
+}
