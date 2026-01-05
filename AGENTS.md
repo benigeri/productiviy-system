@@ -91,7 +91,38 @@ deno lint             # Linting rules
 deno test             # All tests pass
 ```
 
-These will be enforced via pre-commit hooks.
+---
+
+## Claude Code Hooks (Enforcement)
+
+This project uses Claude Code hooks to **enforce** the workflow rules automatically.
+
+### What's Enforced:
+
+| Rule | Enforcement |
+|------|-------------|
+| No direct commits to `main` | ❌ Blocked automatically |
+| Tests must pass before commit | ❌ Blocked if tests fail |
+| Linting must pass | ❌ Blocked if lint fails |
+
+### How It Works:
+
+Hooks are configured in `.claude/settings.json` and run automatically when Claude Code executes git commands.
+
+**Location:** `.claude/hooks/pre-commit-checks.py`
+
+### Hook Triggers:
+- `git commit` → Runs tests + lint, blocks if on main
+- `git push origin main` → Blocked (use PRs instead)
+
+### Bypassing (Emergency Only):
+If you absolutely need to bypass hooks, the user can manually run git commands outside Claude Code. But this should be rare.
+
+### Verifying Hooks:
+```bash
+# In Claude Code, run:
+/hooks
+```
 
 ---
 
