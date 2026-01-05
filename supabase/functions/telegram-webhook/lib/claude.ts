@@ -19,6 +19,7 @@ const CLEANUP_PROMPT = `You are a text cleanup assistant. Clean up the following
 - Fixing grammar and punctuation
 - Preserving the original meaning and intent
 - Keeping it concise
+- IMPORTANT: Preserve any prefix tags at the start (e.g. "// fb - name - from name" or similar markers). Only fix typos in them, never remove them.
 
 Return ONLY the cleaned text, nothing else. Do not add any explanation or commentary.
 
