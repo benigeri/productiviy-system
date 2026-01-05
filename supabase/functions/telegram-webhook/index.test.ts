@@ -17,6 +17,7 @@ function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
       identifier: "BEN-42",
       url: "https://linear.app/team/issue/BEN-42",
     }),
+    sendMessage: () => Promise.resolve(),
     ...overrides,
   };
 }
@@ -82,6 +83,33 @@ Deno.test("handleWebhook - processes text message end-to-end", async () => {
   assertEquals(body.issue.identifier, "BEN-42");
 });
 
+Deno.test("handleWebhook - sends confirmation message after creating issue", async () => {
+  let sentMessage: { chatId: number; text: string } | undefined;
+
+  const deps = createMockDeps({
+    createTriageIssue: () => Promise.resolve({
+      id: "issue-123",
+      identifier: "BEN-99",
+      url: "https://linear.app/team/issue/BEN-99",
+    }),
+    sendMessage: (chatId, text) => {
+      sentMessage = { chatId, text };
+      return Promise.resolve();
+    },
+  });
+
+  const request = new Request("https://example.com/webhook", {
+    method: "POST",
+    headers: { "X-Telegram-Bot-Api-Secret-Token": "test_secret" },
+    body: JSON.stringify(createTextUpdate("New task")),
+  });
+
+  await handleWebhook(request, deps);
+
+  assertEquals(sentMessage?.chatId, 123);
+  assertEquals(sentMessage?.text, "✓ Created [BEN-99](https://linear.app/team/issue/BEN-99)");
+});
+
 // ============================================================================
 // Voice message flow
 // ============================================================================
@@ -114,6 +142,10 @@ Deno.test("handleWebhook - processes voice message end-to-end", async () => {
         url: "https://linear.app/team/issue/BEN-43",
       });
     },
+    sendMessage: () => {
+      callOrder.push("sendMessage");
+      return Promise.resolve();
+    },
   });
 
   const request = new Request("https://example.com/webhook", {
@@ -128,7 +160,7 @@ Deno.test("handleWebhook - processes voice message end-to-end", async () => {
   const body = await response.json();
   assertEquals(body.ok, true);
   assertEquals(body.issue.identifier, "BEN-43");
-  assertEquals(callOrder, ["getFileUrl", "transcribeAudio", "cleanupContent", "createTriageIssue"]);
+  assertEquals(callOrder, ["getFileUrl", "transcribeAudio", "cleanupContent", "createTriageIssue", "sendMessage"]);
 });
 
 // ============================================================================

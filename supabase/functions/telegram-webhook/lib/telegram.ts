@@ -44,6 +44,7 @@ export interface ParsedMessage {
   type: "text" | "voice";
   content: string;
   messageId: number;
+  chatId: number;
 }
 
 export function parseWebhookUpdate(body: WebhookUpdate): ParsedMessage {
@@ -57,6 +58,7 @@ export function parseWebhookUpdate(body: WebhookUpdate): ParsedMessage {
       type: "text",
       content: message.text,
       messageId: message.message_id,
+      chatId: message.chat.id,
     };
   }
 
@@ -65,6 +67,7 @@ export function parseWebhookUpdate(body: WebhookUpdate): ParsedMessage {
       type: "voice",
       content: message.voice.file_id,
       messageId: message.message_id,
+      chatId: message.chat.id,
     };
   }
 
@@ -98,4 +101,31 @@ export function validateWebhookSecret(
 
   const providedSecret = headers.get("X-Telegram-Bot-Api-Secret-Token");
   return providedSecret === expectedSecret;
+}
+
+export async function sendMessage(
+  chatId: number,
+  text: string,
+  botToken: string,
+  fetchFn: typeof fetch = fetch
+): Promise<void> {
+  const response = await fetchFn(
+    `https://api.telegram.org/bot${botToken}/sendMessage`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!data.ok) {
+    throw new Error(`Telegram API error: ${data.description}`);
+  }
 }
