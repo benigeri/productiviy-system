@@ -21,14 +21,26 @@ Send voice notes or text messages from phone via Telegram → automatically crea
 - deno test             # Run all tests
 ```
 
+### Pull Request Workflow
+All changes go through PRs for review - never commit directly to `main`.
+
+1. **Create feature branch**: `git checkout -b feature/description`
+2. **Make changes** following TDD process
+3. **Push branch**: `git push -u origin feature/description`
+4. **Create PR** with clear summary of changes
+5. **User reviews** - can see diff, leave comments
+6. **Merge** after approval
+
 ### Agent Workflow (Beads Process)
 When working on any task:
-1. **Update todo to `in_progress`** before starting
-2. **Write/update tests first** (TDD)
-3. **Implement the feature**
-4. **Run tests locally** - confirm passing
-5. **Update todo to `completed`** only after tests pass
+1. **Create feature branch** from `main`
+2. **Update todo to `in_progress`** before starting
+3. **Write/update tests first** (TDD)
+4. **Implement the feature**
+5. **Run tests locally** - confirm passing
 6. **Commit with descriptive message**
+7. **Push and create PR** for review
+8. **Update todo to `completed`** only after PR is merged
 
 ---
 
