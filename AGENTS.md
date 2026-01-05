@@ -10,6 +10,7 @@ This document defines how AI agents should work on this codebase.
 2. **Test-Driven Development** - Write tests before implementation
 3. **Track progress with todos** - Use the beads process for visibility
 4. **Small, focused PRs** - One feature/fix per PR for easy review
+5. **Verify before closing** - Always test/verify your work before marking a bead complete
 
 ---
 
@@ -75,9 +76,13 @@ deno test
 - Add new todos if scope expands
 
 ### When Finishing:
-1. Ensure all tests pass
-2. Create PR and push
-3. Mark todo as `completed` only **after PR is merged**
+1. **Verify your work** - Test that changes actually work:
+   - For code: run tests, verify functionality
+   - For config/credentials: test the connection/integration
+   - For setup tasks: confirm the service responds correctly
+2. Ensure all tests pass
+3. Create PR and push
+4. Mark todo as `completed` only **after PR is merged AND work is verified**
 
 ---
 
@@ -181,10 +186,23 @@ Agent:
 5. Implement deepgram.ts
 6. Run tests → confirm they pass (Green)
 7. Refactor if needed
-8. git commit -m "Add Deepgram voice transcription"
-9. git push -u origin feature/voice-transcription
-10. Create PR with summary
-11. Wait for user to review and merge
-12. TodoWrite: mark task as completed
-13. git checkout main && git pull
+8. **Verify**: Test the integration works (e.g., curl the API, check responses)
+9. git commit -m "Add Deepgram voice transcription"
+10. git push -u origin feature/voice-transcription
+11. Create PR with summary
+12. Wait for user to review and merge
+13. TodoWrite: mark task as completed
+14. git checkout main && git pull
+```
+
+### Setup Task Example:
+
+```
+User: "Set up Supabase project"
+
+Agent:
+1. Guide user through Supabase dashboard setup
+2. Store credentials in .env
+3. **Verify**: Test the connection works (curl the API endpoint)
+4. Only after verification succeeds → close the bead
 ```
