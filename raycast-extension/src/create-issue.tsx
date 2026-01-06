@@ -77,10 +77,7 @@ export default function Command() {
       isLoading={isLoading}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title="Create Issue"
-            onSubmit={handleSubmit}
-          />
+          <Action.SubmitForm title="Create Issue" onSubmit={handleSubmit} />
         </ActionPanel>
       }
     >

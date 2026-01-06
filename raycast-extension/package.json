@@ -40,7 +40,6 @@
     "build": "ray build --skip-types -e dist -o dist",
     "dev": "ray develop",
     "fix-lint": "ray lint --fix",
-    "lint": "ray lint",
-    "prepublishOnly": "echo 'This extension is private' && exit 1"
+    "lint": "ray lint"
   }
 }
