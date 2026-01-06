@@ -182,9 +182,29 @@ if (import.meta.main) {
         true,
     };
 
-    // For production, do async signature verification
+    // Read body for both challenge check and signature verification
+    const bodyText = await req.clone().text();
+    let payload: { type: string; challenge?: string };
+    try {
+      payload = JSON.parse(bodyText);
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Handle URL verification challenge BEFORE signature check
+    // Slack sends this during app setup and expects immediate response
+    if (payload.type === "url_verification") {
+      return new Response(JSON.stringify({ challenge: payload.challenge }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // For all other requests, verify signature
     if (signingSecret) {
-      const bodyText = await req.clone().text();
       const signature = req.headers.get("x-slack-signature") ?? "";
       const timestamp = req.headers.get("x-slack-request-timestamp") ?? "";
 
