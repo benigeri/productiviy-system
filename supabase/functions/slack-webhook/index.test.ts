@@ -1,16 +1,23 @@
 import { assertEquals } from "@std/assert";
 import { handleSlackWebhook, type SlackWebhookDeps } from "./index.ts";
 
-function createMockDeps(overrides: Partial<SlackWebhookDeps> = {}): SlackWebhookDeps {
+function createMockDeps(
+  overrides: Partial<SlackWebhookDeps> = {},
+): SlackWebhookDeps {
   return {
     signingSecret: "test_signing_secret",
     cleanupContent: (text: string) => Promise.resolve(text.trim()),
-    createTriageIssue: () => Promise.resolve({
-      id: "issue-123",
-      identifier: "BEN-42",
-      url: "https://linear.app/team/issue/BEN-42",
-    }),
+    createTriageIssue: () =>
+      Promise.resolve({
+        id: "issue-123",
+        identifier: "BEN-42",
+        url: "https://linear.app/team/issue/BEN-42",
+      }),
     verifySignature: () => true,
+    resolveUser: (userId: string) => Promise.resolve(`user_${userId}`),
+    resolveUserGroup: () => Promise.resolve("group"),
+    getPermalink: () =>
+      Promise.resolve("https://slack.com/archives/C123/p1234567890"),
     ...overrides,
   };
 }
@@ -102,6 +109,7 @@ Deno.test("handleSlackWebhook - splits multiline into title and description", as
         url: "https://linear.app/team/issue/BEN-100",
       });
     },
+    getPermalink: () => Promise.resolve(null), // No permalink for this test
   });
 
   const multilineText = `Fix login bug
@@ -121,10 +129,13 @@ Affects iOS and Android`;
   await handleSlackWebhook(request, deps);
 
   assertEquals(captured?.title, "Fix login bug");
-  assertEquals(captured?.description, "Users can't log in on mobile\nAffects iOS and Android");
+  assertEquals(
+    captured?.description,
+    "Users can't log in on mobile\nAffects iOS and Android",
+  );
 });
 
-Deno.test("handleSlackWebhook - single line message has no description", async () => {
+Deno.test("handleSlackWebhook - single line message has no description without permalink", async () => {
   let captured: { title: string; description?: string } | undefined;
 
   const deps = createMockDeps({
@@ -137,6 +148,7 @@ Deno.test("handleSlackWebhook - single line message has no description", async (
         url: "https://linear.app/team/issue/BEN-101",
       });
     },
+    getPermalink: () => Promise.resolve(null), // No permalink
   });
 
   const request = new Request("https://example.com/webhook", {
@@ -153,6 +165,42 @@ Deno.test("handleSlackWebhook - single line message has no description", async (
 
   assertEquals(captured?.title, "Single line task");
   assertEquals(captured?.description, undefined);
+});
+
+Deno.test("handleSlackWebhook - includes permalink in description", async () => {
+  let captured: { title: string; description?: string } | undefined;
+
+  const deps = createMockDeps({
+    cleanupContent: (text) => Promise.resolve(text),
+    createTriageIssue: (title, description) => {
+      captured = { title, description };
+      return Promise.resolve({
+        id: "issue-123",
+        identifier: "BEN-102",
+        url: "https://linear.app/team/issue/BEN-102",
+      });
+    },
+    getPermalink: () =>
+      Promise.resolve("https://myworkspace.slack.com/archives/C123/p1234"),
+  });
+
+  const request = new Request("https://example.com/webhook", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-slack-signature": "v0=valid",
+      "x-slack-request-timestamp": "1234567890",
+    },
+    body: JSON.stringify(createMessageEvent("Task with link")),
+  });
+
+  await handleSlackWebhook(request, deps);
+
+  assertEquals(captured?.title, "Task with link");
+  assertEquals(
+    captured?.description,
+    "[View in Slack](https://myworkspace.slack.com/archives/C123/p1234)",
+  );
 });
 
 // ============================================================================
@@ -291,7 +339,9 @@ Deno.test("handleSlackWebhook - returns 400 for empty message", async () => {
 Deno.test("handleSlackWebhook - returns 500 on Linear API failure", async () => {
   const deps = createMockDeps({
     createTriageIssue: () => {
-      return Promise.reject(new Error("Linear API error: 500 Internal Server Error"));
+      return Promise.reject(
+        new Error("Linear API error: 500 Internal Server Error"),
+      );
     },
   });
 

@@ -1,7 +1,17 @@
 import { cleanupContent as cleanupContentImpl } from "../_shared/lib/claude.ts";
 import { createTriageIssue as createTriageIssueImpl } from "../_shared/lib/linear.ts";
-import { captureToLinear, type CaptureDeps } from "../_shared/lib/capture.ts";
+import { type CaptureDeps, captureToLinear } from "../_shared/lib/capture.ts";
 import type { LinearIssue } from "../_shared/lib/types.ts";
+import {
+  createSlackUserGroupResolver,
+  createSlackUserResolver,
+  getMessagePermalink,
+  getOriginalMessageUrl,
+  parseSlackMessage,
+  type SlackMessageEvent,
+  type UserGroupResolver,
+  type UserResolver,
+} from "./lib/slack.ts";
 
 /**
  * Dependencies for the Slack webhook handler.
@@ -10,13 +20,19 @@ import type { LinearIssue } from "../_shared/lib/types.ts";
 export interface SlackWebhookDeps {
   signingSecret?: string;
   cleanupContent: (text: string) => Promise<string>;
-  createTriageIssue: (title: string, description?: string) => Promise<LinearIssue>;
+  createTriageIssue: (
+    title: string,
+    description?: string,
+  ) => Promise<LinearIssue>;
   verifySignature: (
     signature: string,
     timestamp: string,
     body: string,
     secret: string,
   ) => boolean;
+  resolveUser: UserResolver;
+  resolveUserGroup: UserGroupResolver;
+  getPermalink: (channel: string, messageTs: string) => Promise<string | null>;
 }
 
 interface SlackUrlVerification {
@@ -27,16 +43,6 @@ interface SlackUrlVerification {
 interface SlackEventCallback {
   type: "event_callback";
   event: SlackMessageEvent;
-}
-
-interface SlackMessageEvent {
-  type: "message";
-  subtype?: string;
-  text?: string;
-  channel: string;
-  user?: string;
-  bot_id?: string;
-  ts: string;
 }
 
 type SlackPayload = SlackUrlVerification | SlackEventCallback;
@@ -105,7 +111,12 @@ export async function handleSlackWebhook(
     const signature = request.headers.get("x-slack-signature") ?? "";
     const timestamp = request.headers.get("x-slack-request-timestamp") ?? "";
 
-    const isValid = deps.verifySignature(signature, timestamp, bodyText, deps.signingSecret);
+    const isValid = deps.verifySignature(
+      signature,
+      timestamp,
+      bodyText,
+      deps.signingSecret,
+    );
     if (!isValid) {
       return jsonResponse({ error: "Invalid signature" }, 401);
     }
@@ -130,13 +141,32 @@ export async function handleSlackWebhook(
       return jsonResponse({ ok: true, ignored: true });
     }
 
-    // Get message text
-    const text = event.text?.trim() ?? "";
-    if (text === "") {
-      return jsonResponse({ error: "Empty message content" }, 400);
-    }
-
     try {
+      // Check for original message URL in forwarded attachments first
+      const originalUrl = getOriginalMessageUrl(event);
+
+      // Parse Slack message: extract text, resolve mentions, handle forwards
+      // Run parsing and permalink fetch in parallel for speed
+      const [parsedContent, dmPermalink] = await Promise.all([
+        parseSlackMessage(event, deps.resolveUser, deps.resolveUserGroup),
+        // Only fetch DM permalink if no original URL found
+        originalUrl
+          ? Promise.resolve(null)
+          : deps.getPermalink(event.channel, event.ts),
+      ]);
+
+      if (parsedContent.trim() === "") {
+        return jsonResponse({ error: "Empty message content" }, 400);
+      }
+
+      // Prefer original message URL (for forwards) over DM permalink
+      const permalink = originalUrl ?? dmPermalink;
+
+      // Append permalink to content so it appears in the issue description
+      const contentWithLink = permalink
+        ? `${parsedContent}\n\n[View in Slack](${permalink})`
+        : parsedContent;
+
       // Create CaptureDeps from SlackWebhookDeps
       const captureDeps: CaptureDeps = {
         cleanupContent: deps.cleanupContent,
@@ -144,7 +174,7 @@ export async function handleSlackWebhook(
       };
 
       // Use shared capture pipeline: cleanup → parse → create issue
-      const issue = await captureToLinear(text, captureDeps);
+      const issue = await captureToLinear(contentWithLink, captureDeps);
 
       return jsonResponse({ ok: true, issue });
     } catch (error) {
@@ -167,6 +197,7 @@ if (import.meta.main) {
   Deno.serve(async (req) => {
     // Read API keys once at startup
     const signingSecret = Deno.env.get("SLACK_SIGNING_SECRET");
+    const botToken = Deno.env.get("SLACK_BOT_TOKEN") ?? "";
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
     const linearKey = Deno.env.get("LINEAR_API_KEY") ?? "";
 
@@ -180,6 +211,10 @@ if (import.meta.main) {
         // In production, verification is done before this (see below)
         // This is a no-op since we already verified above
         true,
+      resolveUser: createSlackUserResolver(botToken),
+      resolveUserGroup: createSlackUserGroupResolver(botToken),
+      getPermalink: (channel, messageTs) =>
+        getMessagePermalink(channel, messageTs, botToken),
     };
 
     // Read body for both challenge check and signature verification
@@ -203,6 +238,20 @@ if (import.meta.main) {
       });
     }
 
+    // Ignore Slack retries to prevent duplicate processing
+    // Slack retries after 3 seconds if no response - we process async so this happens
+    const retryNum = req.headers.get("x-slack-retry-num");
+    if (retryNum) {
+      console.log(`Ignoring Slack retry #${retryNum}`);
+      return new Response(
+        JSON.stringify({ ok: true, ignored: true, reason: "retry" }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
     // For all other requests, verify signature
     if (signingSecret) {
       const signature = req.headers.get("x-slack-signature") ?? "";
@@ -217,7 +266,12 @@ if (import.meta.main) {
         });
       }
 
-      const isValid = await verifySlackSignature(signature, timestamp, bodyText, signingSecret);
+      const isValid = await verifySlackSignature(
+        signature,
+        timestamp,
+        bodyText,
+        signingSecret,
+      );
       if (!isValid) {
         return new Response(JSON.stringify({ error: "Invalid signature" }), {
           status: 401,
