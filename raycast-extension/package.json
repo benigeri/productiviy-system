@@ -6,7 +6,9 @@
   "icon": "extension-icon.png",
   "author": "benigeri",
   "owner": "archive",
-  "categories": ["Productivity"],
+  "categories": [
+    "Productivity"
+  ],
   "license": "MIT",
   "commands": [
     {
@@ -32,7 +34,7 @@
   "devDependencies": {
     "@raycast/eslint-config": "^1.0.11",
     "@types/node": "22.14.0",
-    "@types/react": "^18.3.3",
+    "@types/react": "^19.2.7",
     "eslint": "^8.57.0",
     "prettier": "^3.3.3",
     "typescript": "^5.4.5"
