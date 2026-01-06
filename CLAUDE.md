@@ -251,6 +251,43 @@ Never commit secrets. Use:
 
 ---
 
+## Supabase Edge Functions
+
+### Deployment
+
+Functions auto-deploy on push to main via GitHub Actions (see `.github/workflows/deploy-functions.yml`).
+
+To manually deploy:
+```bash
+SUPABASE_ACCESS_TOKEN=$SUPABASE_ACCESS_TOKEN supabase functions deploy telegram-webhook --project-ref aadqqdsclktlyeuweqrv
+```
+
+### Debugging
+
+**Check function status:**
+```bash
+SUPABASE_ACCESS_TOKEN=$SUPABASE_ACCESS_TOKEN supabase functions list --project-ref aadqqdsclktlyeuweqrv
+```
+
+**Check deployment version and timestamp:**
+```bash
+curl -s 'https://api.supabase.com/v1/projects/aadqqdsclktlyeuweqrv/functions/telegram-webhook' \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+```
+
+The `updated_at` field (Unix timestamp in ms) shows when the function was last deployed. Compare against git commit timestamps to verify the deployed version matches your code.
+
+**View logs:**
+Logs are available in the Supabase Dashboard:
+https://supabase.com/dashboard/project/aadqqdsclktlyeuweqrv/functions/telegram-webhook/logs
+
+### Common Issues
+
+1. **Code not taking effect** - Function wasn't redeployed after merge. Check `updated_at` timestamp vs git commit time.
+2. **Function errors** - Check logs in Supabase Dashboard for stack traces.
+
+---
+
 ## PR Description Template
 
 ```markdown
