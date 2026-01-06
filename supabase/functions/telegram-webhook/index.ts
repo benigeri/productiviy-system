@@ -10,20 +10,20 @@ import {
 import { transcribeAudio as transcribeAudioImpl } from "./lib/deepgram.ts";
 import { cleanupContent as cleanupContentImpl } from "../_shared/lib/claude.ts";
 import { createTriageIssue as createTriageIssueImpl } from "../_shared/lib/linear.ts";
-import { parseIssueContent } from "../_shared/lib/parse.ts";
+import { captureToLinear, type CaptureDeps } from "../_shared/lib/capture.ts";
 import type { LinearIssue } from "../_shared/lib/types.ts";
 
+/**
+ * Dependencies for the Telegram webhook handler.
+ * Functions should have API keys pre-bound at construction time.
+ */
 export interface WebhookDeps {
-  botToken: string;
-  deepgramKey: string;
-  anthropicKey: string;
-  linearKey: string;
   webhookSecret?: string;
-  getFileUrl: (fileId: string, botToken: string) => Promise<string>;
-  transcribeAudio: (audioUrl: string, apiKey: string) => Promise<string>;
-  cleanupContent: (text: string, apiKey: string) => Promise<string>;
-  createTriageIssue: (title: string, apiKey: string, description?: string) => Promise<LinearIssue>;
-  reactToMessage: (chatId: number, messageId: number, emoji: string, botToken: string) => Promise<void>;
+  getFileUrl: (fileId: string) => Promise<string>;
+  transcribeAudio: (audioUrl: string) => Promise<string>;
+  cleanupContent: (text: string) => Promise<string>;
+  createTriageIssue: (title: string, description?: string) => Promise<LinearIssue>;
+  reactToMessage: (chatId: number, messageId: number, emoji: string) => Promise<void>;
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -46,30 +46,33 @@ export async function handleWebhook(
     const body: WebhookUpdate = await request.json();
     const parsed = parseWebhookUpdate(body);
 
-    let content: string;
+    let rawText: string;
 
     if (parsed.type === "voice") {
-      // Voice: get file URL → transcribe → cleanup
-      const fileUrl = await deps.getFileUrl(parsed.content, deps.botToken);
-      const transcript = await deps.transcribeAudio(fileUrl, deps.deepgramKey);
-      content = await deps.cleanupContent(transcript, deps.anthropicKey);
+      // Voice: get file URL → transcribe
+      const fileUrl = await deps.getFileUrl(parsed.content);
+      rawText = await deps.transcribeAudio(fileUrl);
     } else {
-      // Text: just cleanup
-      content = await deps.cleanupContent(parsed.content, deps.anthropicKey);
+      // Text: use content directly
+      rawText = parsed.content;
     }
 
-    if (content.trim() === "") {
+    // Check for empty input before capture pipeline
+    if (rawText.trim() === "") {
       return jsonResponse({ error: "Empty message content" }, 400);
     }
 
-    // Parse into title and description using shared function
-    const { title, description } = parseIssueContent(content);
+    // Create CaptureDeps from WebhookDeps (interfaces are compatible)
+    const captureDeps: CaptureDeps = {
+      cleanupContent: deps.cleanupContent,
+      createTriageIssue: deps.createTriageIssue,
+    };
 
-    // Create Linear issue
-    const issue = await deps.createTriageIssue(title, deps.linearKey, description);
+    // Use shared capture pipeline: cleanup → parse → create issue
+    const issue = await captureToLinear(rawText, captureDeps);
 
     // React with thumbs up to confirm
-    await deps.reactToMessage(parsed.chatId, parsed.messageId, "👍", deps.botToken);
+    await deps.reactToMessage(parsed.chatId, parsed.messageId, "👍");
 
     return jsonResponse({ ok: true, issue });
   } catch (error) {
@@ -79,6 +82,11 @@ export async function handleWebhook(
       return jsonResponse({ error: message }, 400);
     }
 
+    // Handle empty content error from capture pipeline
+    if (message === "Cleanup resulted in empty content") {
+      return jsonResponse({ error: "Empty message content" }, 400);
+    }
+
     return jsonResponse({ error: message }, 500);
   }
 }
@@ -86,17 +94,22 @@ export async function handleWebhook(
 // Production handler - only runs when invoked directly by Supabase Edge Functions
 if (import.meta.main) {
   Deno.serve((req) => {
+    // Read API keys once at startup
+    const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
+    const deepgramKey = Deno.env.get("DEEPGRAM_API_KEY") ?? "";
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+    const linearKey = Deno.env.get("LINEAR_API_KEY") ?? "";
+
+    // Create deps with API keys pre-bound
     const deps: WebhookDeps = {
-      botToken: Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "",
-      deepgramKey: Deno.env.get("DEEPGRAM_API_KEY") ?? "",
-      anthropicKey: Deno.env.get("ANTHROPIC_API_KEY") ?? "",
-      linearKey: Deno.env.get("LINEAR_API_KEY") ?? "",
       webhookSecret: Deno.env.get("TELEGRAM_WEBHOOK_SECRET"),
-      getFileUrl: (fileId, botToken) => getFileUrlImpl(fileId, botToken),
-      transcribeAudio: (url, apiKey) => transcribeAudioImpl(url, apiKey),
-      cleanupContent: (text, apiKey) => cleanupContentImpl(text, apiKey),
-      createTriageIssue: (title, apiKey, description) => createTriageIssueImpl(title, apiKey, undefined, description),
-      reactToMessage: (chatId, messageId, emoji, botToken) => reactToMessageImpl(chatId, messageId, emoji, botToken),
+      getFileUrl: (fileId) => getFileUrlImpl(fileId, botToken),
+      transcribeAudio: (url) => transcribeAudioImpl(url, deepgramKey),
+      cleanupContent: (text) => cleanupContentImpl(text, anthropicKey),
+      createTriageIssue: (title, description) =>
+        createTriageIssueImpl(title, linearKey, undefined, description),
+      reactToMessage: (chatId, messageId, emoji) =>
+        reactToMessageImpl(chatId, messageId, emoji, botToken),
     };
 
     return handleWebhook(req, deps);

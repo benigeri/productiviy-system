@@ -1,7 +1,16 @@
-import { cleanupContent } from "../_shared/lib/claude.ts";
-import { createTriageIssue } from "../_shared/lib/linear.ts";
-import { parseIssueContent } from "../_shared/lib/parse.ts";
-import type { CreateIssueResponse } from "../_shared/lib/types.ts";
+import { cleanupContent as cleanupContentImpl } from "../_shared/lib/claude.ts";
+import { createTriageIssue as createTriageIssueImpl } from "../_shared/lib/linear.ts";
+import { captureToLinear, type CaptureDeps } from "../_shared/lib/capture.ts";
+import type { CreateIssueResponse, LinearIssue } from "../_shared/lib/types.ts";
+
+/**
+ * Dependencies for the create-issue handler.
+ * Functions should have API keys pre-bound at construction time.
+ */
+export interface CreateIssueDeps {
+  cleanupContent: (text: string) => Promise<string>;
+  createTriageIssue: (title: string, description?: string) => Promise<LinearIssue>;
+}
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -21,7 +30,10 @@ interface CreateIssueRequest {
   text: string;
 }
 
-export async function handleCreateIssue(request: Request): Promise<Response> {
+export async function handleCreateIssue(
+  request: Request,
+  deps?: CreateIssueDeps,
+): Promise<Response> {
   // Handle CORS preflight
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders() });
@@ -32,12 +44,21 @@ export async function handleCreateIssue(request: Request): Promise<Response> {
     return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
   }
 
-  // Get API keys from environment
-  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-  const linearKey = Deno.env.get("LINEAR_API_KEY");
+  // If deps not provided, create from environment (production mode)
+  let effectiveDeps = deps;
+  if (!effectiveDeps) {
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const linearKey = Deno.env.get("LINEAR_API_KEY");
 
-  if (!anthropicKey || !linearKey) {
-    return jsonResponse({ ok: false, error: "Server configuration error" }, 500);
+    if (!anthropicKey || !linearKey) {
+      return jsonResponse({ ok: false, error: "Server configuration error" }, 500);
+    }
+
+    effectiveDeps = {
+      cleanupContent: (text) => cleanupContentImpl(text, anthropicKey),
+      createTriageIssue: (title, description) =>
+        createTriageIssueImpl(title, linearKey, undefined, description),
+    };
   }
 
   try {
@@ -52,18 +73,14 @@ export async function handleCreateIssue(request: Request): Promise<Response> {
       return jsonResponse({ ok: false, error: "Text cannot be empty" }, 400);
     }
 
-    // Step 1: Clean up the text with Claude
-    const cleanedContent = await cleanupContent(trimmedText, anthropicKey);
+    // Create CaptureDeps from CreateIssueDeps (interfaces are compatible)
+    const captureDeps: CaptureDeps = {
+      cleanupContent: effectiveDeps.cleanupContent,
+      createTriageIssue: effectiveDeps.createTriageIssue,
+    };
 
-    if (cleanedContent.trim() === "") {
-      return jsonResponse({ ok: false, error: "Cleanup resulted in empty content" }, 400);
-    }
-
-    // Step 2: Parse into title and description
-    const { title, description } = parseIssueContent(cleanedContent);
-
-    // Step 3: Create Linear issue
-    const issue = await createTriageIssue(title, linearKey, undefined, description);
+    // Use shared capture pipeline: cleanup → parse → create issue
+    const issue = await captureToLinear(trimmedText, captureDeps);
 
     const response: CreateIssueResponse = {
       ok: true,
@@ -79,6 +96,18 @@ export async function handleCreateIssue(request: Request): Promise<Response> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+
+    // Handle empty content error from capture pipeline
+    if (message === "Cleanup resulted in empty content") {
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          ...corsHeaders(),
+        },
+      });
+    }
+
     return new Response(JSON.stringify({ ok: false, error: message }), {
       status: 500,
       headers: {
@@ -91,5 +120,5 @@ export async function handleCreateIssue(request: Request): Promise<Response> {
 
 // Production handler
 if (import.meta.main) {
-  Deno.serve(handleCreateIssue);
+  Deno.serve((req) => handleCreateIssue(req));
 }
