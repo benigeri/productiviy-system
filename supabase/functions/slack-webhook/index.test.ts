@@ -361,3 +361,96 @@ Deno.test("handleSlackWebhook - returns 500 on Linear API failure", async () => 
   const body = await response.json();
   assertEquals(body.error, "Linear API error: 500 Internal Server Error");
 });
+
+// ============================================================================
+// Message shortcuts
+// ============================================================================
+
+Deno.test("handleSlackWebhook - handles message shortcut with URL-encoded payload", async () => {
+  const deps = createMockDeps();
+
+  const shortcutPayload = {
+    type: "message_action",
+    callback_id: "send_to_linear",
+    message: {
+      type: "message",
+      text: "Test message from shortcut",
+      user: "U123456",
+      ts: "1234567890.123456",
+    },
+    channel: {
+      id: "C123456",
+      name: "general",
+    },
+    user: {
+      id: "U789",
+      name: "requester",
+    },
+    response_url: "https://hooks.slack.com/response/xxx",
+  };
+
+  const request = new Request("https://example.com/webhook", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "x-slack-signature": "v0=valid",
+      "x-slack-request-timestamp": "1234567890",
+    },
+    body: `payload=${encodeURIComponent(JSON.stringify(shortcutPayload))}`,
+  });
+
+  const response = await handleSlackWebhook(request, deps);
+
+  // Should return empty 200 immediately (processing happens in background)
+  assertEquals(response.status, 200);
+  const body = await response.text();
+  assertEquals(body, "");
+});
+
+Deno.test("handleSlackWebhook - returns 200 for empty shortcut message", async () => {
+  const deps = createMockDeps();
+
+  const shortcutPayload = {
+    type: "message_action",
+    callback_id: "send_to_linear",
+    message: {
+      type: "message",
+      text: "",
+      user: "U123456",
+      ts: "1234567890.123456",
+    },
+    channel: { id: "C123456" },
+    user: { id: "U789" },
+    response_url: "https://hooks.slack.com/response/xxx",
+  };
+
+  const request = new Request("https://example.com/webhook", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: `payload=${encodeURIComponent(JSON.stringify(shortcutPayload))}`,
+  });
+
+  const response = await handleSlackWebhook(request, deps);
+
+  assertEquals(response.status, 200);
+});
+
+Deno.test("handleSlackWebhook - returns 400 for missing payload in URL-encoded request", async () => {
+  const deps = createMockDeps();
+
+  const request = new Request("https://example.com/webhook", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "other_field=value",
+  });
+
+  const response = await handleSlackWebhook(request, deps);
+
+  assertEquals(response.status, 400);
+  const body = await response.json();
+  assertEquals(body.error, "Missing payload");
+});

@@ -36,14 +36,6 @@ export interface SlackFile {
 }
 
 /**
- * Result of parsing a Slack message.
- */
-export interface ParsedSlackMessage {
-  content: string;
-  permalink: string | null;
-}
-
-/**
  * Function type for resolving Slack user IDs to display names.
  */
 export type UserResolver = (userId: string) => Promise<string>;

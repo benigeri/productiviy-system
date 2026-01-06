@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import {
   formatMentions,
+  getOriginalMessageUrl,
   parseSlackMessage,
   type SlackMessageEvent,
   type UserResolver,
@@ -275,4 +276,81 @@ Deno.test("parseSlackMessage - resolves mentions in forwarded content", async ()
   const result = await parseSlackMessage(event, resolver);
 
   assertEquals(result, "From Jane:\nHey @mike, check this");
+});
+
+// ============================================================================
+// getOriginalMessageUrl - extracts URL from forwarded messages
+// ============================================================================
+
+Deno.test("getOriginalMessageUrl - returns from_url from attachment", () => {
+  const event: SlackMessageEvent = {
+    type: "message",
+    text: "",
+    channel: "C123",
+    ts: "1234567890.123456",
+    attachments: [
+      {
+        author_name: "Jane",
+        text: "Forwarded content",
+        from_url: "https://workspace.slack.com/archives/C456/p1234567890",
+      },
+    ],
+  };
+
+  const result = getOriginalMessageUrl(event);
+  assertEquals(result, "https://workspace.slack.com/archives/C456/p1234567890");
+});
+
+Deno.test("getOriginalMessageUrl - returns null when no attachments", () => {
+  const event: SlackMessageEvent = {
+    type: "message",
+    text: "Plain message",
+    channel: "C123",
+    ts: "1234567890.123456",
+  };
+
+  const result = getOriginalMessageUrl(event);
+  assertEquals(result, null);
+});
+
+Deno.test("getOriginalMessageUrl - returns null when no from_url in attachments", () => {
+  const event: SlackMessageEvent = {
+    type: "message",
+    text: "",
+    channel: "C123",
+    ts: "1234567890.123456",
+    attachments: [
+      {
+        author_name: "Jane",
+        text: "Content without URL",
+      },
+    ],
+  };
+
+  const result = getOriginalMessageUrl(event);
+  assertEquals(result, null);
+});
+
+Deno.test("getOriginalMessageUrl - returns first from_url when multiple attachments", () => {
+  const event: SlackMessageEvent = {
+    type: "message",
+    text: "",
+    channel: "C123",
+    ts: "1234567890.123456",
+    attachments: [
+      {
+        author_name: "Jane",
+        text: "First",
+        from_url: "https://workspace.slack.com/first",
+      },
+      {
+        author_name: "Bob",
+        text: "Second",
+        from_url: "https://workspace.slack.com/second",
+      },
+    ],
+  };
+
+  const result = getOriginalMessageUrl(event);
+  assertEquals(result, "https://workspace.slack.com/first");
 });

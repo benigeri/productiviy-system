@@ -45,7 +45,30 @@ interface SlackEventCallback {
   event: SlackMessageEvent;
 }
 
-type SlackPayload = SlackUrlVerification | SlackEventCallback;
+interface SlackMessageShortcut {
+  type: "message_action";
+  callback_id: string;
+  message: {
+    type: string;
+    text: string;
+    user: string;
+    ts: string;
+  };
+  channel: {
+    id: string;
+    name?: string;
+  };
+  user: {
+    id: string;
+    name?: string;
+  };
+  response_url: string;
+}
+
+type SlackPayload =
+  | SlackUrlVerification
+  | SlackEventCallback
+  | SlackMessageShortcut;
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -95,10 +118,25 @@ export async function handleSlackWebhook(
   const bodyText = await request.text();
   let payload: SlackPayload;
 
-  try {
-    payload = JSON.parse(bodyText);
-  } catch {
-    return jsonResponse({ error: "Invalid JSON" }, 400);
+  // Shortcuts are sent as URL-encoded form data with a "payload" field
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    try {
+      const params = new URLSearchParams(bodyText);
+      const payloadStr = params.get("payload");
+      if (!payloadStr) {
+        return jsonResponse({ error: "Missing payload" }, 400);
+      }
+      payload = JSON.parse(payloadStr);
+    } catch {
+      return jsonResponse({ error: "Invalid payload" }, 400);
+    }
+  } else {
+    try {
+      payload = JSON.parse(bodyText);
+    } catch {
+      return jsonResponse({ error: "Invalid JSON" }, 400);
+    }
   }
 
   // Handle URL verification challenge (no signature check needed)
@@ -189,6 +227,69 @@ export async function handleSlackWebhook(
     }
   }
 
+  // Handle message shortcuts (right-click → "Send to Linear")
+  if (payload.type === "message_action") {
+    const messageText = payload.message.text ?? "";
+
+    if (messageText.trim() === "") {
+      return new Response("", { status: 200 });
+    }
+
+    // Process in background - Slack needs response within 3 seconds
+    // We can't await this or Slack will timeout
+    const processShortcut = async () => {
+      try {
+        // Resolve the message author's username
+        const authorName = await deps.resolveUser(payload.message.user);
+
+        // Resolve mentions in the message
+        const formattedText = await parseSlackMessage(
+          {
+            type: "message",
+            text: messageText,
+            channel: payload.channel.id,
+            user: payload.message.user,
+            ts: payload.message.ts,
+          },
+          deps.resolveUser,
+          deps.resolveUserGroup,
+        );
+
+        // Prefix with author for clarity in Linear
+        const contentWithAuthor = `From @${authorName}: ${formattedText}`;
+
+        // Get permalink to the original message
+        const permalink = await deps.getPermalink(
+          payload.channel.id,
+          payload.message.ts,
+        );
+
+        // Append permalink to content
+        const contentWithLink = permalink
+          ? `${contentWithAuthor}\n\n[View in Slack](${permalink})`
+          : contentWithAuthor;
+
+        // Create CaptureDeps from SlackWebhookDeps
+        const captureDeps: CaptureDeps = {
+          cleanupContent: deps.cleanupContent,
+          createTriageIssue: deps.createTriageIssue,
+        };
+
+        // Use shared capture pipeline: cleanup → parse → create issue
+        await captureToLinear(contentWithLink, captureDeps);
+        console.log("Shortcut processed successfully");
+      } catch (error) {
+        console.error("Shortcut processing error:", error);
+      }
+    };
+
+    // Fire and forget - don't await
+    processShortcut();
+
+    // Return immediately to satisfy Slack's 3-second requirement
+    return new Response("", { status: 200 });
+  }
+
   return jsonResponse({ ok: true, ignored: true });
 }
 
@@ -219,6 +320,39 @@ if (import.meta.main) {
 
     // Read body for both challenge check and signature verification
     const bodyText = await req.clone().text();
+    const contentType = req.headers.get("content-type") ?? "";
+
+    // Shortcuts send URL-encoded data - parse payload and verify signature, then pass to handler
+    if (contentType.includes("application/x-www-form-urlencoded")) {
+      // Signature verification still uses the raw body text
+      if (signingSecret) {
+        const signature = req.headers.get("x-slack-signature") ?? "";
+        const timestamp = req.headers.get("x-slack-request-timestamp") ?? "";
+
+        const now = Math.floor(Date.now() / 1000);
+        if (Math.abs(now - parseInt(timestamp)) > 300) {
+          return new Response(JSON.stringify({ error: "Request too old" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        const isValid = await verifySlackSignature(
+          signature,
+          timestamp,
+          bodyText,
+          signingSecret,
+        );
+        if (!isValid) {
+          return new Response(JSON.stringify({ error: "Invalid signature" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      }
+      return handleSlackWebhook(req, deps);
+    }
+
     let payload: { type: string; challenge?: string };
     try {
       payload = JSON.parse(bodyText);
