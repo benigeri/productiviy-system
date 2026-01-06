@@ -1,18 +1,4 @@
-export interface LinearIssue {
-  id: string;
-  identifier: string;
-  url: string;
-}
-
-interface LinearResponse {
-  data?: {
-    issueCreate: {
-      success: boolean;
-      issue: LinearIssue | null;
-    };
-  };
-  errors?: Array<{ message: string }>;
-}
+import type { LinearIssue, LinearResponse } from "./types.ts";
 
 const CREATE_ISSUE_MUTATION = `
   mutation IssueCreate($input: IssueCreateInput!) {
@@ -27,14 +13,18 @@ const CREATE_ISSUE_MUTATION = `
   }
 `;
 
-const TEAM_ID = "418bd6ee-1f6d-47cc-87f2-88b7371b743a";
+// Default team ID - can be overridden via environment variable
+const DEFAULT_TEAM_ID = "418bd6ee-1f6d-47cc-87f2-88b7371b743a";
 
 export async function createTriageIssue(
   title: string,
   apiKey: string,
   fetchFn: typeof fetch = fetch,
-  description?: string
+  description?: string,
+  teamId?: string
 ): Promise<LinearIssue> {
+  const effectiveTeamId = teamId ?? DEFAULT_TEAM_ID;
+
   const response = await fetchFn("https://api.linear.app/graphql", {
     method: "POST",
     headers: {
@@ -46,7 +36,7 @@ export async function createTriageIssue(
       variables: {
         input: {
           title,
-          teamId: TEAM_ID,
+          teamId: effectiveTeamId,
           ...(description && { description }),
         },
       },
