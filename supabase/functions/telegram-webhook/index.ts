@@ -8,11 +8,10 @@ import {
   type WebhookUpdate,
 } from "./lib/telegram.ts";
 import { transcribeAudio as transcribeAudioImpl } from "./lib/deepgram.ts";
-import { cleanupContent as cleanupContentImpl } from "./lib/claude.ts";
-import {
-  createTriageIssue as createTriageIssueImpl,
-  type LinearIssue,
-} from "./lib/linear.ts";
+import { cleanupContent as cleanupContentImpl } from "../_shared/lib/claude.ts";
+import { createTriageIssue as createTriageIssueImpl } from "../_shared/lib/linear.ts";
+import { parseIssueContent } from "../_shared/lib/parse.ts";
+import type { LinearIssue } from "../_shared/lib/types.ts";
 
 export interface WebhookDeps {
   botToken: string;
@@ -63,10 +62,8 @@ export async function handleWebhook(
       return jsonResponse({ error: "Empty message content" }, 400);
     }
 
-    // Split into title (first line) and description (rest)
-    const lines = content.split("\n");
-    const title = lines[0].trim();
-    const description = lines.slice(1).join("\n").trim() || undefined;
+    // Parse into title and description using shared function
+    const { title, description } = parseIssueContent(content);
 
     // Create Linear issue
     const issue = await deps.createTriageIssue(title, deps.linearKey, description);
