@@ -43,7 +43,7 @@ export default function Command() {
         body: JSON.stringify({ text: content }),
       });
 
-      const data: CreateIssueResponse = await response.json();
+      const data = (await response.json()) as CreateIssueResponse;
 
       if (!data.ok || !data.issue) {
         throw new Error(data.error || "Failed to create issue");
