@@ -5,7 +5,10 @@
   "description": "Create Linear issues quickly with AI-powered text cleanup",
   "icon": "extension-icon.png",
   "author": "benigeri",
-  "categories": ["Productivity"],
+  "owner": "archive",
+  "categories": [
+    "Productivity"
+  ],
   "license": "MIT",
   "commands": [
     {
@@ -31,7 +34,7 @@
   "devDependencies": {
     "@raycast/eslint-config": "^1.0.11",
     "@types/node": "22.14.0",
-    "@types/react": "^18.3.3",
+    "@types/react": "^19.2.7",
     "eslint": "^8.57.0",
     "prettier": "^3.3.3",
     "typescript": "^5.4.5"
@@ -40,7 +43,6 @@
     "build": "ray build --skip-types -e dist -o dist",
     "dev": "ray develop",
     "fix-lint": "ray lint --fix",
-    "lint": "ray lint",
-    "prepublishOnly": "echo 'This extension is private' && exit 1"
+    "lint": "ray lint"
   }
 }
