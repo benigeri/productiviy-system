@@ -4,10 +4,6 @@ import type { WebhookUpdate } from "./lib/telegram.ts";
 
 function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
   return {
-    botToken: "test_bot_token",
-    deepgramKey: "test_deepgram_key",
-    anthropicKey: "test_anthropic_key",
-    linearKey: "test_linear_key",
     webhookSecret: "test_secret",
     getFileUrl: () => Promise.resolve("https://telegram.org/file/voice.oga"),
     transcribeAudio: () => Promise.resolve("transcribed voice message"),
@@ -116,7 +112,7 @@ Deno.test("handleWebhook - splits multiline into title and description", async (
 
   const deps = createMockDeps({
     cleanupContent: (text) => Promise.resolve(text),
-    createTriageIssue: (title, _apiKey, description) => {
+    createTriageIssue: (title, description) => {
       captured = { title, description };
       return Promise.resolve({
         id: "issue-123",
@@ -147,7 +143,7 @@ Deno.test("handleWebhook - single line message has no description", async () => 
 
   const deps = createMockDeps({
     cleanupContent: (text) => Promise.resolve(text),
-    createTriageIssue: (title, _apiKey, description) => {
+    createTriageIssue: (title, description) => {
       captured = { title, description };
       return Promise.resolve({
         id: "issue-123",
