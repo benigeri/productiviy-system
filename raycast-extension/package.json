@@ -5,6 +5,7 @@
   "description": "Create Linear issues quickly with AI-powered text cleanup",
   "icon": "extension-icon.png",
   "author": "benigeri",
+  "owner": "archive",
   "categories": ["Productivity"],
   "license": "MIT",
   "commands": [
