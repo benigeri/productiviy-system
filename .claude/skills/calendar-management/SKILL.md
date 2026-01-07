@@ -240,6 +240,57 @@ bash -c 'source .env && curl -s "https://api.us.nylas.com/v3/grants/$NYLAS_GRANT
 
 ---
 
+## Workflow Patterns
+
+### Event ID Tracking
+
+When creating multiple events that may need updates later in the same session, capture the returned IDs:
+
+```bash
+# The API returns data.id for each created event
+RESULT=$(curl -s -X POST ... -d '{"title":"Sleep",...}')
+EVENT_ID=$(echo "$RESULT" | jq -r ".data.id")
+```
+
+Store IDs in arrays or variables for batch updates:
+```bash
+# Create events and track IDs
+SLEEP_IDS=()
+for DAY in 10 11 12; do
+  RESULT=$(curl -s -X POST ...)
+  SLEEP_IDS+=("$(echo "$RESULT" | jq -r ".data.id")")
+done
+
+# Later, update them
+for ID in "${SLEEP_IDS[@]}"; do
+  curl -s -X PUT ".../events/$ID..."
+done
+```
+
+### Morning Block Sequence
+
+Morning blocks should be contiguous. The standard sequence:
+
+1. **Sleep** ends → **Wake up and read** starts (same timestamp)
+2. **Wake up and read** ends → next activity starts
+
+When user specifies **NYC office days**, add a commute block:
+1. Sleep ends → Wake up and read starts
+2. Wake up and read ends → **🚗 Go To Office** starts
+3. Go To Office ends → ready to leave
+
+To fit a commute block, shift sleep and wake earlier by the commute duration:
+```
+Example: Adding 15-min commute for NYC office days
+- Sleep: 10pm-6am → 9:45pm-5:45am (shifted 15 min earlier)
+- Wake: 6am-7am → 5:45am-6:45am (shifted 15 min earlier)
+- Commute: 6:45am-7am (new block)
+```
+
+**Note:** Only add commute blocks when user explicitly mentions office/NYC days. Don't assume commute is needed.
+
+---
+
 ## Troubleshooting
 
 ### Can't find an event that exists on calendar
@@ -302,6 +353,22 @@ Claude: Found Tuesday Jan 20 sleep block (10pm-6am EST).
 Shifting 1 hour later...
 
 ✓ Updated: 11:00 PM - 7:00 AM EST
+```
+
+### NYC office week adjustment
+```
+User: I'm in NYC Mon 12 to Fri 16, add 15-min go-to-office blocks
+
+Claude: I'll adjust your schedule for those office days:
+- Shift sleep 15 min earlier (9:45pm-5:45am) for nights of Jan 11-15
+- Shift wake up 15 min earlier (5:45am-6:45am) for mornings Jan 12-16
+- Add "🚗 Go To Office" blocks (6:45am-7am) for mornings Jan 12-16
+
+[Updates existing events, creates new commute blocks...]
+
+✓ Updated 5 sleep blocks
+✓ Updated 5 wake up blocks
+✓ Created 5 go-to-office blocks
 ```
 
 ---
