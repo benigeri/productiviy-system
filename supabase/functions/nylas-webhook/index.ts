@@ -4,6 +4,7 @@
  */
 
 import type {
+  NylasFolder,
   NylasMessage,
   NylasWebhookPayload,
 } from "../_shared/lib/nylas-types.ts";
@@ -23,6 +24,7 @@ import {
 export interface WebhookDeps {
   verifySignature: (signature: string, body: string) => Promise<boolean>;
   getMessage: (messageId: string) => Promise<NylasMessage>;
+  getFolders: () => Promise<NylasFolder[]>;
   updateMessageFolders: (
     messageId: string,
     folders: string[],
@@ -37,6 +39,22 @@ function jsonResponse(data: unknown, status = 200): Response {
 }
 
 /**
+ * Build lookup maps between folder IDs and names.
+ */
+function buildFolderMaps(folders: NylasFolder[]): {
+  idToName: Map<string, string>;
+  nameToId: Map<string, string>;
+} {
+  const idToName = new Map<string, string>();
+  const nameToId = new Map<string, string>();
+  for (const folder of folders) {
+    idToName.set(folder.id, folder.name);
+    nameToId.set(folder.name, folder.id);
+  }
+  return { idToName, nameToId };
+}
+
+/**
  * Process a message and ensure only one workflow label is active.
  * Returns true if an update was made.
  */
@@ -44,8 +62,17 @@ async function processMessage(
   messageId: string,
   deps: WebhookDeps,
 ): Promise<boolean> {
-  const message = await deps.getMessage(messageId);
-  const workflowLabels = getWorkflowLabels(message.folders);
+  // Fetch message and folders in parallel
+  const [message, folders] = await Promise.all([
+    deps.getMessage(messageId),
+    deps.getFolders(),
+  ]);
+
+  const { idToName, nameToId } = buildFolderMaps(folders);
+
+  // Convert folder IDs to names for workflow label detection
+  const folderNames = message.folders.map((id) => idToName.get(id) ?? id);
+  const workflowLabels = getWorkflowLabels(folderNames);
 
   // No workflow labels or only one - nothing to do
   if (workflowLabels.length <= 1) {
@@ -59,9 +86,12 @@ async function processMessage(
   }
 
   // Remove other workflow labels, keep the highest priority one
-  const newFolders = removeWorkflowLabels(message.folders, highestPriority);
+  const newFolderNames = removeWorkflowLabels(folderNames, highestPriority);
 
-  await deps.updateMessageFolders(messageId, newFolders);
+  // Convert names back to IDs for the API call
+  const newFolderIds = newFolderNames.map((name) => nameToId.get(name) ?? name);
+
+  await deps.updateMessageFolders(messageId, newFolderIds);
   return true;
 }
 
@@ -125,6 +155,7 @@ if (import.meta.main) {
       verifySignature: (signature, body) =>
         verifyNylasSignature(signature, body, webhookSecret),
       getMessage: (id) => client.getMessage(id),
+      getFolders: () => client.getFolders(),
       updateMessageFolders: (id, folders) =>
         client.updateMessageFolders(id, folders),
     };

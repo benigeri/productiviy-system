@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { handleWebhook, type WebhookDeps } from "./index.ts";
 import type {
+  NylasFolder,
   NylasMessage,
   NylasWebhookPayload,
 } from "../_shared/lib/nylas-types.ts";
@@ -8,6 +9,14 @@ import type {
 // ============================================================================
 // Helper to create mock deps
 // ============================================================================
+
+const DEFAULT_FOLDERS: NylasFolder[] = [
+  { id: "INBOX", grant_id: "grant-456", name: "INBOX" },
+  { id: "SENT", grant_id: "grant-456", name: "SENT" },
+  { id: "Label_139", grant_id: "grant-456", name: "to-respond-paul" },
+  { id: "Label_138", grant_id: "grant-456", name: "to-read-paul" },
+  { id: "Label_140", grant_id: "grant-456", name: "drafted" },
+];
 
 function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
   return {
@@ -23,6 +32,7 @@ function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
         date: 1704067200,
         folders: ["INBOX"],
       }),
+    getFolders: () => Promise.resolve(DEFAULT_FOLDERS),
     updateMessageFolders: (id, folders) =>
       Promise.resolve({
         id,
@@ -158,7 +168,8 @@ Deno.test("handleWebhook - clears other workflow labels when to-respond-paul add
         from: [{ email: "sender@example.com" }],
         to: [{ email: "recipient@example.com" }],
         date: 1704067200,
-        folders: ["INBOX", "to-respond-paul", "to-read-paul", "drafted"],
+        // Use folder IDs as Nylas returns them
+        folders: ["INBOX", "Label_139", "Label_138", "Label_140"],
       }),
     updateMessageFolders: (_id, folders) => {
       updatedFolders = folders;
@@ -177,11 +188,11 @@ Deno.test("handleWebhook - clears other workflow labels when to-respond-paul add
 
   await handleWebhook(request, deps);
 
-  // Should keep INBOX and to-respond-paul (highest priority), remove others
+  // Should keep INBOX and Label_139 (to-respond-paul, highest priority), remove others
   assertEquals(updatedFolders.includes("INBOX"), true);
-  assertEquals(updatedFolders.includes("to-respond-paul"), true);
-  assertEquals(updatedFolders.includes("to-read-paul"), false);
-  assertEquals(updatedFolders.includes("drafted"), false);
+  assertEquals(updatedFolders.includes("Label_139"), true); // to-respond-paul
+  assertEquals(updatedFolders.includes("Label_138"), false); // to-read-paul removed
+  assertEquals(updatedFolders.includes("Label_140"), false); // drafted removed
 });
 
 Deno.test("handleWebhook - no update needed when only one workflow label", async () => {
@@ -206,7 +217,8 @@ Deno.test("handleWebhook - no update needed when only one workflow label", async
         from: [{ email: "sender@example.com" }],
         to: [{ email: "recipient@example.com" }],
         date: 1704067200,
-        folders: ["INBOX", "to-respond-paul"],
+        // Use folder ID for to-respond-paul
+        folders: ["INBOX", "Label_139"],
       }),
     updateMessageFolders: (_id, folders) => {
       updateCalled = true;
@@ -251,6 +263,7 @@ Deno.test("handleWebhook - no update when no workflow labels", async () => {
         from: [{ email: "sender@example.com" }],
         to: [{ email: "recipient@example.com" }],
         date: 1704067200,
+        // INBOX and SENT are system folders, not workflow labels
         folders: ["INBOX", "SENT"],
       }),
     updateMessageFolders: () => {
