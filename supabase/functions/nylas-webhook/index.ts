@@ -21,7 +21,6 @@ import {
  * Dependencies for the webhook handler.
  */
 export interface WebhookDeps {
-  webhookSecret: string;
   verifySignature: (signature: string, body: string) => Promise<boolean>;
   getMessage: (messageId: string) => Promise<NylasMessage>;
   updateMessageFolders: (
@@ -123,7 +122,6 @@ if (import.meta.main) {
     const client = createNylasClient(apiKey, grantId);
 
     const deps: WebhookDeps = {
-      webhookSecret,
       verifySignature: (signature, body) =>
         verifyNylasSignature(signature, body, webhookSecret),
       getMessage: (id) => client.getMessage(id),

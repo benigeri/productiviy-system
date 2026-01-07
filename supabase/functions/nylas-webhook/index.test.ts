@@ -11,7 +11,6 @@ import type {
 
 function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
   return {
-    webhookSecret: "test-secret",
     verifySignature: () => Promise.resolve(true),
     getMessage: () =>
       Promise.resolve({
