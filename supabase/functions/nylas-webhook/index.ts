@@ -6,6 +6,7 @@
 import type {
   NylasFolder,
   NylasMessage,
+  NylasThread,
   NylasWebhookPayload,
 } from "../_shared/lib/nylas-types.ts";
 import {
@@ -24,6 +25,7 @@ import {
 export interface WebhookDeps {
   verifySignature: (signature: string, body: string) => Promise<boolean>;
   getMessage: (messageId: string) => Promise<NylasMessage>;
+  getThread: (threadId: string) => Promise<NylasThread>;
   getFolders: () => Promise<NylasFolder[]>;
   updateMessageFolders: (
     messageId: string,
@@ -55,44 +57,116 @@ function buildFolderMaps(folders: NylasFolder[]): {
 }
 
 /**
- * Process a message and ensure only one workflow label is active.
+ * Helper to remove all workflow labels from a message.
  * Returns true if an update was made.
  */
-async function processMessage(
+async function clearWorkflowLabels(
+  message: NylasMessage,
+  idToName: Map<string, string>,
+  nameToId: Map<string, string>,
+  deps: WebhookDeps,
+): Promise<boolean> {
+  const folderNames = message.folders.map((id) => idToName.get(id) ?? id);
+  const workflowLabels = getWorkflowLabels(folderNames);
+
+  if (workflowLabels.length === 0) {
+    return false;
+  }
+
+  // Remove all workflow labels
+  const newFolderNames = removeWorkflowLabels(folderNames);
+  const newFolderIds = newFolderNames.map((name) => nameToId.get(name) ?? name);
+
+  await deps.updateMessageFolders(message.id, newFolderIds);
+  return true;
+}
+
+/**
+ * Process a message update event.
+ * Handles: deduplication (multiple workflow labels) and archive (no INBOX).
+ */
+async function processMessageUpdate(
   messageId: string,
   deps: WebhookDeps,
 ): Promise<boolean> {
-  // Fetch message and folders in parallel
   const [message, folders] = await Promise.all([
     deps.getMessage(messageId),
     deps.getFolders(),
   ]);
 
   const { idToName, nameToId } = buildFolderMaps(folders);
-
-  // Convert folder IDs to names for workflow label detection
   const folderNames = message.folders.map((id) => idToName.get(id) ?? id);
   const workflowLabels = getWorkflowLabels(folderNames);
 
-  // No workflow labels or only one - nothing to do
-  if (workflowLabels.length <= 1) {
+  // No workflow labels - nothing to do
+  if (workflowLabels.length === 0) {
     return false;
   }
 
-  // Multiple workflow labels - keep only the highest priority one
-  const highestPriority = getHighestPriorityLabel(workflowLabels);
-  if (!highestPriority) {
-    return false;
+  // Archive detection: has workflow labels but no INBOX → clear all
+  const hasInbox = folderNames.includes("INBOX");
+  if (!hasInbox) {
+    return clearWorkflowLabels(message, idToName, nameToId, deps);
   }
 
-  // Remove other workflow labels, keep the highest priority one
-  const newFolderNames = removeWorkflowLabels(folderNames, highestPriority);
+  // Deduplication: multiple workflow labels → keep highest priority
+  if (workflowLabels.length > 1) {
+    const highestPriority = getHighestPriorityLabel(workflowLabels);
+    if (highestPriority) {
+      const newFolderNames = removeWorkflowLabels(folderNames, highestPriority);
+      const newFolderIds = newFolderNames.map((name) =>
+        nameToId.get(name) ?? name
+      );
+      await deps.updateMessageFolders(messageId, newFolderIds);
+      return true;
+    }
+  }
 
-  // Convert names back to IDs for the API call
-  const newFolderIds = newFolderNames.map((name) => nameToId.get(name) ?? name);
+  return false;
+}
 
-  await deps.updateMessageFolders(messageId, newFolderIds);
-  return true;
+/**
+ * Process a message created event (new message sent).
+ * If sent message is a reply, clear workflow labels from thread.
+ */
+async function processMessageCreated(
+  messageId: string,
+  deps: WebhookDeps,
+): Promise<boolean> {
+  const [message, folders] = await Promise.all([
+    deps.getMessage(messageId),
+    deps.getFolders(),
+  ]);
+
+  const { idToName, nameToId } = buildFolderMaps(folders);
+  const folderNames = message.folders.map((id) => idToName.get(id) ?? id);
+
+  // Only process sent messages
+  const isSent = folderNames.includes("SENT");
+  if (!isSent) {
+    // Not a sent message - check for deduplication/archive like message.updated
+    return processMessageUpdate(messageId, deps);
+  }
+
+  // Get thread to find other messages
+  const thread = await deps.getThread(message.thread_id);
+
+  // Process each message in thread (except the one we just sent)
+  let updated = false;
+  for (const threadMessageId of thread.message_ids) {
+    if (threadMessageId === messageId) continue;
+
+    const threadMessage = await deps.getMessage(threadMessageId);
+    const cleared = await clearWorkflowLabels(
+      threadMessage,
+      idToName,
+      nameToId,
+      deps,
+    );
+    if (cleared) updated = true;
+  }
+
+  return updated;
 }
 
 /**
@@ -122,20 +196,21 @@ export async function handleWebhook(
 
   try {
     const payload: NylasWebhookPayload = JSON.parse(body);
-
-    // Only process message events
-    if (
-      payload.type !== "message.created" && payload.type !== "message.updated"
-    ) {
-      return jsonResponse({ ok: true, skipped: true });
-    }
-
     const messageId = payload.data.object.id;
 
-    // Process the message
-    await processMessage(messageId, deps);
+    // Route based on event type
+    if (payload.type === "message.created") {
+      await processMessageCreated(messageId, deps);
+      return jsonResponse({ ok: true, action: "message.created" });
+    }
 
-    return jsonResponse({ ok: true });
+    if (payload.type === "message.updated") {
+      await processMessageUpdate(messageId, deps);
+      return jsonResponse({ ok: true, action: "message.updated" });
+    }
+
+    // Unknown event type - skip
+    return jsonResponse({ ok: true, skipped: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return jsonResponse({ error: message }, 500);
@@ -155,6 +230,7 @@ if (import.meta.main) {
       verifySignature: (signature, body) =>
         verifyNylasSignature(signature, body, webhookSecret),
       getMessage: (id) => client.getMessage(id),
+      getThread: (id) => client.getThread(id),
       getFolders: () => client.getFolders(),
       updateMessageFolders: (id, folders) =>
         client.updateMessageFolders(id, folders),

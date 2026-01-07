@@ -32,6 +32,15 @@ function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
         date: 1704067200,
         folders: ["INBOX"],
       }),
+    getThread: () =>
+      Promise.resolve({
+        id: "thread-789",
+        grant_id: "grant-456",
+        subject: "Test",
+        participants: [{ email: "sender@example.com" }],
+        message_ids: ["msg-123"],
+        folders: ["INBOX"],
+      }),
     getFolders: () => Promise.resolve(DEFAULT_FOLDERS),
     updateMessageFolders: (id, folders) =>
       Promise.resolve({
@@ -392,4 +401,134 @@ Deno.test("handleWebhook - returns 500 on processing error", async () => {
   assertEquals(response.status, 500);
   const json = await response.json();
   assertEquals(json.error, "API error");
+});
+
+// ============================================================================
+// Archive detection tests
+// ============================================================================
+
+Deno.test("handleWebhook - clears workflow labels when archived (no INBOX)", async () => {
+  const payload = createWebhookPayload("message.updated");
+  const request = new Request("https://example.com/nylas-webhook", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nylas-signature": "valid-signature",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  let updatedFolders: string[] = [];
+  const deps = createMockDeps({
+    getMessage: () =>
+      Promise.resolve({
+        id: "msg-123",
+        grant_id: "grant-456",
+        thread_id: "thread-789",
+        subject: "Test",
+        from: [{ email: "sender@example.com" }],
+        to: [{ email: "recipient@example.com" }],
+        date: 1704067200,
+        // Archived: has workflow label but no INBOX
+        folders: ["Label_139", "CATEGORY_UPDATES"],
+      }),
+    updateMessageFolders: (_id, folders) => {
+      updatedFolders = folders;
+      return Promise.resolve({
+        id: "msg-123",
+        grant_id: "grant-456",
+        thread_id: "thread-789",
+        subject: "Test",
+        from: [{ email: "sender@example.com" }],
+        to: [{ email: "recipient@example.com" }],
+        date: 1704067200,
+        folders,
+      });
+    },
+  });
+
+  await handleWebhook(request, deps);
+
+  // Workflow label should be removed
+  assertEquals(updatedFolders.includes("Label_139"), false);
+  assertEquals(updatedFolders.includes("CATEGORY_UPDATES"), true);
+});
+
+// ============================================================================
+// Send detection tests
+// ============================================================================
+
+Deno.test("handleWebhook - clears workflow labels from thread when reply sent", async () => {
+  const payload = createWebhookPayload("message.created", "sent-msg-456");
+  const request = new Request("https://example.com/nylas-webhook", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nylas-signature": "valid-signature",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const updatedMessages: { id: string; folders: string[] }[] = [];
+  const deps = createMockDeps({
+    getMessage: (id) => {
+      if (id === "sent-msg-456") {
+        // The sent message
+        return Promise.resolve({
+          id: "sent-msg-456",
+          grant_id: "grant-456",
+          thread_id: "thread-789",
+          subject: "Re: Test",
+          from: [{ email: "me@example.com" }],
+          to: [{ email: "sender@example.com" }],
+          date: 1704067300,
+          folders: ["SENT"],
+        });
+      }
+      // Original message with workflow label
+      return Promise.resolve({
+        id: "original-msg-123",
+        grant_id: "grant-456",
+        thread_id: "thread-789",
+        subject: "Test",
+        from: [{ email: "sender@example.com" }],
+        to: [{ email: "me@example.com" }],
+        date: 1704067200,
+        folders: ["INBOX", "Label_139"],
+      });
+    },
+    getThread: () =>
+      Promise.resolve({
+        id: "thread-789",
+        grant_id: "grant-456",
+        subject: "Test",
+        participants: [
+          { email: "sender@example.com" },
+          { email: "me@example.com" },
+        ],
+        message_ids: ["original-msg-123", "sent-msg-456"],
+        folders: ["INBOX", "SENT"],
+      }),
+    updateMessageFolders: (id, folders) => {
+      updatedMessages.push({ id, folders });
+      return Promise.resolve({
+        id,
+        grant_id: "grant-456",
+        thread_id: "thread-789",
+        subject: "Test",
+        from: [{ email: "sender@example.com" }],
+        to: [{ email: "me@example.com" }],
+        date: 1704067200,
+        folders,
+      });
+    },
+  });
+
+  await handleWebhook(request, deps);
+
+  // Original message should have workflow label cleared
+  assertEquals(updatedMessages.length, 1);
+  assertEquals(updatedMessages[0].id, "original-msg-123");
+  assertEquals(updatedMessages[0].folders.includes("Label_139"), false);
+  assertEquals(updatedMessages[0].folders.includes("INBOX"), true);
 });
