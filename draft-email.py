@@ -214,7 +214,10 @@ def get_draft_prompt(thread_content: str, dictation: str) -> str:
 
     parts.append("\n---\n\n## User's Dictation\n")
     parts.append("The user wants to respond with this intent. ")
-    parts.append("Capture their key points while writing in Paul's voice:\n\n")
+    parts.append("Capture their key points while writing in Paul's voice.\n\n")
+    parts.append("Note: The dictation may contain transcription artifacts such as ")
+    parts.append("repeated words (\"bye bye bye\"), filler words (\"um\", \"uh\"), ")
+    parts.append("or trailing noise. Ignore these artifacts and do not include them in the draft.\n\n")
     parts.append(dictation)
 
     return "\n".join(parts)

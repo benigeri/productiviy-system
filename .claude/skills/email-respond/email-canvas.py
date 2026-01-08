@@ -230,7 +230,8 @@ def list_threads() -> None:
     print(double_line())
 
 
-def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None, total_threads: int = None) -> None:
+def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None, total_threads: int = None,
+                drafted_count: int = 0, skipped_count: int = 0) -> None:
     """Show single thread details with optional draft."""
     thread = nylas_get(f"/threads/{thread_id}")
 
@@ -279,13 +280,23 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
     if thread_index and total_threads:
         position = f" {thread_index}/{total_threads}:"
 
+    # Build progress string
+    progress = ""
+    if drafted_count > 0 or skipped_count > 0:
+        parts = []
+        if drafted_count > 0:
+            parts.append(f"{drafted_count} drafted")
+        if skipped_count > 0:
+            parts.append(f"{skipped_count} skipped")
+        progress = f"  [{', '.join(parts)}]"
+
     print()
     print(double_line())
 
     if draft_text:
         # Abbreviated view when showing draft
         abbrev_subject = subject[:42] + "..." if len(subject) > 45 else subject
-        print(f"  📧 ORIGINAL:{position} {abbrev_subject}")
+        print(f"  📧 ORIGINAL:{position} {abbrev_subject}{progress}")
         print(f"  From: {from_list[0].get('name', 'Unknown') if from_list else 'Unknown'} | {date_str}")
         print(double_line())
         # Show abbreviated body
@@ -297,7 +308,7 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
             print(f"  {line}")
     else:
         # Full view
-        print(f"  📧 Thread{position} {subject}")
+        print(f"  📧 Thread{position} {subject}{progress}")
         print(f"  From: {from_str}")
         print(f"  To: {to_str}")
         if cc_str:
@@ -346,6 +357,8 @@ Examples:
     parser.add_argument("--draft-file", help="Read draft text from file (avoids shell quoting issues)")
     parser.add_argument("--index", "-i", type=int, help="Thread index (e.g., 1 of 9)")
     parser.add_argument("--total", "-n", type=int, help="Total thread count")
+    parser.add_argument("--drafted", type=int, default=0, help="Number of drafts created so far")
+    parser.add_argument("--skipped", type=int, default=0, help="Number of threads skipped so far")
 
     args = parser.parse_args()
 
@@ -369,7 +382,7 @@ Examples:
         sys.exit(1)
 
     if args.thread_id:
-        show_thread(args.thread_id, draft_text, args.index, args.total)
+        show_thread(args.thread_id, draft_text, args.index, args.total, args.drafted, args.skipped)
     else:
         list_threads()
 
