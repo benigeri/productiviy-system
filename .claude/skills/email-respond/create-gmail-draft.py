@@ -86,8 +86,9 @@ def verify_draft_exists(draft_id: str) -> bool:
 
 
 # Gmail system folders that cannot be modified via Nylas API
+# These are filtered out before updating thread labels
 GMAIL_SYSTEM_FOLDERS = {
-    "SENT", "DRAFT", "TRASH", "SPAM", "STARRED", "IMPORTANT", "UNREAD",
+    "INBOX", "SENT", "DRAFT", "TRASH", "SPAM", "STARRED", "IMPORTANT", "UNREAD",
     "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
     "CATEGORY_UPDATES", "CATEGORY_FORUMS",
 }
