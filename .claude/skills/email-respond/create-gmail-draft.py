@@ -85,30 +85,83 @@ def verify_draft_exists(draft_id: str) -> bool:
         return False
 
 
-# Gmail system folders that cannot be modified via Nylas API
-# These are filtered out before updating thread labels
-GMAIL_SYSTEM_FOLDERS = {
-    "INBOX", "SENT", "DRAFT", "TRASH", "SPAM", "STARRED", "IMPORTANT", "UNREAD",
-    "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
-    "CATEGORY_UPDATES", "CATEGORY_FORUMS",
-}
+# System folders that cannot be set via Nylas API PUT requests
+# These must be filtered out before updating message/thread labels
+UNSETTABLE_FOLDERS = {"SENT", "DRAFT", "TRASH", "SPAM"}
 
 
-def update_thread_labels(thread_id: str, add_labels: list, remove_labels: list) -> dict:
-    """Update labels on a thread (affects all messages in thread).
+def update_message_labels(message_id: str, add_labels: list, remove_labels: list) -> dict:
+    """Update labels on a single message.
 
     Args:
-        thread_id: The thread to update
+        message_id: The message to update
         add_labels: List of folder/label IDs to add
         remove_labels: List of folder/label IDs to remove
+
+    Returns:
+        Updated message data with new folders
     """
-    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/threads/{thread_id}"
+    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/messages/{message_id}"
     headers = {
         "Authorization": f"Bearer {NYLAS_API_KEY}",
         "Content-Type": "application/json",
     }
 
-    # First get current folders
+    # Get current folders for this message
+    try:
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+    except requests.RequestException as e:
+        print(f"Error fetching message {message_id}: {e}", file=sys.stderr)
+        return {}
+
+    if not response.ok:
+        print(f"Error fetching message {message_id}: {response.status_code}", file=sys.stderr)
+        return {}
+
+    message_data = response.json().get("data", {})
+    current_folders = message_data.get("folders", [])
+
+    # Filter out system folders that can't be set via API
+    safe_folders = [f for f in current_folders if f not in UNSETTABLE_FOLDERS]
+
+    # Modify folders: remove specified labels, add new ones
+    new_folders = [f for f in safe_folders if f not in remove_labels]
+    for label in add_labels:
+        if label not in new_folders:
+            new_folders.append(label)
+
+    # Update message
+    try:
+        response = requests.put(url, headers=headers, json={"folders": new_folders}, timeout=REQUEST_TIMEOUT)
+    except requests.RequestException as e:
+        print(f"Error updating message {message_id}: {e}", file=sys.stderr)
+        return {}
+
+    if not response.ok:
+        print(f"Error updating message {message_id}: {response.status_code}", file=sys.stderr)
+        return {}
+
+    return response.json().get("data", {})
+
+
+def update_thread_labels(thread_id: str, add_labels: list, remove_labels: list) -> dict:
+    """Update labels on all messages in a thread.
+
+    Updates each message individually to avoid issues with DRAFT system folder
+    blocking thread-level updates.
+
+    Args:
+        thread_id: The thread to update
+        add_labels: List of folder/label IDs to add
+        remove_labels: List of folder/label IDs to remove
+
+    Returns:
+        Dict with thread_id, message_count, and folders from last updated message
+    """
+    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/threads/{thread_id}"
+    headers = {"Authorization": f"Bearer {NYLAS_API_KEY}"}
+
+    # Get thread to find all message IDs
     try:
         response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
     except requests.RequestException as e:
@@ -120,30 +173,27 @@ def update_thread_labels(thread_id: str, add_labels: list, remove_labels: list) 
         sys.exit(1)
 
     thread_data = response.json().get("data", {})
-    current_folders = thread_data.get("folders", [])
+    message_ids = thread_data.get("message_ids", [])
 
-    # Filter out Gmail system folders that can't be modified via API
-    current_folders = [f for f in current_folders if f not in GMAIL_SYSTEM_FOLDERS]
-
-    # Modify folders: remove specified labels, add new ones
-    new_folders = [f for f in current_folders if f not in remove_labels]
-    for label in add_labels:
-        if label not in new_folders:
-            new_folders.append(label)
-
-    payload = {"folders": new_folders}
-
-    try:
-        response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException as e:
-        print(f"Error updating thread labels: {e}", file=sys.stderr)
+    if not message_ids:
+        print("Error: Thread has no messages", file=sys.stderr)
         sys.exit(1)
 
-    if not response.ok:
-        print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
-        sys.exit(1)
+    # Update each message in the thread
+    updated_count = 0
+    last_result = {}
+    for msg_id in message_ids:
+        result = update_message_labels(msg_id, add_labels, remove_labels)
+        if result:
+            updated_count += 1
+            last_result = result
 
-    return response.json().get("data", {})
+    return {
+        "thread_id": thread_id,
+        "messages_total": len(message_ids),
+        "messages_updated": updated_count,
+        "folders": last_result.get("folders", []),
+    }
 
 
 def main():
@@ -230,15 +280,23 @@ def main():
         drafted_added = "Label_215" in updated_folders
         to_respond_removed = "Label_139" not in updated_folders
 
-        output["labels_updated"] = drafted_added and to_respond_removed
+        messages_total = label_result.get("messages_total", 0)
+        messages_updated = label_result.get("messages_updated", 0)
+        all_updated = messages_updated == messages_total and messages_total > 0
+
+        output["labels_updated"] = drafted_added and to_respond_removed and all_updated
         output["labels"] = {
             "thread_id": args.thread_id,
+            "messages_total": messages_total,
+            "messages_updated": messages_updated,
             "added": ["Label_215"] if drafted_added else [],
             "removed": ["Label_139"] if to_respond_removed else [],
             "current_folders": updated_folders,
         }
 
-        if not output["labels_updated"]:
+        if not all_updated:
+            print(f"Warning: Only {messages_updated}/{messages_total} messages updated", file=sys.stderr)
+        elif not output["labels_updated"]:
             print(f"Warning: Label update may have failed. Current folders: {updated_folders}", file=sys.stderr)
 
     # Single JSON output at the end (avoid duplicate outputs)
