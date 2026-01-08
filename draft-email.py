@@ -5,6 +5,7 @@ Fetches an email thread from Nylas and generates a draft response using Anthropi
 """
 
 import argparse
+import json
 import os
 import sys
 import warnings
@@ -26,6 +27,10 @@ ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 
 REQUEST_TIMEOUT = 30  # seconds
 ANTHROPIC_TIMEOUT = 60  # seconds (longer for LLM generation)
+
+# Paths relative to project root
+GUIDELINES_PATH = ".claude/skills/email-respond/email-writing-guidelines.md"
+PAUL_EMAILS_PATH = ".claude/skills/email-respond/paul-emails.txt"
 
 
 def check_env():
@@ -152,21 +157,49 @@ def format_thread(thread: dict, messages: list[dict]) -> str:
     return "\n".join(parts)
 
 
-DRAFT_PROMPT = """You are an email assistant helping to draft a response to an email thread.
+def load_file(relative_path: str) -> str | None:
+    """Load a file relative to the script directory."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_dir, relative_path)
 
-Review the email thread below and draft a professional, helpful response to the most recent message.
+    if os.path.exists(file_path):
+        with open(file_path, encoding="utf-8") as f:
+            return f.read()
+    return None
 
-Guidelines:
-- Match the tone and formality of the conversation
-- Be concise but complete
-- Address all questions or requests in the most recent message
-- If more information is needed to respond properly, note what's missing
-- Do not include a subject line (it will be auto-generated as Re: ...)
-- Start directly with the greeting or response content
 
-Return ONLY the draft email body, nothing else.
+def load_guidelines() -> str:
+    """Load email writing guidelines from file."""
+    content = load_file(GUIDELINES_PATH)
+    if content:
+        return content
 
-"""
+    # Fallback to default prompt if file not found
+    return """You are an email assistant helping to draft a response to an email thread.
+Match the tone and formality of the conversation. Be concise but complete.
+Return a JSON object with to, cc, subject, and body fields."""
+
+
+def load_paul_emails() -> str | None:
+    """Load Paul's example emails for style reference."""
+    return load_file(PAUL_EMAILS_PATH)
+
+
+def get_draft_prompt(thread_content: str) -> str:
+    """Build the full prompt with guidelines, examples, and thread."""
+    guidelines = load_guidelines()
+    paul_emails = load_paul_emails()
+
+    parts = [guidelines]
+
+    if paul_emails:
+        parts.append("\n---\n\n## paul-emails.txt (Reference Examples)\n")
+        parts.append(paul_emails)
+
+    parts.append("\n---\n\n## Email Thread to Respond To\n")
+    parts.append(thread_content)
+
+    return "\n".join(parts)
 
 
 def generate_draft(thread_content: str) -> str:
@@ -177,13 +210,14 @@ def generate_draft(thread_content: str) -> str:
         "content-type": "application/json",
     }
 
+    prompt = get_draft_prompt(thread_content)
     payload = {
         "model": "claude-sonnet-4-20250514",
         "max_tokens": 2048,
         "messages": [
             {
                 "role": "user",
-                "content": f"{DRAFT_PROMPT}{thread_content}",
+                "content": prompt,
             }
         ],
     }
@@ -208,18 +242,29 @@ def generate_draft(thread_content: str) -> str:
     return content[0]["text"]
 
 
+def parse_draft_response(response: str) -> dict:
+    """Parse the JSON response from the AI."""
+    try:
+        return json.loads(response.strip())
+    except json.JSONDecodeError:
+        # If JSON parsing fails, return the raw text as body
+        return {"body": response, "to": [], "cc": [], "subject": ""}
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate an email draft response using AI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s THREAD_ID              # Draft response for a thread
+  %(prog)s THREAD_ID              # Full JSON output with to, cc, subject, body
+  %(prog)s THREAD_ID --body-only  # Just the email body (for display)
   %(prog)s THREAD_ID --verbose    # Show thread content before draft
         """,
     )
     parser.add_argument("thread_id", help="Nylas thread ID to respond to")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show thread content")
+    parser.add_argument("--body-only", action="store_true", help="Output only the email body")
 
     args = parser.parse_args()
 
@@ -253,8 +298,13 @@ Examples:
         print("=" * 50 + "\n", file=sys.stderr)
 
     # Generate draft
-    draft = generate_draft(thread_content)
-    print(draft)
+    raw_response = generate_draft(thread_content)
+    draft = parse_draft_response(raw_response)
+
+    if args.body_only:
+        print(draft.get("body", raw_response))
+    else:
+        print(json.dumps(draft, indent=2))
 
 
 if __name__ == "__main__":
