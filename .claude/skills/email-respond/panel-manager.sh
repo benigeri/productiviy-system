@@ -1,22 +1,55 @@
 #!/bin/bash
 # Panel Manager for Email Workflow
 # Handles creating and updating the tmux panel reliably
+#
+# SAFETY: Uses specific pane IDs stored in a temp file, NEVER relative targets
+# like {right} which can accidentally kill the Agent Deck conversation pane.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PANEL_TARGET="{right}"
+PANEL_ID_FILE="/tmp/email-panel-id.txt"
 
-# Check if panel pane exists
+# Get the stored panel pane ID
+get_panel_id() {
+    if [ -f "$PANEL_ID_FILE" ]; then
+        cat "$PANEL_ID_FILE"
+    else
+        echo ""
+    fi
+}
+
+# Check if our specific panel pane exists
 panel_exists() {
-    tmux list-panes -F '#{pane_index}' 2>/dev/null | grep -q "1"
+    local panel_id
+    panel_id=$(get_panel_id)
+    if [ -z "$panel_id" ]; then
+        return 1
+    fi
+    # Check if this specific pane ID still exists
+    tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -q "^${panel_id}$"
+}
+
+# Get the current pane ID (to avoid killing it)
+get_current_pane_id() {
+    tmux display-message -p '#{pane_id}' 2>/dev/null
 }
 
 # Create panel with persistent shell
 create_panel() {
-    # Kill existing panel if any
-    tmux kill-pane -t "$PANEL_TARGET" 2>/dev/null || true
+    # Close existing panel if any (using stored ID, not relative target)
+    close_panel 2>/dev/null || true
+
+    # Store current pane before creating new one
+    local current_pane
+    current_pane=$(get_current_pane_id)
 
     # Create new pane with bash shell (persists after commands)
-    tmux split-window -h -p 40 -d
+    # -P prints the new pane's info, -F formats it to just the pane_id
+    local new_pane_id
+    new_pane_id=$(tmux split-window -h -p 40 -d -P -F '#{pane_id}')
+
+    # Store the new pane ID for later targeting
+    echo "$new_pane_id" > "$PANEL_ID_FILE"
+
     sleep 0.3  # Wait for pane to initialize
 }
 
@@ -29,10 +62,18 @@ send_to_panel() {
         create_panel
     fi
 
-    # Clear any running process and send new command
-    tmux send-keys -t "$PANEL_TARGET" C-c 2>/dev/null || true
+    local panel_id
+    panel_id=$(get_panel_id)
+
+    if [ -z "$panel_id" ]; then
+        echo "Error: No panel ID found" >&2
+        return 1
+    fi
+
+    # Clear any running process and send new command (using specific pane ID)
+    tmux send-keys -t "$panel_id" C-c 2>/dev/null || true
     sleep 0.1
-    tmux send-keys -t "$PANEL_TARGET" "$cmd" Enter
+    tmux send-keys -t "$panel_id" "$cmd" Enter
 }
 
 # Show thread list
@@ -80,9 +121,32 @@ show_draft() {
     send_to_panel "$cmd"
 }
 
-# Close panel
+# Close panel (SAFE: only closes our tracked pane, never the current pane)
 close_panel() {
-    tmux kill-pane -t "$PANEL_TARGET" 2>/dev/null || true
+    local panel_id
+    panel_id=$(get_panel_id)
+
+    if [ -z "$panel_id" ]; then
+        # No panel tracked, nothing to close
+        return 0
+    fi
+
+    # SAFETY CHECK: Never kill the current pane (protects Agent Deck)
+    local current_pane
+    current_pane=$(get_current_pane_id)
+    if [ "$panel_id" = "$current_pane" ]; then
+        echo "Error: Refusing to kill current pane (safety check)" >&2
+        rm -f "$PANEL_ID_FILE"
+        return 1
+    fi
+
+    # Only kill the pane if it actually exists
+    if panel_exists; then
+        tmux kill-pane -t "$panel_id" 2>/dev/null || true
+    fi
+
+    # Clean up the ID file
+    rm -f "$PANEL_ID_FILE"
 }
 
 # Main command handler
