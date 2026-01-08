@@ -2,13 +2,18 @@
 """
 Email Canvas - Terminal panel display for email workflow.
 Shows threads, single thread details, and drafts in a clean format.
+
+Server mode: Run with --server for persistent process that reads commands from FIFO.
 """
 
 import argparse
+import base64
+import json
 import os
 import re
 import sys
 import textwrap
+import time
 import warnings
 from datetime import datetime
 from html import unescape
@@ -30,6 +35,20 @@ TO_RESPOND_LABEL = "Label_139"  # to-respond-paul
 
 REQUEST_TIMEOUT = 30
 PANEL_WIDTH = 62
+
+# FIFO path for server mode IPC
+FIFO_PATH = "/tmp/email-panel.fifo"
+
+# Cache settings
+CACHE_TTL = 300  # 5 minutes for thread list
+
+# Global cache for server mode
+_cache: Dict = {
+    "threads": None,
+    "threads_time": 0,
+    "messages": {},       # thread_id -> thread data with cleaned messages
+    "full_messages": {},  # message_id -> full message with body
+}
 
 
 def check_env():
@@ -179,6 +198,290 @@ def html_to_text(html: str) -> str:
     text = text.strip()
 
     return text
+
+
+# =============================================================================
+# Server Mode Functions
+# =============================================================================
+
+
+def print_loading(message: str) -> None:
+    """Clear screen and show loading indicator."""
+    print("\033[2J\033[H", end="")  # Clear screen, cursor to top
+    print()
+    print(double_line())
+    print(f"  ⏳ {message}")
+    print(double_line())
+    sys.stdout.flush()
+
+
+def clear_cache() -> None:
+    """Clear all cached data."""
+    global _cache
+    _cache = {
+        "threads": None,
+        "threads_time": 0,
+        "messages": {},
+        "full_messages": {},
+    }
+
+
+def get_threads_cached() -> List[Dict]:
+    """Fetch thread list with caching."""
+    now = time.time()
+    if _cache["threads"] is None or (now - _cache["threads_time"]) > CACHE_TTL:
+        _cache["threads"] = nylas_get(f"/threads?in={TO_RESPOND_LABEL}&limit=20")
+        _cache["threads_time"] = now
+    return _cache["threads"] or []
+
+
+def get_thread_cached(thread_id: str) -> Optional[Dict]:
+    """Fetch single thread with caching."""
+    if thread_id not in _cache["messages"]:
+        _cache["messages"][thread_id] = nylas_get(f"/threads/{thread_id}")
+    return _cache["messages"].get(thread_id)
+
+
+def get_full_message_cached(message_id: str) -> Optional[Dict]:
+    """Fetch full message (with HTML body) with caching."""
+    if message_id not in _cache["full_messages"]:
+        _cache["full_messages"][message_id] = nylas_get(f"/messages/{message_id}")
+    return _cache["full_messages"].get(message_id)
+
+
+def handle_command(cmd: Dict) -> None:
+    """Dispatch command to appropriate handler."""
+    action = cmd.get("action")
+
+    if action == "list":
+        list_threads_server()
+    elif action == "show":
+        show_thread_server(
+            cmd["thread_id"],
+            index=cmd.get("index"),
+            total=cmd.get("total"),
+            drafted=cmd.get("drafted", 0),
+            skipped=cmd.get("skipped", 0),
+        )
+    elif action == "draft":
+        # Decode body from base64 if provided
+        body = ""
+        if cmd.get("body_b64"):
+            body = base64.b64decode(cmd["body_b64"]).decode("utf-8")
+        elif cmd.get("body"):
+            body = cmd["body"]
+        show_thread_server(
+            cmd["thread_id"],
+            draft_text=body,
+            index=cmd.get("index"),
+            total=cmd.get("total"),
+            drafted=cmd.get("drafted", 0),
+            skipped=cmd.get("skipped", 0),
+        )
+    elif action == "loading":
+        print_loading(cmd.get("message", "Loading..."))
+    elif action == "clear_cache":
+        clear_cache()
+        print_loading("Cache cleared")
+    elif action == "exit":
+        print_loading("Goodbye!")
+        sys.exit(0)
+    else:
+        print(f"Unknown action: {action}", file=sys.stderr)
+
+    sys.stdout.flush()
+
+
+def list_threads_server() -> None:
+    """List threads using cached data (server mode)."""
+    threads = get_threads_cached()
+
+    if not threads:
+        print()
+        print(double_line())
+        print("  No emails to respond to")
+        print(double_line())
+        sys.stdout.flush()
+        return
+
+    print()
+    print(double_line())
+    print(f"  📧 EMAILS TO RESPOND ({len(threads)} threads)")
+    print(double_line())
+    print()
+
+    for i, t in enumerate(threads, 1):
+        subject = t.get("subject", "No subject")
+        if len(subject) > 45:
+            subject = subject[:42] + "..."
+
+        latest = t.get("latest_draft_or_message", {})
+        msg_count = len(t.get("message_ids", []))
+        thread_id = t.get("id", "")
+
+        from_list = latest.get("from", []) if latest else []
+        from_p = from_list[0] if from_list else {}
+        from_name = from_p.get("name", "Unknown")
+        from_email = from_p.get("email", "")
+
+        date_str = format_date(latest.get("date", 0)) if latest else ""
+
+        is_waiting = "paul@archive.com" in from_email.lower()
+        status = "⏳" if is_waiting else "📩"
+
+        print(f"  {status} [{i}] {subject}")
+        print(f"     From: {from_name}")
+        print(f"     Date: {date_str} | {msg_count} messages")
+        print(f"     ID: {thread_id}")
+        print()
+
+    print(double_line())
+    print("  Use --thread-id <ID> to view a thread")
+    print(double_line())
+    sys.stdout.flush()
+
+
+def show_thread_server(
+    thread_id: str,
+    draft_text: str = None,
+    index: int = None,
+    total: int = None,
+    drafted: int = 0,
+    skipped: int = 0,
+) -> None:
+    """Show single thread using cached data (server mode)."""
+    thread = get_thread_cached(thread_id)
+
+    if not thread:
+        print(f"Error: Thread not found: {thread_id}", file=sys.stderr)
+        return
+
+    subject = thread.get("subject", "No subject")
+    message_ids = thread.get("message_ids", [])
+
+    if not message_ids:
+        print("Error: Thread has no messages", file=sys.stderr)
+        return
+
+    # Fetch and clean messages
+    messages = clean_messages(message_ids)
+    if not messages:
+        print("Error: Could not fetch messages", file=sys.stderr)
+        return
+
+    messages = sorted(messages, key=lambda m: m.get("date", 0))
+    latest = messages[-1]
+    latest_id = latest.get("id", message_ids[-1])
+
+    # Use cached full message fetch
+    latest_full = get_full_message_cached(latest_id)
+
+    from_list = latest.get("from", [])
+    to_list = latest.get("to", [])
+    cc_list = latest.get("cc", [])
+
+    from_str = ", ".join(format_participant(p) for p in from_list)
+    to_str = ", ".join(format_participant(p) for p in to_list)
+    cc_str = ", ".join(format_participant(p) for p in cc_list) if cc_list else None
+
+    date_str = format_date(latest.get("date", 0))
+    html_body = latest_full.get("body", "") if latest_full else ""
+    body = html_to_text(html_body) if html_body else latest.get("snippet", "")
+
+    position = ""
+    if index and total:
+        position = f" {index}/{total}:"
+
+    progress = ""
+    if drafted > 0 or skipped > 0:
+        parts = []
+        if drafted > 0:
+            parts.append(f"{drafted} drafted")
+        if skipped > 0:
+            parts.append(f"{skipped} skipped")
+        progress = f"  [{', '.join(parts)}]"
+
+    print()
+    print(double_line())
+
+    if draft_text:
+        abbrev_subject = subject[:42] + "..." if len(subject) > 45 else subject
+        print(f"  📧 ORIGINAL:{position} {abbrev_subject}{progress}")
+        print(f"  From: {from_list[0].get('name', 'Unknown') if from_list else 'Unknown'} | {date_str}")
+        print(double_line())
+        abbrev_body = body.strip()[:200]
+        if len(body.strip()) > 200:
+            abbrev_body += "..."
+        wrapped_body = wrap_text(abbrev_body)
+        for line in wrapped_body.split("\n"):
+            print(f"  {line}")
+    else:
+        print(f"  📧 Thread{position} {subject}{progress}")
+        print(f"  From: {from_str}")
+        print(f"  To: {to_str}")
+        if cc_str:
+            print(f"  CC: {cc_str}")
+        print(f"  Date: {date_str} | {len(messages)} messages")
+        print(double_line())
+        print()
+        wrapped_body = wrap_text(body)
+        for line in wrapped_body.split("\n"):
+            print(f"  {line}")
+        print()
+        print(single_line())
+        print("  Scroll up for earlier messages")
+        print(single_line())
+
+    if draft_text:
+        print()
+        print(double_line())
+        print("  ✏️  YOUR DRAFT")
+        print(double_line())
+        print()
+        wrapped_draft = wrap_text(draft_text)
+        for line in wrapped_draft.split("\n"):
+            print(f"  {line}")
+        print()
+        print(single_line())
+        print('  "approve" to save draft | give feedback to revise')
+        print(single_line())
+
+    sys.stdout.flush()
+
+
+def run_server() -> None:
+    """Run in persistent server mode, reading commands from FIFO."""
+    check_env()
+
+    # Remove stale FIFO if it exists
+    if os.path.exists(FIFO_PATH):
+        os.remove(FIFO_PATH)
+    os.mkfifo(FIFO_PATH)
+
+    print_loading("Panel ready. Waiting for commands...")
+
+    try:
+        while True:
+            # Open FIFO (blocks until writer connects)
+            with open(FIFO_PATH, "r") as fifo:
+                for line in fifo:
+                    if not line.strip():
+                        continue
+                    try:
+                        cmd = json.loads(line.strip())
+                        handle_command(cmd)
+                    except json.JSONDecodeError as e:
+                        print(f"Invalid JSON: {e}", file=sys.stderr)
+                    except KeyError as e:
+                        print(f"Missing required field: {e}", file=sys.stderr)
+                    except Exception as e:
+                        print(f"Error handling command: {e}", file=sys.stderr)
+    except KeyboardInterrupt:
+        print_loading("Interrupted. Goodbye!")
+    finally:
+        # Cleanup FIFO
+        if os.path.exists(FIFO_PATH):
+            os.remove(FIFO_PATH)
 
 
 def list_threads() -> None:
@@ -350,6 +653,7 @@ Examples:
   %(prog)s                          # List all threads to respond
   %(prog)s --thread-id ID           # Show single thread
   %(prog)s --thread-id ID --draft "text"  # Show thread with draft
+  %(prog)s --server                 # Run in server mode (FIFO IPC)
         """,
     )
     parser.add_argument("--thread-id", "-t", help="Thread ID to display")
@@ -359,8 +663,15 @@ Examples:
     parser.add_argument("--total", "-n", type=int, help="Total thread count")
     parser.add_argument("--drafted", type=int, default=0, help="Number of drafts created so far")
     parser.add_argument("--skipped", type=int, default=0, help="Number of threads skipped so far")
+    parser.add_argument("--server", "-s", action="store_true",
+                        help="Run in server mode: persistent process reading commands from FIFO")
 
     args = parser.parse_args()
+
+    # Server mode runs its own event loop
+    if args.server:
+        run_server()
+        return
 
     check_env()
 

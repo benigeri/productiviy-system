@@ -26,8 +26,48 @@ Environment variables in `.env`:
 
 ## Tools
 
-### panel-manager.sh
-Manages the tmux panel reliably. Located at `.claude/skills/email-respond/panel-manager.sh`
+### email-canvas.py (Server Mode - Recommended)
+Terminal panel with persistent process and FIFO IPC. Much faster due to caching and no process restarts.
+
+```bash
+# Start panel in server mode (run in tmux pane)
+python3 .claude/skills/email-respond/email-canvas.py --server
+
+# Send commands via FIFO (from main shell)
+FIFO="/tmp/email-panel.fifo"
+
+# Show thread list
+echo '{"action":"list"}' > "$FIFO"
+
+# Show loading indicator
+echo '{"action":"loading","message":"Loading thread..."}' > "$FIFO"
+
+# Show specific thread
+echo '{"action":"show","thread_id":"THREAD_ID","index":1,"total":9}' > "$FIFO"
+
+# Show thread with draft (base64-encode body for multiline safety)
+BODY_B64=$(echo "Draft body text here" | base64)
+echo "{\"action\":\"draft\",\"thread_id\":\"THREAD_ID\",\"body_b64\":\"$BODY_B64\",\"index\":1,\"total\":9}" > "$FIFO"
+
+# Clear cache (force fresh API calls)
+echo '{"action":"clear_cache"}' > "$FIFO"
+
+# Exit server
+echo '{"action":"exit"}' > "$FIFO"
+```
+
+**IPC Commands:**
+| Action | Required | Optional | Description |
+|--------|----------|----------|-------------|
+| `list` | - | - | Show thread list |
+| `show` | `thread_id` | `index`, `total`, `drafted`, `skipped` | Show single thread |
+| `draft` | `thread_id` | `body_b64`, `body`, `index`, `total`, `drafted`, `skipped` | Show thread with draft |
+| `loading` | - | `message` | Show loading indicator |
+| `clear_cache` | - | - | Clear all cached data |
+| `exit` | - | - | Shutdown server |
+
+### panel-manager.sh (Legacy)
+Manages the tmux panel. Located at `.claude/skills/email-respond/panel-manager.sh`
 
 ```bash
 PANEL=".claude/skills/email-respond/panel-manager.sh"
@@ -48,8 +88,8 @@ bash "$PANEL" draft THREAD_ID DRAFT_FILE [INDEX] [TOTAL]
 bash "$PANEL" close
 ```
 
-### email-canvas.py
-Terminal panel display. Located at `.claude/skills/email-respond/email-canvas.py`
+### email-canvas.py (Standalone Mode)
+Terminal panel display for one-off commands. Located at `.claude/skills/email-respond/email-canvas.py`
 
 ```bash
 # List all threads
@@ -101,17 +141,24 @@ python3 .claude/skills/email-respond/create-gmail-draft.py DRAFT_FILE --thread-i
 
 ## Workflow
 
-### 1. Setup Panel
+### 1. Setup Panel (Server Mode)
 
-Create a tmux split pane with a persistent shell:
+Start the panel in server mode for best performance:
 
 ```bash
-PANEL=".claude/skills/email-respond/panel-manager.sh"
-bash "$PANEL" create
-bash "$PANEL" list
+FIFO="/tmp/email-panel.fifo"
+
+# Start panel server in tmux split pane
+tmux split-window -h -p 40 "python3 .claude/skills/email-respond/email-canvas.py --server"
+
+# Wait for FIFO to be ready
+sleep 0.5
+
+# Show initial thread list
+echo '{"action":"list"}' > "$FIFO"
 ```
 
-This creates a panel and shows the thread list. The panel uses a persistent shell so it won't disappear when commands finish.
+This creates a persistent panel process with caching. Subsequent updates are instant.
 
 ### 2. Fetch Thread List
 
@@ -129,7 +176,9 @@ Store the thread IDs and count for iteration.
 #### a. Update Panel to Show Thread
 
 ```bash
-bash "$PANEL" thread THREAD_ID INDEX TOTAL
+# Show loading, then thread (via FIFO)
+echo '{"action":"loading","message":"Loading thread..."}' > "$FIFO"
+echo "{\"action\":\"show\",\"thread_id\":\"$THREAD_ID\",\"index\":$INDEX,\"total\":$TOTAL}" > "$FIFO"
 ```
 
 #### b. Ask User for Input
@@ -169,8 +218,12 @@ python3 draft-email.py THREAD_ID --dictation "$USER_DICTATION" > "$DRAFT_FILE"
 #### e. Update Panel with Draft
 
 ```bash
-# Use panel-manager which reads from file (avoids shell quoting issues with HTML)
-bash "$PANEL" draft THREAD_ID "$DRAFT_FILE" INDEX TOTAL
+# Extract body and base64-encode for safe transport
+DRAFT_BODY=$(jq -r '.body' "$DRAFT_FILE" | python3 -c "import sys; from html import unescape; import re; t=sys.stdin.read(); t=re.sub(r'<[^>]+>', '', t); print(unescape(t).strip())")
+BODY_B64=$(echo "$DRAFT_BODY" | base64)
+
+# Send to panel via FIFO
+echo "{\"action\":\"draft\",\"thread_id\":\"$THREAD_ID\",\"body_b64\":\"$BODY_B64\",\"index\":$INDEX,\"total\":$TOTAL}" > "$FIFO"
 ```
 
 Note: The panel displays plain text. The actual HTML body (with hyperlinks) is preserved in the temp file for creating the Gmail draft.
@@ -250,8 +303,8 @@ After showing session summary:
 # Clean up any remaining temp draft files
 rm -f /tmp/email-draft-*.json /tmp/email-draft-display-*.txt
 
-# Close the panel
-bash "$PANEL" close
+# Exit panel server (cleans up FIFO automatically)
+echo '{"action":"exit"}' > "$FIFO"
 ```
 
 ---
