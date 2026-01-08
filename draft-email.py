@@ -25,6 +25,7 @@ NYLAS_BASE_URL = "https://api.us.nylas.com/v3"
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 
 REQUEST_TIMEOUT = 30  # seconds
+ANTHROPIC_TIMEOUT = 60  # seconds (longer for LLM generation)
 
 
 def check_env():
@@ -48,7 +49,12 @@ def nylas_get(endpoint: str) -> dict:
     url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}{endpoint}"
     headers = {"Authorization": f"Bearer {NYLAS_API_KEY}"}
 
-    response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+    try:
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+    except requests.RequestException as e:
+        print(f"Nylas request failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
     if not response.ok:
         print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
         sys.exit(1)
@@ -74,7 +80,12 @@ def clean_messages(message_ids: list[str]) -> list[dict]:
         "ignore_links": True,
     }
 
-    response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+    try:
+        response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+    except requests.RequestException as e:
+        print(f"Nylas request failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
     if not response.ok:
         print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
         sys.exit(1)
@@ -177,7 +188,11 @@ def generate_draft(thread_content: str) -> str:
         ],
     }
 
-    response = requests.post(ANTHROPIC_URL, headers=headers, json=payload, timeout=60)
+    try:
+        response = requests.post(ANTHROPIC_URL, headers=headers, json=payload, timeout=ANTHROPIC_TIMEOUT)
+    except requests.RequestException as e:
+        print(f"Anthropic request failed: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if not response.ok:
         print(f"Anthropic API error: {response.status_code} {response.text}", file=sys.stderr)
@@ -232,10 +247,10 @@ Examples:
     thread_content = format_thread(thread, messages)
 
     if args.verbose:
-        print(thread_content)
-        print("\n" + "=" * 50)
-        print("GENERATED DRAFT:")
-        print("=" * 50 + "\n")
+        print(thread_content, file=sys.stderr)
+        print("\n" + "=" * 50, file=sys.stderr)
+        print("GENERATED DRAFT:", file=sys.stderr)
+        print("=" * 50 + "\n", file=sys.stderr)
 
     # Generate draft
     draft = generate_draft(thread_content)
