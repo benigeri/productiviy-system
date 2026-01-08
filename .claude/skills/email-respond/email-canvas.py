@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import textwrap
+import unicodedata
 import warnings
 from datetime import datetime
 from html import unescape
@@ -126,6 +127,80 @@ def single_line(char="─"):
     return char * PANEL_WIDTH
 
 
+# Box drawing characters
+BOX_TOP_LEFT = "┌"
+BOX_TOP_RIGHT = "┐"
+BOX_BOTTOM_LEFT = "└"
+BOX_BOTTOM_RIGHT = "┘"
+BOX_HORIZONTAL = "─"
+BOX_VERTICAL = "│"
+BOX_LEFT_T = "├"
+BOX_RIGHT_T = "┤"
+
+
+def box_top(width: int = PANEL_WIDTH) -> str:
+    """Return top border of a box."""
+    return BOX_TOP_LEFT + BOX_HORIZONTAL * (width - 2) + BOX_TOP_RIGHT
+
+
+def box_bottom(width: int = PANEL_WIDTH) -> str:
+    """Return bottom border of a box."""
+    return BOX_BOTTOM_LEFT + BOX_HORIZONTAL * (width - 2) + BOX_BOTTOM_RIGHT
+
+
+def box_separator(width: int = PANEL_WIDTH) -> str:
+    """Return horizontal separator within a box."""
+    return BOX_LEFT_T + BOX_HORIZONTAL * (width - 2) + BOX_RIGHT_T
+
+
+def display_width(text: str) -> int:
+    """Calculate display width of text, accounting for wide characters like emojis."""
+    width = 0
+    for char in text:
+        # East Asian Width: W (wide) and F (fullwidth) take 2 columns
+        # Emojis are typically wide
+        if unicodedata.east_asian_width(char) in ('W', 'F'):
+            width += 2
+        elif ord(char) >= 0x1F300:  # Emoji range starts around here
+            width += 2
+        else:
+            width += 1
+    return width
+
+
+def box_line(text: str, width: int = PANEL_WIDTH) -> str:
+    """Return a line of text within box borders, padded to width."""
+    # Account for the two border characters
+    inner_width = width - 4  # 2 for borders + 2 for padding spaces
+
+    # Calculate display width (accounts for emojis/wide chars)
+    text_display_width = display_width(text)
+
+    # Truncate if too long (use display width for check)
+    if text_display_width > inner_width:
+        # Need to truncate carefully - can't just slice
+        truncated = ""
+        current_width = 0
+        for char in text:
+            char_width = 2 if (unicodedata.east_asian_width(char) in ('W', 'F') or ord(char) >= 0x1F300) else 1
+            if current_width + char_width > inner_width - 3:
+                break
+            truncated += char
+            current_width += char_width
+        text = truncated + "..."
+        text_display_width = display_width(text)
+
+    # Pad to fill width (accounting for display width)
+    padding_needed = inner_width - text_display_width
+    padded = text + " " * padding_needed
+    return f"{BOX_VERTICAL} {padded} {BOX_VERTICAL}"
+
+
+def box_empty(width: int = PANEL_WIDTH) -> str:
+    """Return an empty line within box borders."""
+    return box_line("", width)
+
+
 def wrap_text(text: str, width: int = PANEL_WIDTH - 4) -> str:
     """Wrap text to fit panel width, preserving paragraph breaks."""
     # Split on double newlines for paragraph breaks
@@ -187,21 +262,20 @@ def list_threads() -> None:
 
     if not threads:
         print()
-        print(double_line())
-        print("  No emails to respond to")
-        print(double_line())
+        print(box_top())
+        print(box_line("No emails to respond to"))
+        print(box_bottom())
         return
 
     print()
-    print(double_line())
-    print(f"  📧 EMAILS TO RESPOND ({len(threads)} threads)")
-    print(double_line())
-    print()
+    print(box_top())
+    print(box_line(f"📧 EMAILS TO RESPOND ({len(threads)} threads)"))
+    print(box_separator())
 
     for i, t in enumerate(threads, 1):
         subject = t.get("subject", "No subject")
-        if len(subject) > 45:
-            subject = subject[:42] + "..."
+        if len(subject) > 60:
+            subject = subject[:57] + "..."
 
         latest = t.get("latest_draft_or_message", {})
         msg_count = len(t.get("message_ids", []))
@@ -219,15 +293,15 @@ def list_threads() -> None:
         is_waiting = "paul@archive.com" in from_email.lower()
         status = "⏳" if is_waiting else "📩"
 
-        print(f"  {status} [{i}] {subject}")
-        print(f"     From: {from_name}")
-        print(f"     Date: {date_str} | {msg_count} messages")
-        print(f"     ID: {thread_id}")
-        print()
+        print(box_empty())
+        print(box_line(f"{status} [{i}] {subject}"))
+        print(box_line(f"   From: {from_name} | {date_str}"))
+        print(box_line(f"   {msg_count} messages | ID: {thread_id[:20]}..."))
 
-    print(double_line())
-    print("  Use --thread-id <ID> to view a thread")
-    print(double_line())
+    print(box_empty())
+    print(box_separator())
+    print(box_line("Use --thread-id <ID> to view a thread"))
+    print(box_bottom())
 
 
 def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None, total_threads: int = None,
@@ -291,54 +365,59 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         progress = f"  [{', '.join(parts)}]"
 
     print()
-    print(double_line())
 
     if draft_text:
-        # Abbreviated view when showing draft
-        abbrev_subject = subject[:42] + "..." if len(subject) > 45 else subject
-        print(f"  📧 ORIGINAL:{position} {abbrev_subject}{progress}")
-        print(f"  From: {from_list[0].get('name', 'Unknown') if from_list else 'Unknown'} | {date_str}")
-        print(double_line())
+        # Abbreviated view when showing draft - ORIGINAL EMAIL box
+        abbrev_subject = subject[:60] + "..." if len(subject) > 63 else subject
+        print(box_top())
+        print(box_line(f"📧 ORIGINAL:{position} {abbrev_subject}{progress}"))
+        from_name = from_list[0].get('name', 'Unknown') if from_list else 'Unknown'
+        print(box_line(f"From: {from_name} | {date_str}"))
+        print(box_separator())
         # Show abbreviated body
-        abbrev_body = body.strip()[:200]
-        if len(body.strip()) > 200:
+        abbrev_body = body.strip()[:300]
+        if len(body.strip()) > 300:
             abbrev_body += "..."
-        wrapped_body = wrap_text(abbrev_body)
+        wrapped_body = wrap_text(abbrev_body, width=PANEL_WIDTH - 6)
+        print(box_empty())
         for line in wrapped_body.split("\n"):
-            print(f"  {line}")
+            print(box_line(line))
+        print(box_empty())
+        print(box_bottom())
     else:
-        # Full view
-        print(f"  📧 Thread{position} {subject}{progress}")
-        print(f"  From: {from_str}")
-        print(f"  To: {to_str}")
+        # Full view - THREAD box
+        print(box_top())
+        print(box_line(f"📧 Thread{position} {subject}{progress}"))
+        print(box_line(f"From: {from_str}"))
+        print(box_line(f"To: {to_str}"))
         if cc_str:
-            print(f"  CC: {cc_str}")
-        print(f"  Date: {date_str} | {len(messages)} messages")
-        print(double_line())
-        print()
+            print(box_line(f"CC: {cc_str}"))
+        print(box_line(f"Date: {date_str} | {len(messages)} messages"))
+        print(box_separator())
+        print(box_empty())
         # Show full body with word wrapping
-        wrapped_body = wrap_text(body)
+        wrapped_body = wrap_text(body, width=PANEL_WIDTH - 6)
         for line in wrapped_body.split("\n"):
-            print(f"  {line}")
-        print()
-        print(single_line())
-        print("  Scroll up for earlier messages")
-        print(single_line())
+            print(box_line(line))
+        print(box_empty())
+        print(box_separator())
+        print(box_line("Scroll up for earlier messages"))
+        print(box_bottom())
 
-    # Show draft if provided
+    # Show draft if provided - YOUR DRAFT box
     if draft_text:
         print()
-        print(double_line())
-        print("  ✏️  YOUR DRAFT")
-        print(double_line())
-        print()
-        wrapped_draft = wrap_text(draft_text)
+        print(box_top())
+        print(box_line("✏️  YOUR DRAFT"))
+        print(box_separator())
+        print(box_empty())
+        wrapped_draft = wrap_text(draft_text, width=PANEL_WIDTH - 6)
         for line in wrapped_draft.split("\n"):
-            print(f"  {line}")
-        print()
-        print(single_line())
-        print('  "approve" to save draft | give feedback to revise')
-        print(single_line())
+            print(box_line(line))
+        print(box_empty())
+        print(box_separator())
+        print(box_line('"approve" to save draft | give feedback to revise'))
+        print(box_bottom())
 
 
 def main():
