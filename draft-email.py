@@ -27,6 +27,9 @@ ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 REQUEST_TIMEOUT = 30  # seconds
 ANTHROPIC_TIMEOUT = 60  # seconds (longer for LLM generation)
 
+# Path to email writing guidelines (relative to project root)
+GUIDELINES_PATH = ".claude/skills/email-respond/email-writing-guidelines.md"
+
 
 def check_env():
     """Check required environment variables."""
@@ -152,18 +155,37 @@ def format_thread(thread: dict, messages: list[dict]) -> str:
     return "\n".join(parts)
 
 
-DRAFT_PROMPT = """You are an email assistant helping to draft a response to an email thread.
+def load_guidelines() -> str:
+    """Load email writing guidelines from file."""
+    # Try to find the guidelines file relative to script or project root
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    guidelines_path = os.path.join(script_dir, GUIDELINES_PATH)
 
-Review the email thread below and draft a professional, helpful response to the most recent message.
+    if os.path.exists(guidelines_path):
+        with open(guidelines_path, encoding="utf-8") as f:
+            return f.read()
+
+    # Fallback to default prompt if file not found
+    return """You are an email assistant helping to draft a response to an email thread.
 
 Guidelines:
 - Match the tone and formality of the conversation
 - Be concise but complete
 - Address all questions or requests in the most recent message
-- If more information is needed to respond properly, note what's missing
 - Do not include a subject line (it will be auto-generated as Re: ...)
 - Start directly with the greeting or response content
 
+Return ONLY the draft email body, nothing else."""
+
+
+def get_draft_prompt() -> str:
+    """Build the draft prompt with guidelines."""
+    guidelines = load_guidelines()
+    return f"""{guidelines}
+
+---
+
+Review the email thread below and draft a response to the most recent message.
 Return ONLY the draft email body, nothing else.
 
 """
@@ -177,13 +199,14 @@ def generate_draft(thread_content: str) -> str:
         "content-type": "application/json",
     }
 
+    prompt = get_draft_prompt()
     payload = {
         "model": "claude-sonnet-4-20250514",
         "max_tokens": 2048,
         "messages": [
             {
                 "role": "user",
-                "content": f"{DRAFT_PROMPT}{thread_content}",
+                "content": f"{prompt}{thread_content}",
             }
         ],
     }
