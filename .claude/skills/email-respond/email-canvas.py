@@ -129,10 +129,9 @@ def list_threads() -> None:
 
     for i, t in enumerate(threads, 1):
         subject = t.get("subject", "No subject")
-        if len(subject) > 50:
-            subject = subject[:47] + "..."
+        if len(subject) > 45:
+            subject = subject[:42] + "..."
 
-        participants = t.get("participants", [])
         latest = t.get("latest_draft_or_message", {})
         msg_count = len(t.get("message_ids", []))
         thread_id = t.get("id", "")
@@ -207,7 +206,8 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
 
     if draft_text:
         # Abbreviated view when showing draft
-        print(f"  📧 ORIGINAL:{position} {subject[:40]}...")
+        abbrev_subject = subject[:42] + "..." if len(subject) > 45 else subject
+        print(f"  📧 ORIGINAL:{position} {abbrev_subject}")
         print(f"  From: {from_list[0].get('name', 'Unknown') if from_list else 'Unknown'} | {date_str}")
         print(double_line())
         # Show abbreviated body
@@ -268,6 +268,10 @@ Examples:
     args = parser.parse_args()
 
     check_env()
+
+    if args.draft and not args.thread_id:
+        print("Error: --draft requires --thread-id", file=sys.stderr)
+        sys.exit(1)
 
     if args.thread_id:
         show_thread(args.thread_id, args.draft, args.index, args.total)
