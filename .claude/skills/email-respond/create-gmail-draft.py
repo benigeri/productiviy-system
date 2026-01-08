@@ -73,19 +73,58 @@ def create_draft(payload: dict) -> dict:
     return response.json().get("data", {})
 
 
-def update_message_labels(message_id: str, folders: list) -> dict:
-    """Update labels on a message."""
-    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/messages/{message_id}"
+def verify_draft_exists(draft_id: str) -> bool:
+    """Verify that a draft exists by querying for it."""
+    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/drafts/{draft_id}"
+    headers = {"Authorization": f"Bearer {NYLAS_API_KEY}"}
+
+    try:
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        return response.ok
+    except requests.RequestException:
+        return False
+
+
+def update_thread_labels(thread_id: str, add_labels: list, remove_labels: list) -> dict:
+    """Update labels on a thread (affects all messages in thread).
+
+    Args:
+        thread_id: The thread to update
+        add_labels: List of folder/label IDs to add
+        remove_labels: List of folder/label IDs to remove
+    """
+    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/threads/{thread_id}"
     headers = {
         "Authorization": f"Bearer {NYLAS_API_KEY}",
         "Content-Type": "application/json",
     }
-    payload = {"folders": folders}
+
+    # First get current folders
+    try:
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+    except requests.RequestException as e:
+        print(f"Error fetching thread for label update: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not response.ok:
+        print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
+        sys.exit(1)
+
+    thread_data = response.json().get("data", {})
+    current_folders = thread_data.get("folders", [])
+
+    # Modify folders: remove specified labels, add new ones
+    new_folders = [f for f in current_folders if f not in remove_labels]
+    for label in add_labels:
+        if label not in new_folders:
+            new_folders.append(label)
+
+    payload = {"folders": new_folders}
 
     try:
         response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
     except requests.RequestException as e:
-        print(f"Error updating labels: {e}", file=sys.stderr)
+        print(f"Error updating thread labels: {e}", file=sys.stderr)
         sys.exit(1)
 
     if not response.ok:
@@ -103,6 +142,10 @@ def main():
                         help="Update labels: remove to-respond-paul, add drafted")
     parser.add_argument("--cleanup", action="store_true",
                         help="Delete draft file after successful creation")
+    parser.add_argument("--verify", action="store_true",
+                        help="Verify draft exists after creation (adds API call)")
+    parser.add_argument("--no-reply-to", action="store_true",
+                        help="Debug: create draft without reply_to_message_id")
 
     args = parser.parse_args()
 
@@ -134,27 +177,49 @@ def main():
         "cc": draft.get("cc", []),
         "subject": draft.get("subject", ""),
         "body": draft.get("body", ""),
-        "reply_to_message_id": latest_message_id,
     }
+
+    # Add reply_to_message_id unless --no-reply-to is set (for debugging)
+    if not args.no_reply_to:
+        payload["reply_to_message_id"] = latest_message_id
 
     # Create draft
     result = create_draft(payload)
     draft_id = result.get("id", "unknown")
 
-    print(json.dumps({
+    output = {
         "status": "success",
         "draft_id": draft_id,
         "subject": payload["subject"],
-        "reply_to": latest_message_id,
-    }))
+    }
+
+    if not args.no_reply_to:
+        output["reply_to"] = latest_message_id
+
+    # Verify draft exists if requested
+    if args.verify:
+        if verify_draft_exists(draft_id):
+            output["verified"] = True
+        else:
+            output["verified"] = False
+            output["warning"] = "Draft created but verification failed - may not sync to Gmail"
+            print("Warning: Draft may not appear in Gmail. Check Nylas dashboard.", file=sys.stderr)
+
+    print(json.dumps(output))
 
     # Update labels if requested
     if args.update_labels:
-        # Label_215 = drafted, remove Label_139 = to-respond-paul
-        update_message_labels(latest_message_id, ["INBOX", "Label_215"])
+        # Label_215 = drafted, Label_139 = to-respond-paul
+        update_thread_labels(
+            args.thread_id,
+            add_labels=["Label_215"],
+            remove_labels=["Label_139"]
+        )
         print(json.dumps({
             "labels_updated": True,
-            "message_id": latest_message_id,
+            "thread_id": args.thread_id,
+            "added": ["Label_215"],
+            "removed": ["Label_139"],
         }))
 
     # Cleanup if requested

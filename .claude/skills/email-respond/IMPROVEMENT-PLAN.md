@@ -16,6 +16,7 @@ Improvements based on E2E testing session. Prioritized bug fixes followed by UX 
 ### Bug #5: Labels not being removed after draft creation
 **Priority:** HIGH
 **File:** `.claude/skills/email-respond/create-gmail-draft.py:154`
+**Status:** ✅ FIXED
 
 **Root cause:**
 ```python
@@ -23,10 +24,10 @@ update_message_labels(latest_message_id, ["INBOX", "Label_215"])
 ```
 This updates labels on ONE message, not the thread. Gmail labels are per-thread via the API.
 
-**Fix:**
-1. Use Nylas thread update endpoint instead of message update
-2. OR update ALL messages in the thread
-3. Get current folders, filter out `Label_139`, add `Label_215`
+**Fix applied:**
+- Replaced `update_message_labels()` with new `update_thread_labels(thread_id, add_labels, remove_labels)`
+- New function fetches current thread folders, removes Label_139, adds Label_215
+- Uses thread endpoint instead of message endpoint
 
 **Implementation:**
 ```python
@@ -56,12 +57,18 @@ def update_thread_labels(thread_id: str, add_labels: list, remove_labels: list):
 ### Bug #6: Draft not appearing in Gmail
 **Priority:** HIGH
 **File:** `.claude/skills/email-respond/create-gmail-draft.py`
+**Status:** 🔧 DEBUG FLAGS ADDED (needs live testing)
 
-**Investigation needed:**
-1. Check if draft_id format is valid Gmail draft ID
-2. Verify `reply_to_message_id` is correct
+**Investigation tools added:**
+- `--verify` flag: Verifies draft exists after creation via API call
+- `--no-reply-to` flag: Creates draft without reply_to_message_id for testing
+- `verify_draft_exists()` function: Queries draft by ID to confirm creation
+
+**Investigation needed (live testing):**
+1. Test with `--no-reply-to` to see if draft appears without reply context
+2. Test with `--verify` to confirm draft is created
 3. Check Nylas dashboard for draft creation logs
-4. Test: Create draft without `reply_to_message_id` to see if it appears
+4. Check if sync delay is the issue
 
 **Possible causes:**
 - Draft created but on wrong account/grant
@@ -75,17 +82,18 @@ def update_thread_labels(thread_id: str, add_labels: list, remove_labels: list):
 **Files:**
 - `.claude/skills/email-respond/panel-manager.sh:106` (show_draft)
 - Terminal display of draft body
+**Status:** ✅ FIXED
 
-**Current code:**
+**Root cause:**
 ```bash
 draft_body=$(jq -r '.body' "$draft_file" 2>/dev/null | sed 's/<[^>]*>//g')
 ```
+This strips ALL HTML tags without converting `<br>` and `</p>` to line breaks first.
 
-**Fix:**
+**Fix applied:**
 ```bash
-# Preserve line breaks when stripping HTML
 draft_body=$(jq -r '.body' "$draft_file" 2>/dev/null | \
-  sed 's/<br\s*\/?>/\n/gi' | \
+  sed 's/<br[[:space:]]*\/?>/\n/gi' | \
   sed 's/<\/p>/\n\n/gi' | \
   sed 's/<[^>]*>//g')
 ```
@@ -180,9 +188,9 @@ Lower priority, tackle after bugs and UX improvements:
 
 ## Verification Checklist
 
-- [ ] Bug #5: Create draft → Label_139 removed from thread in Gmail
-- [ ] Bug #6: Create draft → Draft visible in Gmail drafts folder
-- [ ] Bug #7: Draft with paragraphs → Preview shows line breaks
+- [x] Bug #5: Create draft → Label_139 removed from thread in Gmail (✅ FIXED)
+- [ ] Bug #6: Create draft → Draft visible in Gmail drafts folder (🔧 debug flags added, needs live test)
+- [x] Bug #7: Draft with paragraphs → Preview shows line breaks (✅ FIXED)
 - [ ] Improvement E: Progress count visible during workflow
 - [ ] Improvement H: Recipients shown before draft generation
 - [ ] Improvement I: Session summary with clickable Gmail links

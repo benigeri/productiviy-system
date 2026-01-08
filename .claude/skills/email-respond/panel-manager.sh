@@ -101,9 +101,12 @@ show_draft() {
     local index="$3"
     local total="$4"
 
-    # Read draft body from file and strip HTML
+    # Read draft body from file and convert HTML to plain text with line breaks
     local draft_body
-    draft_body=$(jq -r '.body' "$draft_file" 2>/dev/null | sed 's/<[^>]*>//g')
+    draft_body=$(jq -r '.body' "$draft_file" 2>/dev/null | \
+        sed 's/<br[[:space:]]*\/?>/\n/gi' | \
+        sed 's/<\/p>/\n\n/gi' | \
+        sed 's/<[^>]*>//g')
 
     if [ -z "$draft_body" ]; then
         echo "Error: Could not read draft from $draft_file" >&2
