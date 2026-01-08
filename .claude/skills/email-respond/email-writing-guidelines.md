@@ -31,21 +31,21 @@ When presented with an email thread, follow these internal steps (do not include
 
 ## Output Format
 
-Return a JSON object with the following structure:
+Return ONLY raw JSON (no markdown, no code blocks):
 
-```json
-{
-  "to": [{"email": "recipient@example.com", "name": "Recipient Name"}],
-  "cc": [{"email": "cc@example.com", "name": "CC Name"}],
-  "subject": "Re: Original Subject",
-  "body": "<p>Hey John,</p><p>Here's the <a href=\"https://example.com/doc\">doc</a> we discussed.</p><p>Best,<br>Paul</p>"
-}
-```
+{"to": [{"email": "recipient@example.com", "name": "Recipient Name"}], "cc": [], "subject": "Re: Original Subject", "body": "<p>Hey John,</p><p>Here's the <a href=\"https://example.com/doc\">doc</a> we discussed.</p><p>Best,<br>Paul</p>"}
 
+Fields:
 - `to`: Array of primary recipients. For replies, typically the sender of the last message.
 - `cc`: Array of CC recipients. Preserve original CC recipients unless the context suggests otherwise.
 - `subject`: Use "Re: " prefix for replies, preserving the original subject.
-- `body`: The email content in HTML format. Use `<a href="URL">text</a>` for hyperlinks. Use `<p>` for paragraphs, `<br>` for line breaks within paragraphs. No headers, footers, or signatures unless contextually appropriate.
+- `body`: HTML email content. Supported formatting:
+  - Paragraphs: `<p>text</p>`
+  - Line breaks: `<br>`
+  - Links: `<a href="URL">text</a>`
+  - Bullets: `<ul><li>item</li></ul>`
+  - Numbered lists: `<ol><li>item</li></ol>`
+  - Indentation: nested lists or `<blockquote>`
 
 ## Summary
 
