@@ -86,10 +86,14 @@ show_thread() {
     local thread_id="$1"
     local index="$2"
     local total="$3"
+    local drafted="$4"
+    local skipped="$5"
 
     local cmd="python3 '$SCRIPT_DIR/email-canvas.py' --thread-id '$thread_id'"
     [ -n "$index" ] && cmd="$cmd --index $index"
     [ -n "$total" ] && cmd="$cmd --total $total"
+    [ -n "$drafted" ] && cmd="$cmd --drafted $drafted"
+    [ -n "$skipped" ] && cmd="$cmd --skipped $skipped"
 
     send_to_panel "$cmd"
 }
@@ -100,6 +104,8 @@ show_draft() {
     local draft_file="$2"
     local index="$3"
     local total="$4"
+    local drafted="$5"
+    local skipped="$6"
 
     # Read draft body from file and convert HTML to plain text with line breaks
     local draft_body
@@ -120,6 +126,8 @@ show_draft() {
     local cmd="python3 '$SCRIPT_DIR/email-canvas.py' --thread-id '$thread_id' --draft-file '$display_file'"
     [ -n "$index" ] && cmd="$cmd --index $index"
     [ -n "$total" ] && cmd="$cmd --total $total"
+    [ -n "$drafted" ] && cmd="$cmd --drafted $drafted"
+    [ -n "$skipped" ] && cmd="$cmd --skipped $skipped"
 
     send_to_panel "$cmd"
 }
@@ -161,10 +169,12 @@ case "$1" in
         show_list
         ;;
     thread)
-        show_thread "$2" "$3" "$4"
+        # Args: thread_id index total drafted skipped
+        show_thread "$2" "$3" "$4" "$5" "$6"
         ;;
     draft)
-        show_draft "$2" "$3" "$4" "$5"
+        # Args: thread_id draft_file index total drafted skipped
+        show_draft "$2" "$3" "$4" "$5" "$6" "$7"
         ;;
     close)
         close_panel
@@ -173,11 +183,11 @@ case "$1" in
         echo "Usage: $0 {create|list|thread|draft|close} [args...]"
         echo ""
         echo "Commands:"
-        echo "  create                      - Create panel with persistent shell"
-        echo "  list                        - Show thread list"
-        echo "  thread <id> [idx] [total]   - Show specific thread"
-        echo "  draft <id> <file> [idx] [total] - Show thread with draft from file"
-        echo "  close                       - Close panel"
+        echo "  create                              - Create panel with persistent shell"
+        echo "  list                                - Show thread list"
+        echo "  thread <id> [idx] [total] [drafted] [skipped] - Show specific thread"
+        echo "  draft <id> <file> [idx] [total] [drafted] [skipped] - Show thread with draft"
+        echo "  close                               - Close panel"
         exit 1
         ;;
 esac

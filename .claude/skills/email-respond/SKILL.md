@@ -138,7 +138,25 @@ Present options to user:
 - **"next"** or **"skip"** → Move to next thread (keep labels unchanged)
 - **dictation** → User provides response guidance
 
-#### c. Generate Draft (if user dictated)
+#### c. Show Recipients (after dictation, before generating)
+
+After user provides dictation, show the likely recipients before generating the draft:
+
+```
+📬 Recipients for this reply:
+   To: John Smith <john@example.com>
+   CC: Jane Doe <jane@example.com>, Team <team@example.com>
+
+   Confirm or adjust? (enter to confirm, or specify changes)
+```
+
+To get recipients, look at the thread's latest message:
+- **To**: Reply to the sender of the latest message (unless it's from Paul)
+- **CC**: Include original CC recipients
+
+User can adjust: "remove Jane from CC", "add Bob to CC", etc.
+
+#### d. Generate Draft (after recipient confirmation)
 
 ```bash
 # Store draft to temp file (ensures same draft shown in panel goes to Gmail)
@@ -148,7 +166,7 @@ DRAFT_FILE="/tmp/email-draft-${THREAD_ID}.json"
 python3 draft-email.py THREAD_ID --dictation "$USER_DICTATION" > "$DRAFT_FILE"
 ```
 
-#### d. Update Panel with Draft
+#### e. Update Panel with Draft
 
 ```bash
 # Use panel-manager which reads from file (avoids shell quoting issues with HTML)
@@ -157,7 +175,7 @@ bash "$PANEL" draft THREAD_ID "$DRAFT_FILE" INDEX TOTAL
 
 Note: The panel displays plain text. The actual HTML body (with hyperlinks) is preserved in the temp file for creating the Gmail draft.
 
-#### e. Ask User to Approve or Revise
+#### f. Ask User to Approve or Revise
 
 - **"approve"** → Create Gmail draft and update labels
 - **feedback** → Iterate on draft with feedback:
