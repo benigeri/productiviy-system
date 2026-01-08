@@ -26,6 +26,28 @@ Environment variables in `.env`:
 
 ## Tools
 
+### panel-manager.sh
+Manages the tmux panel reliably. Located at `.claude/skills/email-respond/panel-manager.sh`
+
+```bash
+PANEL=".claude/skills/email-respond/panel-manager.sh"
+
+# Create panel with persistent shell
+bash "$PANEL" create
+
+# Show thread list
+bash "$PANEL" list
+
+# Show specific thread
+bash "$PANEL" thread THREAD_ID [INDEX] [TOTAL]
+
+# Show thread with draft from file (avoids shell quoting issues)
+bash "$PANEL" draft THREAD_ID DRAFT_FILE [INDEX] [TOTAL]
+
+# Close panel
+bash "$PANEL" close
+```
+
 ### email-canvas.py
 Terminal panel display. Located at `.claude/skills/email-respond/email-canvas.py`
 
@@ -36,8 +58,11 @@ python3 .claude/skills/email-respond/email-canvas.py
 # Show single thread
 python3 .claude/skills/email-respond/email-canvas.py --thread-id THREAD_ID
 
-# Show thread with draft
-python3 .claude/skills/email-respond/email-canvas.py --thread-id THREAD_ID --draft "Draft text here"
+# Show thread with draft from file (preferred - avoids shell quoting)
+python3 .claude/skills/email-respond/email-canvas.py --thread-id THREAD_ID --draft-file /tmp/draft.txt
+
+# Show thread with inline draft (legacy - may have quoting issues)
+python3 .claude/skills/email-respond/email-canvas.py --thread-id THREAD_ID --draft "Draft text"
 
 # With position indicator
 python3 .claude/skills/email-respond/email-canvas.py --thread-id THREAD_ID --index 1 --total 9
@@ -57,19 +82,36 @@ python3 draft-email.py THREAD_ID --dictation "..." --body-only
 python3 draft-email.py THREAD_ID --dictation "..." --feedback "Make it shorter" --previous-draft /tmp/draft.json
 ```
 
+### create-gmail-draft.py
+Creates Gmail draft from JSON file. Located at `.claude/skills/email-respond/create-gmail-draft.py`
+**Use this instead of curl to avoid shell quoting issues with HTML.**
+
+```bash
+# Create draft from file
+python3 .claude/skills/email-respond/create-gmail-draft.py DRAFT_FILE --thread-id THREAD_ID
+
+# Create draft and update labels (remove to-respond-paul, add drafted)
+python3 .claude/skills/email-respond/create-gmail-draft.py DRAFT_FILE --thread-id THREAD_ID --update-labels
+
+# Create draft, update labels, and cleanup temp file
+python3 .claude/skills/email-respond/create-gmail-draft.py DRAFT_FILE --thread-id THREAD_ID --update-labels --cleanup
+```
+
 ---
 
 ## Workflow
 
 ### 1. Setup Panel
 
-Create a tmux split pane for the email canvas:
+Create a tmux split pane with a persistent shell:
 
 ```bash
-tmux split-window -h -p 40 "python3 .claude/skills/email-respond/email-canvas.py; read"
+PANEL=".claude/skills/email-respond/panel-manager.sh"
+bash "$PANEL" create
+bash "$PANEL" list
 ```
 
-This shows the thread list. Note the total count and thread IDs.
+This creates a panel and shows the thread list. The panel uses a persistent shell so it won't disappear when commands finish.
 
 ### 2. Fetch Thread List
 
@@ -87,8 +129,7 @@ Store the thread IDs and count for iteration.
 #### a. Update Panel to Show Thread
 
 ```bash
-tmux send-keys -t {right} C-c
-tmux send-keys -t {right} "python3 .claude/skills/email-respond/email-canvas.py --thread-id THREAD_ID --index N --total TOTAL" Enter
+bash "$PANEL" thread THREAD_ID INDEX TOTAL
 ```
 
 #### b. Ask User for Input
@@ -105,19 +146,16 @@ DRAFT_FILE="/tmp/email-draft-${THREAD_ID}.json"
 
 # Generate draft with user's dictation - returns JSON with to, cc, subject, body
 python3 draft-email.py THREAD_ID --dictation "$USER_DICTATION" > "$DRAFT_FILE"
-
-# Extract body for panel display (strip HTML tags for readability)
-DRAFT_BODY=$(jq -r '.body' "$DRAFT_FILE" | sed 's/<[^>]*>//g')
 ```
 
 #### d. Update Panel with Draft
 
 ```bash
-tmux send-keys -t {right} C-c
-tmux send-keys -t {right} "python3 .claude/skills/email-respond/email-canvas.py --thread-id THREAD_ID --draft '$DRAFT_BODY' --index N --total TOTAL" Enter
+# Use panel-manager which reads from file (avoids shell quoting issues with HTML)
+bash "$PANEL" draft THREAD_ID "$DRAFT_FILE" INDEX TOTAL
 ```
 
-Note: The panel displays plain text. The actual HTML body (with hyperlinks) is preserved in `DRAFT_JSON` for creating the Gmail draft.
+Note: The panel displays plain text. The actual HTML body (with hyperlinks) is preserved in the temp file for creating the Gmail draft.
 
 #### e. Ask User to Approve or Revise
 
@@ -137,68 +175,20 @@ DRAFT_BODY=$(jq -r '.body' "$DRAFT_FILE" | sed 's/<[^>]*>//g')
 
 ### 4. On Approve
 
-#### a. Get Thread Details for Draft Creation
-
-Read the stored draft from the temp file (`$DRAFT_FILE` from step 3c):
+Use `create-gmail-draft.py` to create the draft, update labels, and cleanup in one command:
 
 ```bash
-# Extract fields from stored draft
-TO_JSON=$(jq -c '.to' "$DRAFT_FILE")
-CC_JSON=$(jq -c '.cc' "$DRAFT_FILE")
-SUBJECT=$(jq -r '.subject' "$DRAFT_FILE")
-BODY_HTML=$(jq -r '.body' "$DRAFT_FILE")
+python3 .claude/skills/email-respond/create-gmail-draft.py "$DRAFT_FILE" --thread-id THREAD_ID --update-labels --cleanup
 ```
 
-Also fetch the thread to get the latest message ID:
+This script:
+- Reads the draft JSON from the temp file
+- Gets the latest message ID from the thread
+- Creates a Gmail draft as a reply
+- Updates labels (removes `to-respond-paul`, adds `drafted`)
+- Deletes the temp file
 
-```bash
-bash -c 'source .env && curl -s "https://api.us.nylas.com/v3/grants/$NYLAS_GRANT_ID/threads/THREAD_ID" \
-  -H "Authorization: Bearer $NYLAS_API_KEY"' | jq '{message_ids}'
-```
-
-Get the latest message ID (last in `message_ids` array) for `reply_to_message_id`.
-
-#### b. Create Gmail Draft
-
-Use the fields extracted from the temp file:
-
-```bash
-bash -c 'source .env && curl -s -X POST "https://api.us.nylas.com/v3/grants/$NYLAS_GRANT_ID/drafts" \
-  -H "Authorization: Bearer $NYLAS_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"subject\": \"$SUBJECT\",
-    \"to\": $TO_JSON,
-    \"cc\": $CC_JSON,
-    \"reply_to_message_id\": \"LATEST_MESSAGE_ID\",
-    \"body\": \"$BODY_HTML\"
-  }"'
-```
-
-The `body` is already HTML formatted with hyperlinks.
-
-#### b2. Cleanup Temp File
-
-```bash
-rm -f "$DRAFT_FILE"
-```
-
-#### c. Update Labels on Latest Message
-
-Remove `to-respond-paul` (Label_139), add `drafted` (Label_215):
-
-```bash
-bash -c 'source .env && curl -s -X PUT "https://api.us.nylas.com/v3/grants/$NYLAS_GRANT_ID/messages/MESSAGE_ID" \
-  -H "Authorization: Bearer $NYLAS_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d "{\"folders\": [\"INBOX\", \"Label_215\"]}"'
-```
-
-Note: Fetch current folders first if you need to preserve other labels.
-
-#### d. Confirm and Advance
-
-Tell user the draft was created, then auto-advance to next thread.
+Then confirm to user and auto-advance to next thread.
 
 ### 5. Cleanup
 
@@ -206,14 +196,13 @@ When all threads processed or user says "done":
 
 ```bash
 # Clean up any remaining temp draft files
-rm -f /tmp/email-draft-*.json
+rm -f /tmp/email-draft-*.json /tmp/email-draft-display-*.txt
 
 # Close the panel
-tmux send-keys -t {right} C-c
-tmux send-keys -t {right} "exit" Enter
+bash "$PANEL" close
 ```
 
-When user skips a thread (no draft generated), no cleanup needed for that thread.
+When user skips a thread (no draft generated), no cleanup needed.
 When user skips after seeing a draft, delete that thread's temp file:
 ```bash
 rm -f "$DRAFT_FILE"

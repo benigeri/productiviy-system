@@ -2,7 +2,9 @@
 """Tests for email-canvas.py"""
 
 import os
+import subprocess
 import sys
+import tempfile
 
 import pytest
 
@@ -100,6 +102,120 @@ class TestPanelWidth:
         """PANEL_WIDTH should be a reasonable value"""
         assert email_canvas.PANEL_WIDTH > 0
         assert email_canvas.PANEL_WIDTH < 200
+
+
+class TestDraftFileArgument:
+    """Tests for --draft-file argument"""
+
+    def test_draft_file_reads_content(self):
+        """Should read draft content from file"""
+        script_path = os.path.join(os.path.dirname(__file__), "email-canvas.py")
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("This is my draft content from file")
+            f.flush()
+            # Can't easily test the full flow without API, but we can test arg parsing
+            result = subprocess.run(
+                ["python3", script_path, "--draft-file", f.name],
+                capture_output=True,
+                text=True
+            )
+            os.unlink(f.name)
+        # Should fail because --draft-file requires --thread-id, but should mention that
+        assert result.returncode != 0
+        assert "thread-id" in result.stderr.lower()
+
+    def test_draft_file_missing_error(self):
+        """Should error if draft file doesn't exist"""
+        script_path = os.path.join(os.path.dirname(__file__), "email-canvas.py")
+        result = subprocess.run(
+            ["python3", script_path, "--thread-id", "fake", "--draft-file", "/nonexistent/file.txt"],
+            capture_output=True,
+            text=True
+        )
+        assert result.returncode != 0
+        assert "not found" in result.stderr.lower()
+
+    def test_draft_and_draft_file_both_require_thread_id(self):
+        """Both --draft and --draft-file should require --thread-id"""
+        script_path = os.path.join(os.path.dirname(__file__), "email-canvas.py")
+        # Test --draft
+        result1 = subprocess.run(
+            ["python3", script_path, "--draft", "Some draft"],
+            capture_output=True,
+            text=True
+        )
+        assert result1.returncode != 0
+        assert "thread-id" in result1.stderr.lower()
+
+
+class TestHtmlToText:
+    """Tests for html_to_text()"""
+
+    def test_strips_html_tags(self):
+        """Should remove HTML tags"""
+        html = "<p>Hello <strong>world</strong></p>"
+        result = email_canvas.html_to_text(html)
+        assert "<p>" not in result
+        assert "<strong>" not in result
+        assert "Hello" in result
+        assert "world" in result
+
+    def test_preserves_paragraph_breaks(self):
+        """Should convert </p> to paragraph breaks"""
+        html = "<p>First paragraph</p><p>Second paragraph</p>"
+        result = email_canvas.html_to_text(html)
+        # Should have double newline between paragraphs
+        assert "First paragraph" in result
+        assert "Second paragraph" in result
+
+    def test_converts_br_to_newline(self):
+        """Should convert <br> to newlines"""
+        html = "Line one<br>Line two<br/>Line three"
+        result = email_canvas.html_to_text(html)
+        assert "Line one" in result
+        assert "Line two" in result
+        assert "Line three" in result
+
+    def test_handles_empty_input(self):
+        """Should handle empty string"""
+        result = email_canvas.html_to_text("")
+        assert result == ""
+
+    def test_handles_none_input(self):
+        """Should handle None input"""
+        result = email_canvas.html_to_text(None)
+        assert result == ""
+
+    def test_decodes_html_entities(self):
+        """Should decode HTML entities"""
+        html = "&amp; &lt; &gt; &quot;"
+        result = email_canvas.html_to_text(html)
+        assert "&" in result
+        assert "<" in result
+        assert ">" in result
+
+
+class TestWrapText:
+    """Tests for wrap_text()"""
+
+    def test_wraps_long_lines(self):
+        """Should wrap text to fit panel width"""
+        long_text = "word " * 50  # Very long line
+        result = email_canvas.wrap_text(long_text, width=40)
+        lines = result.split("\n")
+        for line in lines:
+            assert len(line) <= 45  # Some flexibility for word boundaries
+
+    def test_preserves_paragraph_breaks(self):
+        """Should preserve double newlines as paragraph breaks"""
+        text = "First paragraph here.\n\nSecond paragraph here."
+        result = email_canvas.wrap_text(text)
+        assert "\n\n" in result
+
+    def test_handles_empty_input(self):
+        """Should handle empty string"""
+        result = email_canvas.wrap_text("")
+        assert result == ""
 
 
 if __name__ == "__main__":

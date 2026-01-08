@@ -74,29 +74,41 @@ def get_thread(thread_id: str) -> dict:
 
 
 def clean_messages(message_ids: List[str]) -> List[Dict]:
-    """Fetch and clean multiple messages via Nylas Clean Messages API."""
+    """Fetch and clean multiple messages via Nylas Clean Messages API.
+
+    Nylas limits batch requests to 20 message IDs, so we batch if needed.
+    """
+    BATCH_SIZE = 20
     url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/messages/clean"
     headers = {
         "Authorization": f"Bearer {NYLAS_API_KEY}",
         "Content-Type": "application/json",
     }
-    payload = {
-        "message_id": message_ids,
-        "ignore_images": True,
-        "ignore_links": True,
-    }
 
-    try:
-        response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException as e:
-        print(f"Nylas request failed: {e}", file=sys.stderr)
-        sys.exit(1)
+    all_messages = []
 
-    if not response.ok:
-        print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
-        sys.exit(1)
+    # Batch message IDs into chunks of 20 (Nylas API limit)
+    for i in range(0, len(message_ids), BATCH_SIZE):
+        batch = message_ids[i:i + BATCH_SIZE]
+        payload = {
+            "message_id": batch,
+            "ignore_images": True,
+            "ignore_links": True,
+        }
 
-    return response.json().get("data", [])
+        try:
+            response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+        except requests.RequestException as e:
+            print(f"Nylas request failed: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        if not response.ok:
+            print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
+            sys.exit(1)
+
+        all_messages.extend(response.json().get("data", []))
+
+    return all_messages
 
 
 def format_participant(participant: dict) -> str:
@@ -311,6 +323,29 @@ Examples:
         print("Error: --previous-draft requires --feedback", file=sys.stderr)
         sys.exit(1)
 
+    # Validate previous draft file early (before API calls)
+    previous_draft_json = None
+    if args.feedback:
+        try:
+            with open(args.previous_draft, encoding="utf-8") as f:
+                previous_draft_json = f.read()
+        except FileNotFoundError:
+            print(f"Error: Previous draft file not found: {args.previous_draft}", file=sys.stderr)
+            sys.exit(1)
+        except IOError as e:
+            print(f"Error reading previous draft: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        # Validate previous draft content is not empty
+        if not previous_draft_json or not previous_draft_json.strip():
+            print("Error: Previous draft file is empty", file=sys.stderr)
+            sys.exit(1)
+
+        # Validate feedback is not empty
+        if not args.feedback.strip():
+            print("Error: Feedback cannot be empty", file=sys.stderr)
+            sys.exit(1)
+
     check_env()
 
     # Fetch thread
@@ -342,17 +377,7 @@ Examples:
 
     # Generate draft (with or without feedback)
     if args.feedback:
-        # Load previous draft for feedback iteration
-        try:
-            with open(args.previous_draft, encoding="utf-8") as f:
-                previous_draft_json = f.read()
-        except FileNotFoundError:
-            print(f"Error: Previous draft file not found: {args.previous_draft}", file=sys.stderr)
-            sys.exit(1)
-        except IOError as e:
-            print(f"Error reading previous draft: {e}", file=sys.stderr)
-            sys.exit(1)
-
+        # previous_draft_json was already loaded and validated earlier
         raw_response = generate_with_feedback(
             thread_content, args.dictation, previous_draft_json, args.feedback
         )

@@ -63,29 +63,41 @@ def nylas_get(endpoint: str) -> dict:
 
 
 def clean_messages(message_ids: List[str]) -> List[Dict]:
-    """Fetch and clean multiple messages via Nylas Clean Messages API."""
+    """Fetch and clean multiple messages via Nylas Clean Messages API.
+
+    Nylas limits batch requests to 20 message IDs, so we batch if needed.
+    """
+    BATCH_SIZE = 20
     url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/messages/clean"
     headers = {
         "Authorization": f"Bearer {NYLAS_API_KEY}",
         "Content-Type": "application/json",
     }
-    payload = {
-        "message_id": message_ids,
-        "ignore_images": True,
-        "ignore_links": True,
-    }
 
-    try:
-        response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException as e:
-        print(f"Nylas request failed: {e}", file=sys.stderr)
-        sys.exit(1)
+    all_messages = []
 
-    if not response.ok:
-        print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
-        sys.exit(1)
+    # Batch message IDs into chunks of 20 (Nylas API limit)
+    for i in range(0, len(message_ids), BATCH_SIZE):
+        batch = message_ids[i:i + BATCH_SIZE]
+        payload = {
+            "message_id": batch,
+            "ignore_images": True,
+            "ignore_links": True,
+        }
 
-    return response.json().get("data", [])
+        try:
+            response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+        except requests.RequestException as e:
+            print(f"Nylas request failed: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        if not response.ok:
+            print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
+            sys.exit(1)
+
+        all_messages.extend(response.json().get("data", []))
+
+    return all_messages
 
 
 def format_date(timestamp: int) -> str:
@@ -331,6 +343,7 @@ Examples:
     )
     parser.add_argument("--thread-id", "-t", help="Thread ID to display")
     parser.add_argument("--draft", "-d", help="Draft text to display below thread")
+    parser.add_argument("--draft-file", help="Read draft text from file (avoids shell quoting issues)")
     parser.add_argument("--index", "-i", type=int, help="Thread index (e.g., 1 of 9)")
     parser.add_argument("--total", "-n", type=int, help="Total thread count")
 
@@ -338,12 +351,25 @@ Examples:
 
     check_env()
 
-    if args.draft and not args.thread_id:
+    # Load draft from file if specified
+    draft_text = args.draft
+    if args.draft_file:
+        try:
+            with open(args.draft_file, encoding="utf-8") as f:
+                draft_text = f.read().strip()
+        except FileNotFoundError:
+            print(f"Error: Draft file not found: {args.draft_file}", file=sys.stderr)
+            sys.exit(1)
+        except IOError as e:
+            print(f"Error reading draft file: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    if (args.draft or args.draft_file) and not args.thread_id:
         print("Error: --draft requires --thread-id", file=sys.stderr)
         sys.exit(1)
 
     if args.thread_id:
-        show_thread(args.thread_id, args.draft, args.index, args.total)
+        show_thread(args.thread_id, draft_text, args.index, args.total)
     else:
         list_threads()
 
