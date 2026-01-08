@@ -9,6 +9,7 @@ import os
 import sys
 import warnings
 from datetime import datetime
+from typing import Dict, List, Optional
 
 warnings.filterwarnings("ignore", message=".*OpenSSL.*")
 
@@ -58,7 +59,7 @@ def nylas_get(endpoint: str) -> dict:
     return response.json().get("data", {})
 
 
-def clean_messages(message_ids: list[str]) -> list[dict]:
+def clean_messages(message_ids: List[str]) -> List[Dict]:
     """Fetch and clean multiple messages via Nylas Clean Messages API."""
     url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/messages/clean"
     headers = {

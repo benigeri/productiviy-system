@@ -10,6 +10,7 @@ import os
 import sys
 import warnings
 from datetime import datetime
+from typing import Dict, List, Optional
 
 warnings.filterwarnings("ignore", message=".*OpenSSL.*")
 
@@ -72,7 +73,7 @@ def get_thread(thread_id: str) -> dict:
     return nylas_get(f"/threads/{thread_id}")
 
 
-def clean_messages(message_ids: list[str]) -> list[dict]:
+def clean_messages(message_ids: List[str]) -> List[Dict]:
     """Fetch and clean multiple messages via Nylas Clean Messages API."""
     url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/messages/clean"
     headers = {
@@ -157,7 +158,7 @@ def format_thread(thread: dict, messages: list[dict]) -> str:
     return "\n".join(parts)
 
 
-def load_file(relative_path: str) -> str | None:
+def load_file(relative_path: str) -> Optional[str]:
     """Load a file relative to the script directory."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, relative_path)
@@ -180,7 +181,7 @@ Match the tone and formality of the conversation. Be concise but complete.
 Return a JSON object with to, cc, subject, and body fields."""
 
 
-def load_paul_emails() -> str | None:
+def load_paul_emails() -> Optional[str]:
     """Load Paul's example emails for style reference."""
     return load_file(PAUL_EMAILS_PATH)
 
