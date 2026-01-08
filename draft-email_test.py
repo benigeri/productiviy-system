@@ -195,5 +195,125 @@ class TestLoadFile:
         assert result is None
 
 
+class TestGetDraftPrompt:
+    """Tests for get_draft_prompt()"""
+
+    def test_includes_dictation(self):
+        """Should include dictation in prompt"""
+        thread_content = "=== Email Thread: Test ===\nSome content"
+        dictation = "Tell them yes, let's meet Tuesday"
+        result = draft_email.get_draft_prompt(thread_content, dictation)
+        assert "User's Dictation" in result
+        assert dictation in result
+        assert "capture their key points" in result.lower()
+
+    def test_includes_thread_content(self):
+        """Should include the thread content"""
+        thread_content = "=== Email Thread: Important Meeting ===\nMessage body here"
+        dictation = "Sounds good"
+        result = draft_email.get_draft_prompt(thread_content, dictation)
+        assert "Email Thread to Respond To" in result
+        assert thread_content in result
+
+    def test_dictation_comes_after_thread(self):
+        """Dictation section should come after thread content"""
+        thread_content = "Thread content here"
+        dictation = "My response dictation"
+        result = draft_email.get_draft_prompt(thread_content, dictation)
+        thread_pos = result.find(thread_content)
+        dictation_pos = result.find(dictation)
+        assert thread_pos < dictation_pos, "Dictation should appear after thread content"
+
+
+class TestCLIArguments:
+    """Tests for command line argument handling"""
+
+    def test_dictation_required(self):
+        """Should require --dictation argument"""
+        import subprocess
+        result = subprocess.run(
+            ["python3", "draft-email.py", "fake_thread_id"],
+            capture_output=True,
+            text=True
+        )
+        assert result.returncode != 0
+        assert "required" in result.stderr.lower() or "dictation" in result.stderr.lower()
+
+    def test_feedback_requires_previous_draft(self):
+        """Should error if --feedback without --previous-draft"""
+        import subprocess
+        result = subprocess.run(
+            ["python3", "draft-email.py", "fake_id", "-d", "test", "--feedback", "shorter"],
+            capture_output=True,
+            text=True
+        )
+        assert result.returncode != 0
+        assert "previous-draft" in result.stderr.lower()
+
+    def test_previous_draft_requires_feedback(self):
+        """Should error if --previous-draft without --feedback"""
+        import subprocess
+        result = subprocess.run(
+            ["python3", "draft-email.py", "fake_id", "-d", "test", "--previous-draft", "/tmp/x.json"],
+            capture_output=True,
+            text=True
+        )
+        assert result.returncode != 0
+        assert "feedback" in result.stderr.lower()
+
+
+class TestGenerateWithFeedback:
+    """Tests for generate_with_feedback() message structure"""
+
+    def test_message_structure(self, monkeypatch):
+        """Should construct proper multi-turn message array"""
+        captured_messages = []
+
+        def mock_call_anthropic(messages):
+            captured_messages.extend(messages)
+            return '{"to": [], "cc": [], "subject": "Re: Test", "body": "Revised draft"}'
+
+        monkeypatch.setattr(draft_email, "call_anthropic", mock_call_anthropic)
+        monkeypatch.setattr(draft_email, "load_guidelines", lambda: "Guidelines here")
+        monkeypatch.setattr(draft_email, "load_paul_emails", lambda: None)
+
+        draft_email.generate_with_feedback(
+            thread_content="Thread content",
+            dictation="Say yes",
+            previous_draft='{"body": "Original draft"}',
+            feedback="Make it shorter"
+        )
+
+        assert len(captured_messages) == 3
+        assert captured_messages[0]["role"] == "user"
+        assert "Say yes" in captured_messages[0]["content"]
+        assert captured_messages[1]["role"] == "assistant"
+        assert '{"body": "Original draft"}' in captured_messages[1]["content"]
+        assert captured_messages[2]["role"] == "user"
+        assert "Make it shorter" in captured_messages[2]["content"]
+
+    def test_preserves_original_dictation(self, monkeypatch):
+        """Should include original dictation in first message"""
+        captured_messages = []
+
+        def mock_call_anthropic(messages):
+            captured_messages.extend(messages)
+            return '{"body": "test"}'
+
+        monkeypatch.setattr(draft_email, "call_anthropic", mock_call_anthropic)
+        monkeypatch.setattr(draft_email, "load_guidelines", lambda: "Guidelines")
+        monkeypatch.setattr(draft_email, "load_paul_emails", lambda: None)
+
+        draft_email.generate_with_feedback(
+            thread_content="Thread",
+            dictation="Original user intent here",
+            previous_draft="{}",
+            feedback="feedback"
+        )
+
+        # First message should contain the original dictation
+        assert "Original user intent here" in captured_messages[0]["content"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

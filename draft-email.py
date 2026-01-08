@@ -186,8 +186,8 @@ def load_paul_emails() -> Optional[str]:
     return load_file(PAUL_EMAILS_PATH)
 
 
-def get_draft_prompt(thread_content: str) -> str:
-    """Build the full prompt with guidelines, examples, and thread."""
+def get_draft_prompt(thread_content: str, dictation: str) -> str:
+    """Build the full prompt with guidelines, examples, thread, and dictation."""
     guidelines = load_guidelines()
     paul_emails = load_paul_emails()
 
@@ -200,27 +200,26 @@ def get_draft_prompt(thread_content: str) -> str:
     parts.append("\n---\n\n## Email Thread to Respond To\n")
     parts.append(thread_content)
 
+    parts.append("\n---\n\n## User's Dictation\n")
+    parts.append("The user wants to respond with this intent. ")
+    parts.append("Capture their key points while writing in Paul's voice:\n\n")
+    parts.append(dictation)
+
     return "\n".join(parts)
 
 
-def generate_draft(thread_content: str) -> str:
-    """Generate a draft response using Anthropic."""
+def call_anthropic(messages: list) -> str:
+    """Make a request to the Anthropic API with given messages."""
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
     }
 
-    prompt = get_draft_prompt(thread_content)
     payload = {
         "model": "claude-sonnet-4-20250514",
         "max_tokens": 2048,
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
+        "messages": messages,
     }
 
     try:
@@ -243,6 +242,29 @@ def generate_draft(thread_content: str) -> str:
     return content[0]["text"]
 
 
+def generate_draft(thread_content: str, dictation: str) -> str:
+    """Generate a draft response using Anthropic."""
+    prompt = get_draft_prompt(thread_content, dictation)
+    messages = [{"role": "user", "content": prompt}]
+    return call_anthropic(messages)
+
+
+def generate_with_feedback(
+    thread_content: str, dictation: str, previous_draft: str, feedback: str
+) -> str:
+    """Generate a revised draft based on user feedback.
+
+    Uses multi-turn conversation to preserve context from the original generation.
+    """
+    initial_prompt = get_draft_prompt(thread_content, dictation)
+    messages = [
+        {"role": "user", "content": initial_prompt},
+        {"role": "assistant", "content": previous_draft},
+        {"role": "user", "content": f"Please revise the draft based on this feedback:\n\n{feedback}"},
+    ]
+    return call_anthropic(messages)
+
+
 def parse_draft_response(response: str) -> dict:
     """Parse the JSON response from the AI."""
     try:
@@ -258,16 +280,36 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s THREAD_ID              # Full JSON output with to, cc, subject, body
-  %(prog)s THREAD_ID --body-only  # Just the email body (for display)
-  %(prog)s THREAD_ID --verbose    # Show thread content before draft
+  %(prog)s THREAD_ID -d "Let's meet Tuesday at 2pm"
+  %(prog)s THREAD_ID -d "Yes, sounds good" --body-only
+  %(prog)s THREAD_ID -d "..." --feedback "Make it shorter" --previous-draft /tmp/draft.json
         """,
     )
     parser.add_argument("thread_id", help="Nylas thread ID to respond to")
+    parser.add_argument(
+        "-d", "--dictation", required=True,
+        help="User's dictation of what they want to say in the response"
+    )
+    parser.add_argument(
+        "-f", "--feedback",
+        help="Feedback on previous draft (requires --previous-draft)"
+    )
+    parser.add_argument(
+        "--previous-draft",
+        help="Path to previous draft JSON file (for feedback iterations)"
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Show thread content")
     parser.add_argument("--body-only", action="store_true", help="Output only the email body")
 
     args = parser.parse_args()
+
+    # Validate feedback arguments
+    if args.feedback and not args.previous_draft:
+        print("Error: --feedback requires --previous-draft", file=sys.stderr)
+        sys.exit(1)
+    if args.previous_draft and not args.feedback:
+        print("Error: --previous-draft requires --feedback", file=sys.stderr)
+        sys.exit(1)
 
     check_env()
 
@@ -298,8 +340,25 @@ Examples:
         print("GENERATED DRAFT:", file=sys.stderr)
         print("=" * 50 + "\n", file=sys.stderr)
 
-    # Generate draft
-    raw_response = generate_draft(thread_content)
+    # Generate draft (with or without feedback)
+    if args.feedback:
+        # Load previous draft for feedback iteration
+        try:
+            with open(args.previous_draft, encoding="utf-8") as f:
+                previous_draft_json = f.read()
+        except FileNotFoundError:
+            print(f"Error: Previous draft file not found: {args.previous_draft}", file=sys.stderr)
+            sys.exit(1)
+        except IOError as e:
+            print(f"Error reading previous draft: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        raw_response = generate_with_feedback(
+            thread_content, args.dictation, previous_draft_json, args.feedback
+        )
+    else:
+        raw_response = generate_draft(thread_content, args.dictation)
+
     draft = parse_draft_response(raw_response)
 
     if args.body_only:
