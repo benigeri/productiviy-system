@@ -178,7 +178,7 @@ DRAFT_BODY=$(jq -r '.body' "$DRAFT_FILE" | sed 's/<[^>]*>//g')
 Use `create-gmail-draft.py` to create the draft, update labels, and cleanup in one command:
 
 ```bash
-python3 .claude/skills/email-respond/create-gmail-draft.py "$DRAFT_FILE" --thread-id THREAD_ID --update-labels --cleanup
+RESULT=$(python3 .claude/skills/email-respond/create-gmail-draft.py "$DRAFT_FILE" --thread-id THREAD_ID --update-labels --cleanup)
 ```
 
 This script:
@@ -188,11 +188,45 @@ This script:
 - Updates labels (removes `to-respond-paul`, adds `drafted`)
 - Deletes the temp file
 
+**Capture the draft_id for session summary:**
+```bash
+DRAFT_ID=$(echo "$RESULT" | jq -r '.draft_id')
+SUBJECT=$(echo "$RESULT" | jq -r '.subject')
+# Add to drafts array for end-of-session summary
+```
+
+Increment `drafted_count` and store `{subject, draft_id}` in `drafts[]` array.
 Then confirm to user and auto-advance to next thread.
 
-### 5. Cleanup
+### 5. On Skip
 
-When all threads processed or user says "done":
+Increment `skipped_count`. If a draft was generated but not approved, delete the temp file:
+```bash
+rm -f "$DRAFT_FILE"
+```
+
+### 6. Session Summary
+
+When all threads processed or user says "done", display the session summary:
+
+```
+✅ Session Complete!
+
+📊 Summary: {drafted_count} drafted, {skipped_count} skipped
+
+📝 Drafts to review:
+1. {subject}
+   https://mail.google.com/mail/u/0/#drafts?compose={draft_id}
+2. {subject}
+   https://mail.google.com/mail/u/0/#drafts?compose={draft_id}
+...
+```
+
+The Gmail URL format is: `https://mail.google.com/mail/u/0/#drafts?compose=<draft_id>`
+
+### 7. Cleanup
+
+After showing session summary:
 
 ```bash
 # Clean up any remaining temp draft files
@@ -200,12 +234,6 @@ rm -f /tmp/email-draft-*.json /tmp/email-draft-display-*.txt
 
 # Close the panel
 bash "$PANEL" close
-```
-
-When user skips a thread (no draft generated), no cleanup needed.
-When user skips after seeing a draft, delete that thread's temp file:
-```bash
-rm -f "$DRAFT_FILE"
 ```
 
 ---
@@ -231,6 +259,11 @@ current_index    - Current position (1-based)
 total_threads    - Total count
 user_dictation   - User's dictation for current thread
 draft_file       - Path to temp file: /tmp/email-draft-{THREAD_ID}.json
+
+# Session summary tracking
+drafted_count    - Number of drafts created
+skipped_count    - Number of threads skipped
+drafts[]         - Array of {subject, draft_id} for summary display
 ```
 
 **Important**: The draft is stored in a temp file to ensure the exact draft shown in the panel is sent to Gmail. Clean up temp files when skipping threads or finishing the workflow.
@@ -271,6 +304,26 @@ User: skip
 Claude: Moving to next thread...
 
         📧 Thread 3/9: ...
+
+... [more threads] ...
+
+User: done
+
+Claude: ✅ Session Complete!
+
+        📊 Summary: 5 drafted, 4 skipped
+
+        📝 Drafts to review:
+        1. Re: Paul / Mitch - Catch Up
+           https://mail.google.com/mail/u/0/#drafts?compose=r-7427271980476641806
+        2. Re: Archive connect request
+           https://mail.google.com/mail/u/0/#drafts?compose=r-7427271980476641807
+        3. Re: Edelman
+           https://mail.google.com/mail/u/0/#drafts?compose=r-7427271980476641808
+        4. Re: Archive / Stripe - follow up
+           https://mail.google.com/mail/u/0/#drafts?compose=r-7427271980476641809
+        5. Re: Paul x Em Meet
+           https://mail.google.com/mail/u/0/#drafts?compose=r-7427271980476641810
 ```
 
 ---
