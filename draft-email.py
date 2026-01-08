@@ -5,9 +5,7 @@ Fetches an email thread from Nylas and generates a draft response using Anthropi
 """
 
 import argparse
-import html
 import os
-import re
 import sys
 import warnings
 from datetime import datetime
@@ -26,6 +24,8 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 NYLAS_BASE_URL = "https://api.us.nylas.com/v3"
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 
+REQUEST_TIMEOUT = 30  # seconds
+
 
 def check_env():
     """Check required environment variables."""
@@ -38,19 +38,19 @@ def check_env():
         missing.append("ANTHROPIC_API_KEY")
 
     if missing:
-        print(f"Error: Missing environment variables: {', '.join(missing)}")
-        print("Add them to your .env file")
+        print(f"Error: Missing environment variables: {', '.join(missing)}", file=sys.stderr)
+        print("Add them to your .env file", file=sys.stderr)
         sys.exit(1)
 
 
-def nylas_request(endpoint: str) -> dict:
-    """Make a request to the Nylas API."""
+def nylas_get(endpoint: str) -> dict:
+    """Make a GET request to the Nylas API."""
     url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}{endpoint}"
     headers = {"Authorization": f"Bearer {NYLAS_API_KEY}"}
 
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
     if not response.ok:
-        print(f"Nylas API error: {response.status_code} {response.text}")
+        print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
         sys.exit(1)
 
     return response.json().get("data", {})
@@ -58,40 +58,28 @@ def nylas_request(endpoint: str) -> dict:
 
 def get_thread(thread_id: str) -> dict:
     """Fetch a thread by ID."""
-    return nylas_request(f"/threads/{thread_id}")
+    return nylas_get(f"/threads/{thread_id}")
 
 
-def get_message(message_id: str) -> dict:
-    """Fetch a message by ID with full body."""
-    return nylas_request(f"/messages/{message_id}")
+def clean_messages(message_ids: list[str]) -> list[dict]:
+    """Fetch and clean multiple messages via Nylas Clean Messages API."""
+    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/messages/clean"
+    headers = {
+        "Authorization": f"Bearer {NYLAS_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "message_id": message_ids,
+        "ignore_images": True,
+        "ignore_links": True,
+    }
 
+    response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+    if not response.ok:
+        print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
+        sys.exit(1)
 
-def html_to_text(html_content: str) -> str:
-    """Convert HTML to plain text."""
-    if not html_content:
-        return ""
-
-    # Remove style and script tags
-    text = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
-
-    # Convert common elements
-    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
-    text = re.sub(r'</?p[^>]*>', '\n', text, flags=re.IGNORECASE)
-    text = re.sub(r'</?div[^>]*>', '\n', text, flags=re.IGNORECASE)
-    text = re.sub(r'<li[^>]*>', '\n- ', text, flags=re.IGNORECASE)
-
-    # Remove all remaining HTML tags
-    text = re.sub(r'<[^>]+>', '', text)
-
-    # Decode HTML entities
-    text = html.unescape(text)
-
-    # Clean up whitespace
-    text = re.sub(r'\n\s*\n', '\n\n', text)
-    text = re.sub(r' +', ' ', text)
-
-    return text.strip()
+    return response.json().get("data", [])
 
 
 def format_participant(participant: dict) -> str:
@@ -104,13 +92,14 @@ def format_participant(participant: dict) -> str:
 
 
 def format_message(msg: dict) -> str:
-    """Format a message for the prompt."""
+    """Format a message for the prompt. Expects cleaned message from Nylas Clean Messages API."""
     from_list = msg.get("from", [])
     to_list = msg.get("to", [])
     cc_list = msg.get("cc", [])
     date_ts = msg.get("date", 0)
     subject = msg.get("subject", "(no subject)")
-    body = msg.get("body", "") or msg.get("snippet", "")
+    # Use 'conversation' field from Clean Messages API (plain text)
+    body = msg.get("conversation", "") or msg.get("snippet", "")
 
     # Format date
     date_str = datetime.fromtimestamp(date_ts).strftime("%Y-%m-%d %H:%M") if date_ts else "Unknown"
@@ -131,7 +120,7 @@ def format_message(msg: dict) -> str:
         f"Date: {date_str}",
         f"Subject: {subject}",
         "",
-        html_to_text(body),
+        body.strip(),
     ])
 
     return "\n".join(lines)
@@ -188,17 +177,17 @@ def generate_draft(thread_content: str) -> str:
         ],
     }
 
-    response = requests.post(ANTHROPIC_URL, headers=headers, json=payload)
+    response = requests.post(ANTHROPIC_URL, headers=headers, json=payload, timeout=60)
 
     if not response.ok:
-        print(f"Anthropic API error: {response.status_code} {response.text}")
+        print(f"Anthropic API error: {response.status_code} {response.text}", file=sys.stderr)
         sys.exit(1)
 
     data = response.json()
     content = data.get("content", [])
 
     if not content or content[0].get("type") != "text":
-        print("Error: Unexpected response structure from Anthropic")
+        print("Error: Unexpected response structure from Anthropic", file=sys.stderr)
         sys.exit(1)
 
     return content[0]["text"]
@@ -224,23 +213,19 @@ Examples:
     # Fetch thread
     thread = get_thread(args.thread_id)
     if not thread:
-        print(f"Error: Thread not found: {args.thread_id}")
+        print(f"Error: Thread not found: {args.thread_id}", file=sys.stderr)
         sys.exit(1)
 
-    # Fetch all messages in thread
+    # Get message IDs from thread
     message_ids = thread.get("message_ids", [])
     if not message_ids:
-        print("Error: Thread has no messages")
+        print("Error: Thread has no messages", file=sys.stderr)
         sys.exit(1)
 
-    messages = []
-    for msg_id in message_ids:
-        msg = get_message(msg_id)
-        if msg:
-            messages.append(msg)
-
+    # Fetch and clean all messages in one API call
+    messages = clean_messages(message_ids)
     if not messages:
-        print("Error: Could not fetch any messages")
+        print("Error: Could not fetch any messages", file=sys.stderr)
         sys.exit(1)
 
     # Format thread
