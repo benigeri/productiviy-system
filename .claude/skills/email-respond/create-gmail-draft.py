@@ -216,22 +216,32 @@ def main():
             output["warning"] = "Draft created but verification failed - may not sync to Gmail"
             print("Warning: Draft may not appear in Gmail. Check Nylas dashboard.", file=sys.stderr)
 
-    print(json.dumps(output))
-
     # Update labels if requested
     if args.update_labels:
         # Label_215 = drafted, Label_139 = to-respond-paul
-        update_thread_labels(
+        label_result = update_thread_labels(
             args.thread_id,
             add_labels=["Label_215"],
             remove_labels=["Label_139"]
         )
-        print(json.dumps({
-            "labels_updated": True,
+        # Verify labels were actually updated by checking current_folders
+        updated_folders = label_result.get("folders", [])
+        drafted_added = "Label_215" in updated_folders
+        to_respond_removed = "Label_139" not in updated_folders
+
+        output["labels_updated"] = drafted_added and to_respond_removed
+        output["labels"] = {
             "thread_id": args.thread_id,
-            "added": ["Label_215"],
-            "removed": ["Label_139"],
-        }))
+            "added": ["Label_215"] if drafted_added else [],
+            "removed": ["Label_139"] if to_respond_removed else [],
+            "current_folders": updated_folders,
+        }
+
+        if not output["labels_updated"]:
+            print(f"Warning: Label update may have failed. Current folders: {updated_folders}", file=sys.stderr)
+
+    # Single JSON output at the end (avoid duplicate outputs)
+    print(json.dumps(output))
 
     # Cleanup if requested
     if args.cleanup:
