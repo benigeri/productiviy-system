@@ -36,8 +36,8 @@ TO_RESPOND_LABEL = "Label_139"  # to-respond-paul
 REQUEST_TIMEOUT = 30
 PANEL_WIDTH = 62
 
-# FIFO path for server mode IPC
-FIFO_PATH = "/tmp/email-panel.fifo"
+# Server mode reads from stdin (sent via tmux send-keys)
+# This avoids FIFO files which Claude Code tries to read, causing freezes
 
 # Cache settings
 CACHE_TTL = 300  # 5 minutes for thread list
@@ -450,38 +450,34 @@ def show_thread_server(
 
 
 def run_server() -> None:
-    """Run in persistent server mode, reading commands from FIFO."""
+    """Run in persistent server mode, reading commands from stdin.
+
+    Commands are sent via tmux send-keys, e.g.:
+        tmux send-keys -t $PANE '{"action":"list"}' Enter
+
+    This approach avoids FIFO files which Claude Code tries to read
+    synchronously, causing the session to freeze.
+    """
     check_env()
 
-    # Remove stale FIFO if it exists
-    if os.path.exists(FIFO_PATH):
-        os.remove(FIFO_PATH)
-    os.mkfifo(FIFO_PATH)
-
-    print_loading("Panel ready. Waiting for commands...")
+    print_loading("Panel ready. Type JSON commands...")
 
     try:
-        while True:
-            # Open FIFO (blocks until writer connects)
-            with open(FIFO_PATH, "r") as fifo:
-                for line in fifo:
-                    if not line.strip():
-                        continue
-                    try:
-                        cmd = json.loads(line.strip())
-                        handle_command(cmd)
-                    except json.JSONDecodeError as e:
-                        print(f"Invalid JSON: {e}", file=sys.stderr)
-                    except KeyError as e:
-                        print(f"Missing required field: {e}", file=sys.stderr)
-                    except Exception as e:
-                        print(f"Error handling command: {e}", file=sys.stderr)
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                cmd = json.loads(line)
+                handle_command(cmd)
+            except json.JSONDecodeError as e:
+                print(f"Invalid JSON: {e}", file=sys.stderr)
+            except KeyError as e:
+                print(f"Missing required field: {e}", file=sys.stderr)
+            except Exception as e:
+                print(f"Error handling command: {e}", file=sys.stderr)
     except KeyboardInterrupt:
         print_loading("Interrupted. Goodbye!")
-    finally:
-        # Cleanup FIFO
-        if os.path.exists(FIFO_PATH):
-            os.remove(FIFO_PATH)
 
 
 def list_threads() -> None:

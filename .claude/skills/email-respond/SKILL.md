@@ -27,33 +27,34 @@ Environment variables in `.env`:
 ## Tools
 
 ### email-canvas.py (Server Mode - Recommended)
-Terminal panel with persistent process and FIFO IPC. Much faster due to caching and no process restarts.
+Terminal panel with persistent process reading from stdin. Much faster due to caching and no process restarts.
+
+Commands are sent via `tmux send-keys` to the server's stdin. This avoids FIFO files which can cause Claude Code to freeze (it tries to read them synchronously).
 
 ```bash
-# Start panel in server mode (run in tmux pane)
-python3 .claude/skills/email-respond/email-canvas.py --server
+# Start panel in server mode (run in tmux pane, capture pane ID)
+PANEL_PANE=$(tmux split-window -h -p 40 -d -P -F '#{pane_id}' \
+  "python3 .claude/skills/email-respond/email-canvas.py --server")
 
-# Send commands via FIFO (from main shell)
-FIFO="/tmp/email-panel.fifo"
-
+# Send commands via tmux send-keys
 # Show thread list
-echo '{"action":"list"}' > "$FIFO"
+tmux send-keys -t "$PANEL_PANE" '{"action":"list"}' Enter
 
 # Show loading indicator
-echo '{"action":"loading","message":"Loading thread..."}' > "$FIFO"
+tmux send-keys -t "$PANEL_PANE" '{"action":"loading","message":"Loading thread..."}' Enter
 
 # Show specific thread
-echo '{"action":"show","thread_id":"THREAD_ID","index":1,"total":9}' > "$FIFO"
+tmux send-keys -t "$PANEL_PANE" '{"action":"show","thread_id":"THREAD_ID","index":1,"total":9}' Enter
 
 # Show thread with draft (base64-encode body for multiline safety)
 BODY_B64=$(echo "Draft body text here" | base64)
-echo "{\"action\":\"draft\",\"thread_id\":\"THREAD_ID\",\"body_b64\":\"$BODY_B64\",\"index\":1,\"total\":9}" > "$FIFO"
+tmux send-keys -t "$PANEL_PANE" "{\"action\":\"draft\",\"thread_id\":\"THREAD_ID\",\"body_b64\":\"$BODY_B64\",\"index\":1,\"total\":9}" Enter
 
 # Clear cache (force fresh API calls)
-echo '{"action":"clear_cache"}' > "$FIFO"
+tmux send-keys -t "$PANEL_PANE" '{"action":"clear_cache"}' Enter
 
-# Exit server
-echo '{"action":"exit"}' > "$FIFO"
+# Exit server (or just kill the pane)
+tmux send-keys -t "$PANEL_PANE" '{"action":"exit"}' Enter
 ```
 
 **IPC Commands:**
@@ -146,19 +147,18 @@ python3 .claude/skills/email-respond/create-gmail-draft.py DRAFT_FILE --thread-i
 Start the panel in server mode for best performance:
 
 ```bash
-FIFO="/tmp/email-panel.fifo"
+# Start panel server in tmux split pane, capture the pane ID
+PANEL_PANE=$(tmux split-window -h -p 40 -d -P -F '#{pane_id}' \
+  "python3 .claude/skills/email-respond/email-canvas.py --server")
 
-# Start panel server in tmux split pane
-tmux split-window -h -p 40 "python3 .claude/skills/email-respond/email-canvas.py --server"
-
-# Wait for FIFO to be ready
-sleep 0.5
+# Wait for server to initialize
+sleep 0.3
 
 # Show initial thread list
-echo '{"action":"list"}' > "$FIFO"
+tmux send-keys -t "$PANEL_PANE" '{"action":"list"}' Enter
 ```
 
-This creates a persistent panel process with caching. Subsequent updates are instant.
+This creates a persistent panel process with caching. Commands are sent via `tmux send-keys` to the server's stdin, avoiding FIFO files which can cause Claude Code to freeze.
 
 ### 2. Fetch Thread List
 
@@ -176,9 +176,9 @@ Store the thread IDs and count for iteration.
 #### a. Update Panel to Show Thread
 
 ```bash
-# Show loading, then thread (via FIFO)
-echo '{"action":"loading","message":"Loading thread..."}' > "$FIFO"
-echo "{\"action\":\"show\",\"thread_id\":\"$THREAD_ID\",\"index\":$INDEX,\"total\":$TOTAL}" > "$FIFO"
+# Show loading, then thread (via tmux send-keys)
+tmux send-keys -t "$PANEL_PANE" '{"action":"loading","message":"Loading thread..."}' Enter
+tmux send-keys -t "$PANEL_PANE" "{\"action\":\"show\",\"thread_id\":\"$THREAD_ID\",\"index\":$INDEX,\"total\":$TOTAL}" Enter
 ```
 
 #### b. Ask User for Input
@@ -222,8 +222,8 @@ python3 draft-email.py THREAD_ID --dictation "$USER_DICTATION" > "$DRAFT_FILE"
 DRAFT_BODY=$(jq -r '.body' "$DRAFT_FILE" | python3 -c "import sys; from html import unescape; import re; t=sys.stdin.read(); t=re.sub(r'<[^>]+>', '', t); print(unescape(t).strip())")
 BODY_B64=$(echo "$DRAFT_BODY" | base64)
 
-# Send to panel via FIFO
-echo "{\"action\":\"draft\",\"thread_id\":\"$THREAD_ID\",\"body_b64\":\"$BODY_B64\",\"index\":$INDEX,\"total\":$TOTAL}" > "$FIFO"
+# Send to panel via tmux send-keys
+tmux send-keys -t "$PANEL_PANE" "{\"action\":\"draft\",\"thread_id\":\"$THREAD_ID\",\"body_b64\":\"$BODY_B64\",\"index\":$INDEX,\"total\":$TOTAL}" Enter
 ```
 
 Note: The panel displays plain text. The actual HTML body (with hyperlinks) is preserved in the temp file for creating the Gmail draft.
@@ -303,8 +303,9 @@ After showing session summary:
 # Clean up any remaining temp draft files
 rm -f /tmp/email-draft-*.json /tmp/email-draft-display-*.txt
 
-# Exit panel server (cleans up FIFO automatically)
-echo '{"action":"exit"}' > "$FIFO"
+# Exit panel server (or just kill the pane)
+tmux send-keys -t "$PANEL_PANE" '{"action":"exit"}' Enter
+# Or: tmux kill-pane -t "$PANEL_PANE"
 ```
 
 ---
@@ -325,6 +326,7 @@ echo '{"action":"exit"}' > "$FIFO"
 Track these variables during the workflow:
 
 ```
+PANEL_PANE       - tmux pane ID for the email panel (from split-window -P)
 threads[]        - Array of {id, subject, message_ids}
 current_index    - Current position (1-based)
 total_threads    - Total count
