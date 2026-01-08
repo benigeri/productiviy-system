@@ -47,8 +47,11 @@ python3 .claude/skills/email-respond/email-canvas.py --thread-id THREAD_ID --ind
 AI draft generator. Located at project root.
 
 ```bash
-# Generate draft for a thread (outputs draft text to stdout)
+# Generate full JSON with to, cc, subject, body
 python3 draft-email.py THREAD_ID
+
+# Get just the body (for panel display)
+python3 draft-email.py THREAD_ID --body-only
 ```
 
 ---
@@ -94,15 +97,21 @@ Present options to user:
 #### c. Generate Draft (if user dictated)
 
 ```bash
-DRAFT=$(python3 draft-email.py THREAD_ID)
+# Generate draft - returns JSON with to, cc, subject, body
+DRAFT_JSON=$(python3 draft-email.py THREAD_ID)
+
+# Extract body for panel display (strip HTML tags for readability)
+DRAFT_BODY=$(echo "$DRAFT_JSON" | jq -r '.body' | sed 's/<[^>]*>//g')
 ```
 
 #### d. Update Panel with Draft
 
 ```bash
 tmux send-keys -t {right} C-c
-tmux send-keys -t {right} "python3 .claude/skills/email-respond/email-canvas.py --thread-id THREAD_ID --draft '$DRAFT' --index N --total TOTAL" Enter
+tmux send-keys -t {right} "python3 .claude/skills/email-respond/email-canvas.py --thread-id THREAD_ID --draft '$DRAFT_BODY' --index N --total TOTAL" Enter
 ```
+
+Note: The panel displays plain text. The actual HTML body (with hyperlinks) is preserved in `DRAFT_JSON` for creating the Gmail draft.
 
 #### e. Ask User to Approve or Revise
 
@@ -113,28 +122,35 @@ tmux send-keys -t {right} "python3 .claude/skills/email-respond/email-canvas.py 
 
 #### a. Get Thread Details for Draft Creation
 
+The `DRAFT_JSON` from step 3c contains `to`, `cc`, `subject`, and `body` fields.
+
+Also fetch the thread to get the latest message ID:
+
 ```bash
 bash -c 'source .env && curl -s "https://api.us.nylas.com/v3/grants/$NYLAS_GRANT_ID/threads/THREAD_ID" \
-  -H "Authorization: Bearer $NYLAS_API_KEY"' | jq '{subject, message_ids, participants}'
+  -H "Authorization: Bearer $NYLAS_API_KEY"' | jq '{message_ids}'
 ```
 
 Get the latest message ID (last in `message_ids` array) for `reply_to_message_id`.
 
 #### b. Create Gmail Draft
 
+Use the fields from `DRAFT_JSON`:
+
 ```bash
 bash -c 'source .env && curl -s -X POST "https://api.us.nylas.com/v3/grants/$NYLAS_GRANT_ID/drafts" \
   -H "Authorization: Bearer $NYLAS_API_KEY" \
   -H "Content-Type: application/json" \
   -d "{
-    \"subject\": \"Re: SUBJECT\",
-    \"to\": [{\"email\": \"EMAIL\", \"name\": \"NAME\"}],
+    \"subject\": \"$SUBJECT\",
+    \"to\": $TO_JSON,
+    \"cc\": $CC_JSON,
     \"reply_to_message_id\": \"LATEST_MESSAGE_ID\",
-    \"body\": \"<p>DRAFT_HTML</p>\"
+    \"body\": \"$BODY_HTML\"
   }"'
 ```
 
-Convert plain text draft to HTML (wrap paragraphs in `<p>` tags).
+The `body` from `DRAFT_JSON` is already HTML formatted with hyperlinks.
 
 #### c. Update Labels on Latest Message
 
@@ -183,7 +199,7 @@ Track these variables during the workflow:
 threads[]       - Array of {id, subject, message_ids}
 current_index   - Current position (1-based)
 total_threads   - Total count
-current_draft   - Generated draft text (if any)
+current_draft   - Generated draft JSON: {to, cc, subject, body}
 ```
 
 ---
