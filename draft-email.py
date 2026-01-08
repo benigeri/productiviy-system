@@ -311,6 +311,29 @@ Examples:
         print("Error: --previous-draft requires --feedback", file=sys.stderr)
         sys.exit(1)
 
+    # Validate previous draft file early (before API calls)
+    previous_draft_json = None
+    if args.feedback:
+        try:
+            with open(args.previous_draft, encoding="utf-8") as f:
+                previous_draft_json = f.read()
+        except FileNotFoundError:
+            print(f"Error: Previous draft file not found: {args.previous_draft}", file=sys.stderr)
+            sys.exit(1)
+        except IOError as e:
+            print(f"Error reading previous draft: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        # Validate previous draft content is not empty
+        if not previous_draft_json or not previous_draft_json.strip():
+            print("Error: Previous draft file is empty", file=sys.stderr)
+            sys.exit(1)
+
+        # Validate feedback is not empty
+        if not args.feedback.strip():
+            print("Error: Feedback cannot be empty", file=sys.stderr)
+            sys.exit(1)
+
     check_env()
 
     # Fetch thread
@@ -342,17 +365,7 @@ Examples:
 
     # Generate draft (with or without feedback)
     if args.feedback:
-        # Load previous draft for feedback iteration
-        try:
-            with open(args.previous_draft, encoding="utf-8") as f:
-                previous_draft_json = f.read()
-        except FileNotFoundError:
-            print(f"Error: Previous draft file not found: {args.previous_draft}", file=sys.stderr)
-            sys.exit(1)
-        except IOError as e:
-            print(f"Error reading previous draft: {e}", file=sys.stderr)
-            sys.exit(1)
-
+        # previous_draft_json was already loaded and validated earlier
         raw_response = generate_with_feedback(
             thread_content, args.dictation, previous_draft_json, args.feedback
         )

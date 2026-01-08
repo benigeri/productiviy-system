@@ -331,6 +331,7 @@ Examples:
     )
     parser.add_argument("--thread-id", "-t", help="Thread ID to display")
     parser.add_argument("--draft", "-d", help="Draft text to display below thread")
+    parser.add_argument("--draft-file", help="Read draft text from file (avoids shell quoting issues)")
     parser.add_argument("--index", "-i", type=int, help="Thread index (e.g., 1 of 9)")
     parser.add_argument("--total", "-n", type=int, help="Total thread count")
 
@@ -338,12 +339,25 @@ Examples:
 
     check_env()
 
-    if args.draft and not args.thread_id:
+    # Load draft from file if specified
+    draft_text = args.draft
+    if args.draft_file:
+        try:
+            with open(args.draft_file, encoding="utf-8") as f:
+                draft_text = f.read().strip()
+        except FileNotFoundError:
+            print(f"Error: Draft file not found: {args.draft_file}", file=sys.stderr)
+            sys.exit(1)
+        except IOError as e:
+            print(f"Error reading draft file: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    if (args.draft or args.draft_file) and not args.thread_id:
         print("Error: --draft requires --thread-id", file=sys.stderr)
         sys.exit(1)
 
     if args.thread_id:
-        show_thread(args.thread_id, args.draft, args.index, args.total)
+        show_thread(args.thread_id, draft_text, args.index, args.total)
     else:
         list_threads()
 

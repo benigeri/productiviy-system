@@ -261,6 +261,50 @@ class TestCLIArguments:
         assert result.returncode != 0
         assert "feedback" in result.stderr.lower()
 
+    def test_empty_previous_draft_file_error(self):
+        """Should error if previous draft file is empty"""
+        import subprocess
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            f.write("")  # Empty file
+            f.flush()
+            result = subprocess.run(
+                ["python3", "draft-email.py", "fake_id", "-d", "test",
+                 "--feedback", "shorter", "--previous-draft", f.name],
+                capture_output=True,
+                text=True
+            )
+            os.unlink(f.name)
+        assert result.returncode != 0
+        assert "empty" in result.stderr.lower()
+
+    def test_whitespace_only_previous_draft_error(self):
+        """Should error if previous draft file contains only whitespace"""
+        import subprocess
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            f.write("   \n\n  ")  # Whitespace only
+            f.flush()
+            result = subprocess.run(
+                ["python3", "draft-email.py", "fake_id", "-d", "test",
+                 "--feedback", "shorter", "--previous-draft", f.name],
+                capture_output=True,
+                text=True
+            )
+            os.unlink(f.name)
+        assert result.returncode != 0
+        assert "empty" in result.stderr.lower()
+
+    def test_missing_previous_draft_file_error(self):
+        """Should error if previous draft file doesn't exist"""
+        import subprocess
+        result = subprocess.run(
+            ["python3", "draft-email.py", "fake_id", "-d", "test",
+             "--feedback", "shorter", "--previous-draft", "/nonexistent/path/draft.json"],
+            capture_output=True,
+            text=True
+        )
+        assert result.returncode != 0
+        assert "not found" in result.stderr.lower()
+
 
 class TestGenerateWithFeedback:
     """Tests for generate_with_feedback() message structure"""
