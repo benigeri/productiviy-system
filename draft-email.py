@@ -74,29 +74,41 @@ def get_thread(thread_id: str) -> dict:
 
 
 def clean_messages(message_ids: List[str]) -> List[Dict]:
-    """Fetch and clean multiple messages via Nylas Clean Messages API."""
+    """Fetch and clean multiple messages via Nylas Clean Messages API.
+
+    Nylas limits batch requests to 20 message IDs, so we batch if needed.
+    """
+    BATCH_SIZE = 20
     url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/messages/clean"
     headers = {
         "Authorization": f"Bearer {NYLAS_API_KEY}",
         "Content-Type": "application/json",
     }
-    payload = {
-        "message_id": message_ids,
-        "ignore_images": True,
-        "ignore_links": True,
-    }
 
-    try:
-        response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException as e:
-        print(f"Nylas request failed: {e}", file=sys.stderr)
-        sys.exit(1)
+    all_messages = []
 
-    if not response.ok:
-        print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
-        sys.exit(1)
+    # Batch message IDs into chunks of 20 (Nylas API limit)
+    for i in range(0, len(message_ids), BATCH_SIZE):
+        batch = message_ids[i:i + BATCH_SIZE]
+        payload = {
+            "message_id": batch,
+            "ignore_images": True,
+            "ignore_links": True,
+        }
 
-    return response.json().get("data", [])
+        try:
+            response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+        except requests.RequestException as e:
+            print(f"Nylas request failed: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        if not response.ok:
+            print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
+            sys.exit(1)
+
+        all_messages.extend(response.json().get("data", []))
+
+    return all_messages
 
 
 def format_participant(participant: dict) -> str:
