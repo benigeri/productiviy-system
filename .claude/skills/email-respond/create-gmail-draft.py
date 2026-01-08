@@ -85,6 +85,14 @@ def verify_draft_exists(draft_id: str) -> bool:
         return False
 
 
+# Gmail system folders that cannot be modified via Nylas API
+GMAIL_SYSTEM_FOLDERS = {
+    "SENT", "DRAFT", "TRASH", "SPAM", "STARRED", "IMPORTANT", "UNREAD",
+    "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
+    "CATEGORY_UPDATES", "CATEGORY_FORUMS",
+}
+
+
 def update_thread_labels(thread_id: str, add_labels: list, remove_labels: list) -> dict:
     """Update labels on a thread (affects all messages in thread).
 
@@ -112,6 +120,9 @@ def update_thread_labels(thread_id: str, add_labels: list, remove_labels: list) 
 
     thread_data = response.json().get("data", {})
     current_folders = thread_data.get("folders", [])
+
+    # Filter out Gmail system folders that can't be modified via API
+    current_folders = [f for f in current_folders if f not in GMAIL_SYSTEM_FOLDERS]
 
     # Modify folders: remove specified labels, add new ones
     new_folders = [f for f in current_folders if f not in remove_labels]
