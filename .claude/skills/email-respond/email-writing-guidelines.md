@@ -38,14 +38,14 @@ Return a JSON object with the following structure:
   "to": [{"email": "recipient@example.com", "name": "Recipient Name"}],
   "cc": [{"email": "cc@example.com", "name": "CC Name"}],
   "subject": "Re: Original Subject",
-  "body": "The email body text here"
+  "body": "<p>Hey John,</p><p>Here's the <a href=\"https://example.com/doc\">doc</a> we discussed.</p><p>Best,<br>Paul</p>"
 }
 ```
 
 - `to`: Array of primary recipients. For replies, typically the sender of the last message.
 - `cc`: Array of CC recipients. Preserve original CC recipients unless the context suggests otherwise.
 - `subject`: Use "Re: " prefix for replies, preserving the original subject.
-- `body`: The email content only. No headers, footers, or signatures unless contextually appropriate.
+- `body`: The email content in HTML format. Use `<a href="URL">text</a>` for hyperlinks. Use `<p>` for paragraphs, `<br>` for line breaks within paragraphs. No headers, footers, or signatures unless contextually appropriate.
 
 ## Summary
 
