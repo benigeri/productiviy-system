@@ -29,7 +29,7 @@ NYLAS_BASE_URL = "https://api.us.nylas.com/v3"
 TO_RESPOND_LABEL = "Label_139"  # to-respond-paul
 
 REQUEST_TIMEOUT = 30
-PANEL_WIDTH = 62
+PANEL_WIDTH = 100
 
 
 def check_env():

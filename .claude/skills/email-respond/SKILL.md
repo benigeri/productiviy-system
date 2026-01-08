@@ -232,15 +232,10 @@ When all threads processed or user says "done", display the session summary:
 
 📊 Summary: {drafted_count} drafted, {skipped_count} skipped
 
-📝 Drafts to review:
-1. {subject}
-   https://mail.google.com/mail/u/0/#drafts?compose={draft_id}
-2. {subject}
-   https://mail.google.com/mail/u/0/#drafts?compose={draft_id}
-...
+📝 Review drafts: https://mail.google.com/mail/u/0/#drafts
 ```
 
-The Gmail URL format is: `https://mail.google.com/mail/u/0/#drafts?compose=<draft_id>`
+**Keep it brief** - the user can see all their drafts in one place at the drafts link.
 
 ### 7. Cleanup
 
@@ -253,6 +248,17 @@ rm -f /tmp/email-draft-*.json /tmp/email-draft-display-*.txt
 # Close the panel
 bash "$PANEL" close
 ```
+
+---
+
+## UX Guidelines
+
+**Draft Display Rules:**
+- **DO NOT** echo/repeat draft content in conversation - the panel already shows it
+- When draft is ready, just say: "Draft shown in panel. Approve or give feedback?"
+- Keep conversation responses brief - all the detail is visible in the panel
+
+**Why:** Users see the panel side-by-side. Repeating content wastes space and slows the workflow.
 
 ---
 
@@ -281,7 +287,6 @@ draft_file       - Path to temp file: /tmp/email-draft-{THREAD_ID}.json
 # Session summary tracking
 drafted_count    - Number of drafts created
 skipped_count    - Number of threads skipped
-drafts[]         - Array of {subject, draft_id} for summary display
 ```
 
 **Important**: The draft is stored in a temp file to ensure the exact draft shown in the panel is sent to Gmail. Clean up temp files when skipping threads or finishing the workflow.
@@ -294,34 +299,20 @@ drafts[]         - Array of {subject, draft_id} for summary display
 Claude: Setting up email panel...
         [Panel shows: 9 threads to respond]
 
-        📧 Thread 1/9: Re: Paul / Mitch - Catch Up
-        From: Bell, Mitch
-
-        What would you like to say? (or: skip, done)
+        Thread 1/9 shown. What would you like to say? (or: skip, done)
 
 User: tell him the first report will be a static PDF, but for full
       engagement they'd get workspace access
 
-Claude: Generating draft...
-        [Panel updates to show draft]
-
-        Does this look good? (approve / give feedback)
+Claude: Draft shown in panel. Approve or give feedback?
 
 User: approve
 
-Claude: ✓ Draft saved to Gmail
-        ✓ Labels updated
-
-        📧 Thread 2/9: The Lead x Archive agreement
-        From: John Smith
-
-        What would you like to say? (or: skip, done)
+Claude: ✓ Saved. Thread 2/9 shown. What would you like to say?
 
 User: skip
 
-Claude: Moving to next thread...
-
-        📧 Thread 3/9: ...
+Claude: Thread 3/9 shown. What would you like to say?
 
 ... [more threads] ...
 
@@ -329,19 +320,8 @@ User: done
 
 Claude: ✅ Session Complete!
 
-        📊 Summary: 5 drafted, 4 skipped
-
-        📝 Drafts to review:
-        1. Re: Paul / Mitch - Catch Up
-           https://mail.google.com/mail/u/0/#drafts?compose=r-7427271980476641806
-        2. Re: Archive connect request
-           https://mail.google.com/mail/u/0/#drafts?compose=r-7427271980476641807
-        3. Re: Edelman
-           https://mail.google.com/mail/u/0/#drafts?compose=r-7427271980476641808
-        4. Re: Archive / Stripe - follow up
-           https://mail.google.com/mail/u/0/#drafts?compose=r-7427271980476641809
-        5. Re: Paul x Em Meet
-           https://mail.google.com/mail/u/0/#drafts?compose=r-7427271980476641810
+        📊 5 drafted, 4 skipped
+        📝 Review: https://mail.google.com/mail/u/0/#drafts
 ```
 
 ---
