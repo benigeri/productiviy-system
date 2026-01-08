@@ -6,9 +6,12 @@ Shows threads, single thread details, and drafts in a clean format.
 
 import argparse
 import os
+import re
 import sys
+import textwrap
 import warnings
 from datetime import datetime
+from html import unescape
 from typing import Dict, List, Optional
 
 warnings.filterwarnings("ignore", message=".*OpenSSL.*")
@@ -111,6 +114,61 @@ def single_line(char="─"):
     return char * PANEL_WIDTH
 
 
+def wrap_text(text: str, width: int = PANEL_WIDTH - 4) -> str:
+    """Wrap text to fit panel width, preserving paragraph breaks."""
+    # Split on double newlines for paragraph breaks
+    paragraphs = text.strip().split("\n\n")
+    wrapped_paragraphs = []
+    for para in paragraphs:
+        # Handle single newlines within paragraphs as line breaks
+        lines = para.split("\n")
+        wrapped_lines = []
+        for line in lines:
+            line_text = " ".join(line.split())
+            if line_text:
+                wrapped = textwrap.fill(line_text, width=width)
+                wrapped_lines.append(wrapped)
+        if wrapped_lines:
+            wrapped_paragraphs.append("\n".join(wrapped_lines))
+    return "\n\n".join(wrapped_paragraphs)
+
+
+def html_to_text(html: str) -> str:
+    """Convert HTML to plain text while preserving paragraph structure."""
+    if not html:
+        return ""
+
+    # Replace block elements with newlines to preserve structure
+    text = re.sub(r"</div>\s*<div", "</div>\n<div", html, flags=re.IGNORECASE)
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</p>\s*", "\n\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</div>\s*", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</li>\s*", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</tr>\s*", "\n", text, flags=re.IGNORECASE)
+
+    # Remove all remaining HTML tags
+    text = re.sub(r"<[^>]+>", "", text)
+
+    # Decode HTML entities
+    text = unescape(text)
+
+    # Remove zero-width spaces and other invisible Unicode characters
+    text = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", text)
+
+    # Normalize whitespace within lines (but preserve newlines)
+    lines = text.split("\n")
+    lines = [" ".join(line.split()) for line in lines]
+    text = "\n".join(lines)
+
+    # Collapse multiple blank lines into double newlines (paragraph breaks)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    # Strip leading/trailing whitespace
+    text = text.strip()
+
+    return text
+
+
 def list_threads() -> None:
     """List all threads with to-respond-paul label."""
     threads = nylas_get(f"/threads?in={TO_RESPOND_LABEL}&limit=20")
@@ -184,6 +242,10 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
     # Sort by date (newest last)
     messages = sorted(messages, key=lambda m: m.get("date", 0))
     latest = messages[-1]
+    latest_id = latest.get("id", message_ids[-1])
+
+    # Fetch latest message directly to get HTML body (clean_messages doesn't include it)
+    latest_full = nylas_get(f"/messages/{latest_id}")
 
     # Get recipient info for reply
     from_list = latest.get("from", [])
@@ -195,7 +257,10 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
     cc_str = ", ".join(format_participant(p) for p in cc_list) if cc_list else None
 
     date_str = format_date(latest.get("date", 0))
-    body = latest.get("conversation", "") or latest.get("snippet", "")
+    # Use HTML body and convert to text to preserve paragraph structure
+    # The 'conversation' field loses formatting; 'body' has HTML with structure
+    html_body = latest_full.get("body", "") if latest_full else ""
+    body = html_to_text(html_body) if html_body else latest.get("snippet", "")
 
     # Build thread position string
     position = ""
@@ -215,7 +280,8 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         abbrev_body = body.strip()[:200]
         if len(body.strip()) > 200:
             abbrev_body += "..."
-        for line in abbrev_body.split("\n"):
+        wrapped_body = wrap_text(abbrev_body)
+        for line in wrapped_body.split("\n"):
             print(f"  {line}")
     else:
         # Full view
@@ -227,8 +293,9 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         print(f"  Date: {date_str} | {len(messages)} messages")
         print(double_line())
         print()
-        # Show full body
-        for line in body.strip().split("\n"):
+        # Show full body with word wrapping
+        wrapped_body = wrap_text(body)
+        for line in wrapped_body.split("\n"):
             print(f"  {line}")
         print()
         print(single_line())
@@ -242,7 +309,8 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         print("  ✏️  YOUR DRAFT")
         print(double_line())
         print()
-        for line in draft_text.strip().split("\n"):
+        wrapped_draft = wrap_text(draft_text)
+        for line in wrapped_draft.split("\n"):
             print(f"  {line}")
         print()
         print(single_line())

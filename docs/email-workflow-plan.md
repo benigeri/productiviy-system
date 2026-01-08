@@ -1,8 +1,11 @@
 # Email Workflow Improvement Plan
 
-## Current Status: Ready for E2E Testing
+> **SUPERSEDED**: See [docs/email-workflow-improvements.md](email-workflow-improvements.md) for the comprehensive technical plan.
 
-All implementation complete. Next step: test `/handle-to-respond-paul` end-to-end.
+## Current Status: Planning Complete - Ready for Implementation
+
+E2E test started 2026-01-07. Thread 1 processed successfully but issues discovered.
+Comprehensive improvement plan created with detailed architecture.
 
 ## Implementation Steps
 
@@ -13,7 +16,28 @@ All implementation complete. Next step: test `/handle-to-respond-paul` end-to-en
 | 3 | Create draft-email.py | ✅ Done | #33 |
 | 4 | Rewrite SKILL.md | ✅ Done | #35 |
 | 5 | Add tests (29 tests) | ✅ Done | #36 |
-| 6 | **Test end-to-end** | ⏳ Next | - |
+| 6 | E2E test (partial) | ⚠️ Issues | - |
+| 7 | Fix paragraph formatting | ✅ Done | - |
+| 8 | **Fix issues below** | ⏳ Next | - |
+
+## Known Issues (from E2E testing)
+
+### 1. Draft Mismatch (productiviy-system-126)
+**Problem:** The draft shown in the panel differs from the draft sent to Gmail.
+- Panel shows one version, Gmail gets a different (possibly better) version
+- Need to ensure consistency: what you see is what gets saved
+
+### 2. Prompt Quality (productiviy-system-mhg)
+**Problem:** draft-email.py prompts not generating exact desired output.
+- Need to debug and tune the prompts in `email-writing-guidelines.md`
+- May need to adjust temperature, add examples, or refine instructions
+
+### 3. Tmux Performance (productiviy-system-smy)
+**Problem:** Panel rendering is slow and buggy.
+- Loading drafts into panel is slow
+- Panel sometimes disappears unexpectedly
+- Need to build a more robust utility for faster rendering
+- Consider: batch updates, simpler refresh mechanism, or alternative display
 
 ## Files
 
