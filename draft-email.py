@@ -246,6 +246,7 @@ def generate_draft(thread_content: str) -> str:
 def parse_draft_response(response: str) -> dict:
     """Parse the JSON response from the AI, handling markdown code blocks."""
     # Try to extract JSON from markdown code block
+    # Non-greedy .*? works because the trailing ``` constrains the match
     json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response, re.DOTALL)
     if json_match:
         response = json_match.group(1)
