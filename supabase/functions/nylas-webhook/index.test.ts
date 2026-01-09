@@ -15,7 +15,7 @@ const DEFAULT_FOLDERS: NylasFolder[] = [
   { id: "SENT", grant_id: "grant-456", name: "SENT" },
   { id: "Label_139", grant_id: "grant-456", name: "to-respond-paul" },
   { id: "Label_138", grant_id: "grant-456", name: "to-read-paul" },
-  { id: "Label_140", grant_id: "grant-456", name: "drafted" },
+  { id: "Label_215", grant_id: "grant-456", name: "drafted" },
 ];
 
 function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
@@ -178,7 +178,7 @@ Deno.test("handleWebhook - clears other workflow labels when to-respond-paul add
         to: [{ email: "recipient@example.com" }],
         date: 1704067200,
         // Use folder IDs as Nylas returns them
-        folders: ["INBOX", "Label_139", "Label_138", "Label_140"],
+        folders: ["INBOX", "Label_139", "Label_138", "Label_215"],
       }),
     updateMessageFolders: (_id, folders) => {
       updatedFolders = folders;
@@ -201,7 +201,7 @@ Deno.test("handleWebhook - clears other workflow labels when to-respond-paul add
   assertEquals(updatedFolders.includes("INBOX"), true);
   assertEquals(updatedFolders.includes("Label_139"), true); // to-respond-paul
   assertEquals(updatedFolders.includes("Label_138"), false); // to-read-paul removed
-  assertEquals(updatedFolders.includes("Label_140"), false); // drafted removed
+  assertEquals(updatedFolders.includes("Label_215"), false); // drafted removed
 });
 
 Deno.test("handleWebhook - no update needed when only one workflow label", async () => {
@@ -531,4 +531,79 @@ Deno.test("handleWebhook - clears workflow labels from thread when reply sent", 
   assertEquals(updatedMessages[0].id, "original-msg-123");
   assertEquals(updatedMessages[0].folders.includes("Label_139"), false);
   assertEquals(updatedMessages[0].folders.includes("INBOX"), true);
+});
+
+Deno.test("handleWebhook - clears workflow labels from sent message itself (draft becomes sent)", async () => {
+  const payload = createWebhookPayload("message.created", "sent-msg-456");
+  const request = new Request("https://example.com/nylas-webhook", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nylas-signature": "valid-signature",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const updatedMessages: { id: string; folders: string[] }[] = [];
+  const deps = createMockDeps({
+    getMessage: (id) => {
+      if (id === "sent-msg-456") {
+        // The sent message that was a draft - has "drafted" label
+        return Promise.resolve({
+          id: "sent-msg-456",
+          grant_id: "grant-456",
+          thread_id: "thread-789",
+          subject: "Re: Test",
+          from: [{ email: "me@example.com" }],
+          to: [{ email: "sender@example.com" }],
+          date: 1704067300,
+          folders: ["SENT", "Label_215"], // Has drafted label!
+        });
+      }
+      // Original message - no workflow labels
+      return Promise.resolve({
+        id: "original-msg-123",
+        grant_id: "grant-456",
+        thread_id: "thread-789",
+        subject: "Test",
+        from: [{ email: "sender@example.com" }],
+        to: [{ email: "me@example.com" }],
+        date: 1704067200,
+        folders: ["INBOX"],
+      });
+    },
+    getThread: () =>
+      Promise.resolve({
+        id: "thread-789",
+        grant_id: "grant-456",
+        subject: "Test",
+        participants: [
+          { email: "sender@example.com" },
+          { email: "me@example.com" },
+        ],
+        message_ids: ["original-msg-123", "sent-msg-456"],
+        folders: ["INBOX", "SENT"],
+      }),
+    updateMessageFolders: (id, folders) => {
+      updatedMessages.push({ id, folders });
+      return Promise.resolve({
+        id,
+        grant_id: "grant-456",
+        thread_id: "thread-789",
+        subject: "Test",
+        from: [{ email: "me@example.com" }],
+        to: [{ email: "sender@example.com" }],
+        date: 1704067300,
+        folders,
+      });
+    },
+  });
+
+  await handleWebhook(request, deps);
+
+  // Sent message should have its drafted label cleared
+  assertEquals(updatedMessages.length, 1);
+  assertEquals(updatedMessages[0].id, "sent-msg-456");
+  assertEquals(updatedMessages[0].folders.includes("Label_215"), false);
+  assertEquals(updatedMessages[0].folders.includes("SENT"), true);
 });
