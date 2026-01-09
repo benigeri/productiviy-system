@@ -1,5 +1,5 @@
 ---
-name: handle-to-respond-paul
+name: email-respond
 description: Process emails labeled 'to-respond-paul' - show thread in tmux panel, draft reply from dictation using AI, update labels. Interactive workflow for email triage.
 ---
 
