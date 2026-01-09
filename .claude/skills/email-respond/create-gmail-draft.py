@@ -269,28 +269,29 @@ def main():
 
     # Update labels if requested
     if args.update_labels:
-        # Label_215 = drafted, Label_139 = to-respond-paul
+        # Workflow labels: Label_139 = to-respond-paul, Label_138 = to-read-paul, Label_215 = drafted
+        # When adding any workflow label, remove ALL other workflow labels
         label_result = update_thread_labels(
             args.thread_id,
             add_labels=["Label_215"],
-            remove_labels=["Label_139"]
+            remove_labels=["Label_139", "Label_138"]  # Remove all other workflow labels
         )
         # Verify labels were actually updated by checking current_folders
         updated_folders = label_result.get("folders", [])
         drafted_added = "Label_215" in updated_folders
-        to_respond_removed = "Label_139" not in updated_folders
+        workflow_labels_removed = "Label_139" not in updated_folders and "Label_138" not in updated_folders
 
         messages_total = label_result.get("messages_total", 0)
         messages_updated = label_result.get("messages_updated", 0)
         all_updated = messages_updated == messages_total and messages_total > 0
 
-        output["labels_updated"] = drafted_added and to_respond_removed and all_updated
+        output["labels_updated"] = drafted_added and workflow_labels_removed and all_updated
         output["labels"] = {
             "thread_id": args.thread_id,
             "messages_total": messages_total,
             "messages_updated": messages_updated,
             "added": ["Label_215"] if drafted_added else [],
-            "removed": ["Label_139"] if to_respond_removed else [],
+            "removed": [l for l in ["Label_139", "Label_138"] if l not in updated_folders],
             "current_folders": updated_folders,
         }
 
