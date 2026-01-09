@@ -127,7 +127,7 @@ async function processMessageUpdate(
 
 /**
  * Process a message created event (new message sent).
- * If sent message is a reply, clear workflow labels from thread.
+ * If sent message is a reply, clear workflow labels from entire thread.
  */
 async function processMessageCreated(
   messageId: string,
@@ -148,15 +148,16 @@ async function processMessageCreated(
     return processMessageUpdate(messageId, deps);
   }
 
-  // Get thread to find other messages
+  // Get thread to find all messages
   const thread = await deps.getThread(message.thread_id);
 
-  // Process each message in thread (except the one we just sent)
+  // Clear workflow labels from ALL messages in thread (including the sent one)
+  // This handles the case where a draft with "drafted" label becomes a sent message
   let updated = false;
   for (const threadMessageId of thread.message_ids) {
-    if (threadMessageId === messageId) continue;
-
-    const threadMessage = await deps.getMessage(threadMessageId);
+    const threadMessage = threadMessageId === messageId
+      ? message  // Reuse already-fetched message
+      : await deps.getMessage(threadMessageId);
     const cleared = await clearWorkflowLabels(
       threadMessage,
       idToName,
