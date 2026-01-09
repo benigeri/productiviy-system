@@ -117,6 +117,35 @@ class TestNormalizeDraft(unittest.TestCase):
         self.assertEqual(result["body"], "<p>Hello</p>")
         self.assertEqual(result["extra_field"], "preserved")
 
+    def test_normalizes_bcc_field(self):
+        """BCC field should also be normalized."""
+        draft = {
+            "to": [{"email": "to@example.com", "name": "To"}],
+            "cc": [],
+            "bcc": ["hidden@example.com"],
+            "subject": "Test",
+            "body": "Hello"
+        }
+        result = draft_email.normalize_draft(draft)
+        self.assertEqual(result["bcc"], [{"email": "hidden@example.com", "name": ""}])
+
+    def test_does_not_mutate_input(self):
+        """normalize_draft should not mutate the input dict."""
+        original_cc = ["cc@example.com"]
+        draft = {
+            "to": [{"email": "to@example.com", "name": "To"}],
+            "cc": original_cc,
+            "subject": "Test",
+            "body": "Hello"
+        }
+        result = draft_email.normalize_draft(draft)
+        # Original should be unchanged
+        self.assertEqual(draft["cc"], ["cc@example.com"])
+        # Result should be normalized
+        self.assertEqual(result["cc"], [{"email": "cc@example.com", "name": ""}])
+        # Should be different objects
+        self.assertIsNot(result, draft)
+
 
 class TestAtomicWrite(unittest.TestCase):
     """Tests for atomic_write function."""

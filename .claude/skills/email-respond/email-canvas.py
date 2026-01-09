@@ -317,11 +317,11 @@ def format_message_box(msg: dict, msg_index: int, total_messages: int, is_latest
         List of formatted lines (without box borders)
     """
     from_list = msg.get("from", [])
-    from_name = from_list[0].get("name", "Unknown") if from_list else "Unknown"
+    from_name = from_list[0].get("name", "") if from_list else ""
     from_email = from_list[0].get("email", "") if from_list else ""
 
-    # Show name, or email if no name
-    from_display = from_name if from_name and from_name != from_email else from_email
+    # Show name, or email if no name, or "Unknown" if both empty
+    from_display = from_name if from_name and from_name != from_email else (from_email or "Unknown")
 
     date_str = format_date(msg.get("date", 0))
 

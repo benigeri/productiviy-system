@@ -313,11 +313,14 @@ def normalize_draft(draft: dict) -> dict:
 
     The AI sometimes returns CC as plain strings instead of objects.
     This ensures consistent format for the Nylas API.
+
+    Returns a new dict (does not mutate the input).
     """
+    result = dict(draft)  # Shallow copy
     for field in ["to", "cc", "bcc"]:
-        if field in draft and isinstance(draft[field], list):
-            draft[field] = [normalize_recipient(r) for r in draft[field]]
-    return draft
+        if field in result and isinstance(result[field], list):
+            result[field] = [normalize_recipient(r) for r in result[field]]
+    return result
 
 
 def atomic_write(filepath: str, content: str) -> None:
