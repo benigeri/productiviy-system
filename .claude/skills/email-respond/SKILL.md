@@ -264,12 +264,24 @@ bash "$PANEL" close
 
 ## User Commands
 
-| Command | Action |
-|---------|--------|
-| `next` / `skip` | Move to next thread, keep current labels |
-| `done` | Exit workflow |
-| `approve` | After seeing draft, save to Gmail and advance |
-| (any text) | Treated as dictation/feedback for draft generation |
+| Command | Hotkey | Action |
+|---------|--------|--------|
+| `next` / `skip` | **Alt+S** | Move to next thread, keep current labels |
+| `done` | **Alt+D** | Exit workflow |
+| `approve` | **Alt+A** | After seeing draft, save to Gmail and advance |
+| (paste) | **Alt+V** | Paste clipboard content as multi-line dictation |
+| (any text) | - | Treated as dictation/feedback for draft generation |
+
+### Hotkeys
+
+When the email panel is active, these tmux hotkeys are available:
+
+- **Alt+A** - Approve current draft (sends "approve" command)
+- **Alt+S** - Skip current thread (sends "skip" command)
+- **Alt+D** - Done with workflow (sends "done" command)
+- **Alt+V** - Paste from clipboard as dictation (useful for multi-line input)
+
+Hotkeys are automatically activated when the panel is created and deactivated when closed.
 
 ---
 

@@ -7,6 +7,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PANEL_ID_FILE="/tmp/email-panel-id.txt"
+HOTKEYS_SCRIPT="$SCRIPT_DIR/email-hotkeys.sh"
 
 # Get the stored panel pane ID
 get_panel_id() {
@@ -51,6 +52,9 @@ create_panel() {
     echo "$new_pane_id" > "$PANEL_ID_FILE"
 
     sleep 0.3  # Wait for pane to initialize
+
+    # Setup hotkeys (Alt+A/S/D/V) for workflow actions
+    bash "$HOTKEYS_SCRIPT" setup 2>/dev/null || true
 }
 
 # Send command to panel
@@ -139,8 +143,13 @@ close_panel() {
 
     if [ -z "$panel_id" ]; then
         # No panel tracked, nothing to close
+        # But still teardown hotkeys in case they're active
+        bash "$HOTKEYS_SCRIPT" teardown 2>/dev/null || true
         return 0
     fi
+
+    # Teardown hotkeys before closing panel
+    bash "$HOTKEYS_SCRIPT" teardown 2>/dev/null || true
 
     # SAFETY CHECK: Never kill the current pane (protects Agent Deck)
     local current_pane
