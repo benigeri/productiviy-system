@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useConversation } from '../../hooks/useConversation';
 
 interface Thread {
   id: string;
@@ -24,6 +25,16 @@ export function ThreadDetail({
   thread: Thread;
   messages: Message[];
 }) {
+  const {
+    conversation,
+    isLoaded,
+    addMessage,
+    updateDraft,
+    clear: clearConversation,
+    messages: conversationMessages,
+    currentDraft: storedDraft,
+  } = useConversation(thread.id);
+
   const [instructions, setInstructions] = useState('');
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,6 +43,12 @@ export function ThreadDetail({
   async function generateDraft() {
     setLoading(true);
     setError('');
+
+    // Save user instructions to conversation history
+    if (instructions.trim()) {
+      addMessage('user', instructions);
+    }
+
     try {
       const res = await fetch('/api/drafts', {
         method: 'POST',
@@ -55,6 +72,9 @@ export function ThreadDetail({
         throw new Error(data.error || 'Failed to generate draft');
       }
 
+      // Save assistant's draft to conversation history
+      addMessage('assistant', data.body);
+      updateDraft(data.body);
       setDraft(data.body);
 
       // Update session count in localStorage
@@ -112,6 +132,32 @@ export function ThreadDetail({
         ))}
       </div>
 
+      {/* Conversation History */}
+      {isLoaded && conversationMessages.length > 0 && (
+        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <h3 className="font-semibold text-blue-800 mb-3">Draft Iteration History</h3>
+          <div className="space-y-2">
+            {conversationMessages.map((msg, i) => (
+              <div
+                key={i}
+                className={`p-3 rounded ${
+                  msg.role === 'user'
+                    ? 'bg-white border border-blue-200'
+                    : 'bg-blue-100 border border-blue-300'
+                }`}
+              >
+                <div className="text-xs font-semibold text-blue-700 mb-1">
+                  {msg.role === 'user' ? '👤 You' : '🤖 Assistant'}
+                </div>
+                <div className="text-sm whitespace-pre-wrap">
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Draft form */}
       {!draft ? (
         <div className="space-y-4 sticky bottom-4 bg-white p-6 rounded-lg border-2 border-gray-200 shadow-lg">
@@ -146,9 +192,20 @@ export function ThreadDetail({
           <div className="text-sm whitespace-pre-wrap leading-relaxed mb-4 p-4 bg-white rounded border">
             {draft}
           </div>
-          <p className="text-sm text-green-700 font-medium">
-            Draft saved to Gmail. Redirecting back to inbox...
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-green-700 font-medium">
+              Draft saved to Gmail. Redirecting back to inbox...
+            </p>
+            <button
+              onClick={() => {
+                clearConversation();
+                window.location.href = '/inbox';
+              }}
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium"
+            >
+              Approve & Clear
+            </button>
+          </div>
         </div>
       )}
     </div>
