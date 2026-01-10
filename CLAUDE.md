@@ -27,20 +27,29 @@ This document defines how AI agents should work on this codebase.
 
 2. **Make changes** following TDD (see below)
 
-3. **Commit with clear messages**:
+3. **Test locally** - CRITICAL: Always verify your changes work before pushing:
+   - For web apps: Start dev server, open in browser, test all modified functionality
+   - For APIs: Use curl/Postman to test endpoints
+   - For CLI tools: Run the command with various inputs
+   - For libraries: Run the test suite
+   - **NEVER skip this step** - broken code wastes everyone's time
+
+4. **Commit with clear messages**:
    ```bash
    git commit -m "Brief description of change"
    ```
 
-4. **Push and create PR**:
+5. **Push and create PR**:
    ```bash
    git push -u origin feature/short-description
    ```
    Then create PR with summary of changes.
 
-5. **Wait for review** - User will review diff and approve
+6. **Run code review** - Use compound engineering review agents to catch issues
 
-6. **After merge**, switch back to main:
+7. **Wait for review** - User will review diff and approve
+
+8. **After merge**, switch back to main:
    ```bash
    git checkout main && git pull
    ```
@@ -239,6 +248,71 @@ const mockFetch = async () => {
 - Follow PEP 8
 - Use type hints
 - Use `python-dotenv` for env vars
+
+---
+
+## UI Development Guidelines
+
+Opinionated constraints for building better interfaces with agents.
+
+### Stack
+- **MUST** use Tailwind CSS defaults (spacing, radius, shadows) before custom values
+- **MUST** use motion/react (formerly framer-motion) when JavaScript animation is required
+- **SHOULD** use tw-animate-css for entrance and micro-animations in Tailwind CSS
+- **MUST** use cn utility (clsx + tailwind-merge) for class logic
+- **IMPORTANT**: shadcn/ui requires Tailwind v3, NOT v4. Always use Tailwind v3 when using shadcn components.
+
+### Components
+- **MUST** use accessible component primitives for anything with keyboard or focus behavior (Base UI, React Aria, Radix)
+- **MUST** use the project's existing component primitives first
+- **NEVER** mix primitive systems within the same interaction surface
+- **SHOULD** prefer Base UI for new primitives if compatible with the stack
+- **MUST** add an aria-label to icon-only buttons
+- **NEVER** rebuild keyboard or focus behavior by hand unless explicitly requested
+
+### Interaction
+- **MUST** use an AlertDialog for destructive or irreversible actions
+- **SHOULD** use structural skeletons for loading states
+- **NEVER** use h-screen, use h-dvh
+- **MUST** respect safe-area-inset for fixed elements
+- **MUST** show errors next to where the action happens
+- **NEVER** block paste in input or textarea elements
+
+### Animation
+- **NEVER** add animation unless it is explicitly requested
+- **MUST** animate only compositor props (transform, opacity)
+- **NEVER** animate layout properties (width, height, top, left, margin, padding)
+- **SHOULD** avoid animating paint properties (background, color) except for small, local UI (text, icons)
+- **SHOULD** use ease-out on entrance
+- **NEVER** exceed 200ms for interaction feedback
+- **MUST** pause looping animations when off-screen
+- **MUST** respect prefers-reduced-motion
+- **NEVER** introduce custom easing curves unless explicitly requested
+- **SHOULD** avoid animating large images or full-screen surfaces
+
+### Typography
+- **MUST** use text-balance for headings and text-pretty for body/paragraphs
+- **MUST** use tabular-nums for data
+- **SHOULD** use truncate or line-clamp for dense UI
+- **NEVER** modify letter-spacing (tracking-) unless explicitly requested
+
+### Layout
+- **MUST** use a fixed z-index scale (no arbitrary z-x)
+- **SHOULD** use size-x for square elements instead of w-x + h-x
+
+### Performance
+- **NEVER** animate large blur() or backdrop-filter surfaces
+- **NEVER** apply will-change outside an active animation
+- **NEVER** use useEffect for anything that can be expressed as render logic
+
+### Design
+- **NEVER** use gradients unless explicitly requested
+- **NEVER** use purple or multicolor gradients
+- **NEVER** use glow effects as primary affordances
+- **SHOULD** use Tailwind CSS default shadow scale unless explicitly requested
+- **MUST** give empty states one clear next action
+- **SHOULD** limit accent color usage to one per view
+- **SHOULD** use existing theme or Tailwind CSS color tokens before introducing new ones
 
 ---
 
