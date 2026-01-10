@@ -145,8 +145,12 @@ def html_to_text(html: str) -> str:
     if not html:
         return ""
 
+    # Remove style and script tags with their contents
+    text = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.IGNORECASE | re.DOTALL)
+
     # Replace block elements with newlines to preserve structure
-    text = re.sub(r"</div>\s*<div", "</div>\n<div", html, flags=re.IGNORECASE)
+    text = re.sub(r"</div>\s*<div", "</div>\n<div", text, flags=re.IGNORECASE)
     text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"</p>\s*", "\n\n", text, flags=re.IGNORECASE)
     text = re.sub(r"</div>\s*", "\n", text, flags=re.IGNORECASE)
