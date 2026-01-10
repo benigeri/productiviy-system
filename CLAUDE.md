@@ -27,20 +27,29 @@ This document defines how AI agents should work on this codebase.
 
 2. **Make changes** following TDD (see below)
 
-3. **Commit with clear messages**:
+3. **Test locally** - CRITICAL: Always verify your changes work before pushing:
+   - For web apps: Start dev server, open in browser, test all modified functionality
+   - For APIs: Use curl/Postman to test endpoints
+   - For CLI tools: Run the command with various inputs
+   - For libraries: Run the test suite
+   - **NEVER skip this step** - broken code wastes everyone's time
+
+4. **Commit with clear messages**:
    ```bash
    git commit -m "Brief description of change"
    ```
 
-4. **Push and create PR**:
+5. **Push and create PR**:
    ```bash
    git push -u origin feature/short-description
    ```
    Then create PR with summary of changes.
 
-5. **Wait for review** - User will review diff and approve
+6. **Run code review** - Use compound engineering review agents to catch issues
 
-6. **After merge**, switch back to main:
+7. **Wait for review** - User will review diff and approve
+
+8. **After merge**, switch back to main:
    ```bash
    git checkout main && git pull
    ```
