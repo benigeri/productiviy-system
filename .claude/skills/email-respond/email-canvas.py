@@ -215,6 +215,8 @@ def wrap_text(text: str, width: int = PANEL_WIDTH - 4) -> str:
             if line_text:
                 wrapped = textwrap.fill(line_text, width=width)
                 wrapped_lines.append(wrapped)
+            else:
+                wrapped_lines.append("")  # PRESERVE blank lines
         if wrapped_lines:
             wrapped_paragraphs.append("\n".join(wrapped_lines))
     return "\n\n".join(wrapped_paragraphs)
