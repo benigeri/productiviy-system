@@ -30,15 +30,15 @@ Guidelines:
       content: `Thread Subject: {{thread_subject}}
 
 Previous Messages:
-{{#each messages}}
-From: {{this.from}}
-To: {{this.to}}
-Date: {{this.date}}
+{{#messages}}
+From: {{from}}
+To: {{to}}
+Date: {{date}}
 
-{{this.body}}
+{{body}}
 
 ---
-{{/each}}
+{{/messages}}
 
 User Instructions: {{user_instructions}}
 
