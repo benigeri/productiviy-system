@@ -203,7 +203,9 @@ def clean_messages(message_ids: List[str]) -> List[Dict]:
         payload = {
             "message_id": batch,
             "ignore_images": True,
-            "ignore_links": True,
+            "ignore_links": False,
+            "html_as_markdown": True,
+            "images_as_markdown": True,
         }
 
         try:

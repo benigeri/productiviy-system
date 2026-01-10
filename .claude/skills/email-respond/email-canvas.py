@@ -111,6 +111,38 @@ def box_empty(width: int = PANEL_WIDTH) -> str:
     return box_line("", width)
 
 
+def clean_markdown(text: str) -> str:
+    """Clean up markdown escaping and HTML remnants from Nylas conversation field."""
+    if not text:
+        return ""
+
+    import re
+
+    # Remove HTML links, keep text: <a href='...'>text</a> → text
+    text = re.sub(r"<a [^>]*>([^<]*)</a>", r"\1", text)
+    # Remove any remaining HTML tags
+    text = re.sub(r"<[^>]+>", "", text)
+
+    # Unescape markdown characters FIRST (before processing markdown syntax)
+    text = text.replace("\\-", "-")
+    text = text.replace("\\[", "[")
+    text = text.replace("\\]", "]")
+    text = text.replace("\\*", "*")
+    text = text.replace("\\(", "(")
+    text = text.replace("\\)", ")")
+
+    # Remove markdown links, keep text: [text](url) → text
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+
+    # Convert markdown bullets to actual bullets
+    text = text.replace("\n- ", "\n• ")
+    # Handle line-start bullets
+    if text.startswith("- "):
+        text = "• " + text[2:]
+
+    return text
+
+
 def wrap_text(text: str, width: int = PANEL_WIDTH - 4) -> str:
     """Wrap text to fit panel width, preserving paragraph breaks."""
     # Split on double newlines for paragraph breaks
@@ -207,8 +239,9 @@ def format_message_box(msg: dict, msg_index: int, total_messages: int, is_latest
 
     date_str = email_utils.format_date(msg.get("date", 0))
 
-    # Use conversation field from Clean Messages API (plain text, no HTML)
+    # Use conversation field from Clean Messages API (contains markdown formatting)
     body = msg.get("conversation", "") or msg.get("snippet", "")
+    body = clean_markdown(body)
 
     lines = []
     label = "📩 LATEST" if is_latest else f"[{msg_index}/{total_messages}]"
@@ -275,8 +308,9 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         from_list = latest.get("from", [])
         from_name = from_list[0].get("name", "Unknown") if from_list else "Unknown"
         date_str = email_utils.format_date(latest.get("date", 0))
-        # Use conversation field from Clean Messages API (plain text, no HTML)
+        # Use conversation field from Clean Messages API (contains markdown formatting)
         body = latest.get("conversation", "") or latest.get("snippet", "")
+        body = clean_markdown(body)
 
         abbrev_subject = subject[:60] + "..." if len(subject) > 63 else subject
         print(box_top())
