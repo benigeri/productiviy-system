@@ -8,117 +8,30 @@ import argparse
 import json
 import os
 import sys
-import tempfile
 import warnings
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Optional
 
 warnings.filterwarnings("ignore", message=".*OpenSSL.*")
 
 import requests
-from dotenv import load_dotenv
 
-load_dotenv()
+# Import from shared library
+# draft-email.py is at project root, so email_utils is in same directory
+# But we still add project root to path for consistency
+_project_root = os.path.dirname(os.path.abspath(__file__))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+import email_utils
 
-NYLAS_API_KEY = os.getenv("NYLAS_API_KEY")
-NYLAS_GRANT_ID = os.getenv("NYLAS_GRANT_ID")
+# Get config from email_utils
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-
-NYLAS_BASE_URL = "https://api.us.nylas.com/v3"
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
-
-REQUEST_TIMEOUT = 30  # seconds
 ANTHROPIC_TIMEOUT = 60  # seconds (longer for LLM generation)
 
 # Paths relative to project root
 GUIDELINES_PATH = ".claude/skills/email-respond/email-writing-guidelines.md"
 PAUL_EMAILS_PATH = ".claude/skills/email-respond/paul-emails.txt"
-
-
-def check_env():
-    """Check required environment variables."""
-    missing = []
-    if not NYLAS_API_KEY:
-        missing.append("NYLAS_API_KEY")
-    if not NYLAS_GRANT_ID:
-        missing.append("NYLAS_GRANT_ID")
-    if not ANTHROPIC_API_KEY:
-        missing.append("ANTHROPIC_API_KEY")
-
-    if missing:
-        print(f"Error: Missing environment variables: {', '.join(missing)}", file=sys.stderr)
-        print("Add them to your .env file", file=sys.stderr)
-        sys.exit(1)
-
-
-def nylas_get(endpoint: str) -> dict:
-    """Make a GET request to the Nylas API."""
-    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}{endpoint}"
-    headers = {"Authorization": f"Bearer {NYLAS_API_KEY}"}
-
-    try:
-        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException as e:
-        print(f"Nylas request failed: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    if not response.ok:
-        print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
-        sys.exit(1)
-
-    return response.json().get("data", {})
-
-
-def get_thread(thread_id: str) -> dict:
-    """Fetch a thread by ID."""
-    return nylas_get(f"/threads/{thread_id}")
-
-
-def clean_messages(message_ids: List[str]) -> List[Dict]:
-    """Fetch and clean multiple messages via Nylas Clean Messages API.
-
-    Nylas limits batch requests to 20 message IDs, so we batch if needed.
-    """
-    BATCH_SIZE = 20
-    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/messages/clean"
-    headers = {
-        "Authorization": f"Bearer {NYLAS_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    all_messages = []
-
-    # Batch message IDs into chunks of 20 (Nylas API limit)
-    for i in range(0, len(message_ids), BATCH_SIZE):
-        batch = message_ids[i:i + BATCH_SIZE]
-        payload = {
-            "message_id": batch,
-            "ignore_images": True,
-            "ignore_links": True,
-        }
-
-        try:
-            response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
-        except requests.RequestException as e:
-            print(f"Nylas request failed: {e}", file=sys.stderr)
-            sys.exit(1)
-
-        if not response.ok:
-            print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
-            sys.exit(1)
-
-        all_messages.extend(response.json().get("data", []))
-
-    return all_messages
-
-
-def format_participant(participant: dict) -> str:
-    """Format an email participant."""
-    name = participant.get("name", "")
-    email = participant.get("email", "")
-    if name and name != email:
-        return f"{name} <{email}>"
-    return email
 
 
 def format_message(msg: dict) -> str:
@@ -134,9 +47,9 @@ def format_message(msg: dict) -> str:
     # Format date
     date_str = datetime.fromtimestamp(date_ts).strftime("%Y-%m-%d %H:%M") if date_ts else "Unknown"
 
-    # Format participants
-    from_str = ", ".join(format_participant(p) for p in from_list)
-    to_str = ", ".join(format_participant(p) for p in to_list)
+    # Format participants using email_utils
+    from_str = ", ".join(email_utils.format_participant(p) for p in from_list)
+    to_str = ", ".join(email_utils.format_participant(p) for p in to_list)
 
     # Build message
     lines = [
@@ -144,7 +57,7 @@ def format_message(msg: dict) -> str:
         f"To: {to_str}",
     ]
     if cc_list:
-        cc_str = ", ".join(format_participant(p) for p in cc_list)
+        cc_str = ", ".join(email_utils.format_participant(p) for p in cc_list)
         lines.append(f"Cc: {cc_str}")
     lines.extend([
         f"Date: {date_str}",
@@ -290,61 +203,6 @@ def parse_draft_response(response: str) -> dict:
         return {"body": response, "to": [], "cc": [], "subject": ""}
 
 
-def normalize_recipient(recipient) -> dict:
-    """Normalize a recipient to {email, name} format.
-
-    Handles:
-    - String: "email@example.com" -> {"email": "email@example.com", "name": ""}
-    - Dict without name: {"email": "..."} -> {"email": "...", "name": ""}
-    - Dict with name: {"email": "...", "name": "..."} -> unchanged
-    """
-    if isinstance(recipient, str):
-        return {"email": recipient, "name": ""}
-    if isinstance(recipient, dict):
-        return {
-            "email": recipient.get("email", ""),
-            "name": recipient.get("name", "")
-        }
-    return {"email": "", "name": ""}
-
-
-def normalize_draft(draft: dict) -> dict:
-    """Normalize draft to ensure all recipients are in {email, name} format.
-
-    The AI sometimes returns CC as plain strings instead of objects.
-    This ensures consistent format for the Nylas API.
-
-    Returns a new dict (does not mutate the input).
-    """
-    result = dict(draft)  # Shallow copy
-    for field in ["to", "cc", "bcc"]:
-        if field in result and isinstance(result[field], list):
-            result[field] = [normalize_recipient(r) for r in result[field]]
-    return result
-
-
-def atomic_write(filepath: str, content: str) -> None:
-    """Write content to file atomically.
-
-    Writes to a temp file first, then renames. This ensures the output file
-    is never truncated before we're ready to write, allowing safe use of the
-    same file for both --previous-draft input and --output.
-    """
-    dir_path = os.path.dirname(filepath) or "."
-    fd, temp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(content)
-        os.replace(temp_path, filepath)
-    except Exception:
-        # Clean up temp file on error
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
-        raise
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Generate an email draft response using AI",
@@ -413,10 +271,10 @@ Note: Use -o/--output instead of shell redirection (>) when iterating on drafts.
             print("Error: Feedback cannot be empty", file=sys.stderr)
             sys.exit(1)
 
-    check_env()
+    email_utils.check_env("NYLAS_API_KEY", "NYLAS_GRANT_ID", "ANTHROPIC_API_KEY")
 
     # Fetch thread
-    thread = get_thread(args.thread_id)
+    thread = email_utils.get_thread(args.thread_id)
     if not thread:
         print(f"Error: Thread not found: {args.thread_id}", file=sys.stderr)
         sys.exit(1)
@@ -428,7 +286,7 @@ Note: Use -o/--output instead of shell redirection (>) when iterating on drafts.
         sys.exit(1)
 
     # Fetch and clean all messages in one API call
-    messages = clean_messages(message_ids)
+    messages = email_utils.clean_messages(message_ids)
     if not messages:
         print("Error: Could not fetch any messages", file=sys.stderr)
         sys.exit(1)
@@ -452,7 +310,7 @@ Note: Use -o/--output instead of shell redirection (>) when iterating on drafts.
         raw_response = generate_draft(thread_content, args.dictation)
 
     draft = parse_draft_response(raw_response)
-    draft = normalize_draft(draft)
+    draft = email_utils.normalize_draft(draft)
 
     # Format output
     if args.body_only:
@@ -462,7 +320,7 @@ Note: Use -o/--output instead of shell redirection (>) when iterating on drafts.
 
     # Write to file or stdout
     if args.output:
-        atomic_write(args.output, output_content + "\n")
+        email_utils.atomic_write(args.output, output_content + "\n")
     else:
         print(output_content)
 

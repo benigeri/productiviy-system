@@ -11,110 +11,22 @@ import sys
 import textwrap
 import unicodedata
 import warnings
-from datetime import datetime
 from html import unescape
 from typing import Dict, List, Optional
 
 warnings.filterwarnings("ignore", message=".*OpenSSL.*")
 
-import requests
-from dotenv import load_dotenv
-
-load_dotenv()
-
-NYLAS_API_KEY = os.getenv("NYLAS_API_KEY")
-NYLAS_GRANT_ID = os.getenv("NYLAS_GRANT_ID")
-NYLAS_BASE_URL = "https://api.us.nylas.com/v3"
+# Import from shared library
+# Add project root to path so email_utils can be imported regardless of cwd
+_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+import email_utils
 
 # Label IDs
-TO_RESPOND_LABEL = "Label_139"  # to-respond-paul
+TO_RESPOND_LABEL = email_utils.LABEL_TO_RESPOND
 
-REQUEST_TIMEOUT = 30
 PANEL_WIDTH = 100
-
-
-def check_env():
-    """Check required environment variables."""
-    missing = []
-    if not NYLAS_API_KEY:
-        missing.append("NYLAS_API_KEY")
-    if not NYLAS_GRANT_ID:
-        missing.append("NYLAS_GRANT_ID")
-    if missing:
-        print(f"Error: Missing environment variables: {', '.join(missing)}", file=sys.stderr)
-        sys.exit(1)
-
-
-def nylas_get(endpoint: str) -> dict:
-    """Make a GET request to the Nylas API."""
-    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}{endpoint}"
-    headers = {"Authorization": f"Bearer {NYLAS_API_KEY}"}
-
-    try:
-        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException as e:
-        print(f"Nylas request failed: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    if not response.ok:
-        print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
-        sys.exit(1)
-
-    return response.json().get("data", {})
-
-
-def clean_messages(message_ids: List[str]) -> List[Dict]:
-    """Fetch and clean multiple messages via Nylas Clean Messages API.
-
-    Nylas limits batch requests to 20 message IDs, so we batch if needed.
-    """
-    BATCH_SIZE = 20
-    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/messages/clean"
-    headers = {
-        "Authorization": f"Bearer {NYLAS_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    all_messages = []
-
-    # Batch message IDs into chunks of 20 (Nylas API limit)
-    for i in range(0, len(message_ids), BATCH_SIZE):
-        batch = message_ids[i:i + BATCH_SIZE]
-        payload = {
-            "message_id": batch,
-            "ignore_images": True,
-            "ignore_links": True,
-        }
-
-        try:
-            response = requests.put(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
-        except requests.RequestException as e:
-            print(f"Nylas request failed: {e}", file=sys.stderr)
-            sys.exit(1)
-
-        if not response.ok:
-            print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
-            sys.exit(1)
-
-        all_messages.extend(response.json().get("data", []))
-
-    return all_messages
-
-
-def format_date(timestamp: int) -> str:
-    """Format Unix timestamp to readable date."""
-    if not timestamp:
-        return "Unknown"
-    return datetime.fromtimestamp(timestamp).strftime("%b %d, %I:%M %p")
-
-
-def format_participant(p: dict) -> str:
-    """Format email participant."""
-    name = p.get("name", "")
-    email = p.get("email", "")
-    if name and name != email:
-        return f"{name} <{email}>"
-    return email
 
 
 def double_line(char="═"):
@@ -260,7 +172,7 @@ def html_to_text(html: str) -> str:
 
 def list_threads() -> None:
     """List all threads with to-respond-paul label."""
-    threads = nylas_get(f"/threads?in={TO_RESPOND_LABEL}&limit=20")
+    threads = email_utils.nylas_get(f"/threads?in={TO_RESPOND_LABEL}&limit=20")
 
     if not threads:
         print()
@@ -289,7 +201,7 @@ def list_threads() -> None:
         from_name = from_p.get("name", "Unknown")
         from_email = from_p.get("email", "")
 
-        date_str = format_date(latest.get("date", 0)) if latest else ""
+        date_str = email_utils.format_date(latest.get("date", 0)) if latest else ""
 
         # Check if waiting on response (last message from Paul)
         is_waiting = "paul@archive.com" in from_email.lower()
@@ -325,7 +237,7 @@ def format_message_box(msg: dict, msg_index: int, total_messages: int, is_latest
     # Show name, or email if no name, or "Unknown" if both empty
     from_display = from_name if from_name and from_name != from_email else (from_email or "Unknown")
 
-    date_str = format_date(msg.get("date", 0))
+    date_str = email_utils.format_date(msg.get("date", 0))
 
     # Use conversation (plain text) for older messages, full body for latest
     body = msg.get("conversation", "") or msg.get("snippet", "")
@@ -350,7 +262,7 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
     Displays ALL messages in the thread with visual separation.
     Messages are sorted oldest to newest (most recent at bottom).
     """
-    thread = nylas_get(f"/threads/{thread_id}")
+    thread = email_utils.get_thread(thread_id)
 
     if not thread:
         print(f"Error: Thread not found: {thread_id}", file=sys.stderr)
@@ -364,7 +276,7 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         sys.exit(1)
 
     # Fetch and clean all messages
-    messages = clean_messages(message_ids)
+    messages = email_utils.clean_messages(message_ids)
     if not messages:
         print("Error: Could not fetch messages", file=sys.stderr)
         sys.exit(1)
@@ -394,7 +306,7 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         # Abbreviated view when showing draft - show only latest message summary
         from_list = latest.get("from", [])
         from_name = from_list[0].get("name", "Unknown") if from_list else "Unknown"
-        date_str = format_date(latest.get("date", 0))
+        date_str = email_utils.format_date(latest.get("date", 0))
         body = latest.get("conversation", "") or latest.get("snippet", "")
 
         abbrev_subject = subject[:60] + "..." if len(subject) > 63 else subject
@@ -472,7 +384,7 @@ Examples:
 
     args = parser.parse_args()
 
-    check_env()
+    email_utils.check_env("NYLAS_API_KEY", "NYLAS_GRANT_ID")
 
     # Load draft from file if specified
     draft_text = args.draft

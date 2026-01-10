@@ -12,44 +12,19 @@ import os
 import sys
 
 import requests
-from dotenv import load_dotenv
 
-load_dotenv()
+# Import from shared library
+# Add project root to path so email_utils can be imported regardless of cwd
+_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+import email_utils
 
-NYLAS_API_KEY = os.getenv("NYLAS_API_KEY")
-NYLAS_GRANT_ID = os.getenv("NYLAS_GRANT_ID")
-NYLAS_BASE_URL = "https://api.us.nylas.com/v3"
-REQUEST_TIMEOUT = 30
-
-
-def check_env():
-    """Check required environment variables."""
-    missing = []
-    if not NYLAS_API_KEY:
-        missing.append("NYLAS_API_KEY")
-    if not NYLAS_GRANT_ID:
-        missing.append("NYLAS_GRANT_ID")
-    if missing:
-        print(f"Error: Missing environment variables: {', '.join(missing)}", file=sys.stderr)
-        sys.exit(1)
-
-
-def get_thread(thread_id: str) -> dict:
-    """Fetch thread to get latest message ID."""
-    url = f"{NYLAS_BASE_URL}/grants/{NYLAS_GRANT_ID}/threads/{thread_id}"
-    headers = {"Authorization": f"Bearer {NYLAS_API_KEY}"}
-
-    try:
-        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException as e:
-        print(f"Error fetching thread: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    if not response.ok:
-        print(f"Nylas API error: {response.status_code} {response.text}", file=sys.stderr)
-        sys.exit(1)
-
-    return response.json().get("data", {})
+# Use config from email_utils
+NYLAS_API_KEY = email_utils.NYLAS_API_KEY
+NYLAS_GRANT_ID = email_utils.NYLAS_GRANT_ID
+NYLAS_BASE_URL = email_utils.NYLAS_BASE_URL
+REQUEST_TIMEOUT = email_utils.REQUEST_TIMEOUT
 
 
 def create_draft(payload: dict) -> dict:
@@ -211,7 +186,7 @@ def main():
 
     args = parser.parse_args()
 
-    check_env()
+    email_utils.check_env("NYLAS_API_KEY", "NYLAS_GRANT_ID")
 
     # Read draft file
     try:
@@ -225,7 +200,7 @@ def main():
         sys.exit(1)
 
     # Get thread to find latest message ID
-    thread = get_thread(args.thread_id)
+    thread = email_utils.get_thread(args.thread_id)
     message_ids = thread.get("message_ids", [])
     if not message_ids:
         print("Error: Thread has no messages", file=sys.stderr)
