@@ -13,7 +13,7 @@ from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 
 # Add project root to path so email_utils can be imported
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
 import email_utils
 
 # Load module without running main
@@ -111,15 +111,9 @@ class TestPanelWidth:
 class TestDraftFileArgument:
     """Tests for --draft-file argument"""
 
-    @pytest.mark.skip(reason="Subprocess tests require complex PYTHONPATH setup after refactor")
     def test_draft_file_reads_content(self):
         """Should read draft content from file"""
         script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "email-canvas.py"))
-        # Run from project root so email_utils can be imported
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-        # Set PYTHONPATH to include project root
-        env = os.environ.copy()
-        env["PYTHONPATH"] = project_root
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("This is my draft content from file")
             f.flush()
@@ -128,45 +122,31 @@ class TestDraftFileArgument:
                 ["python3", script_path, "--draft-file", f.name],
                 capture_output=True,
                 text=True,
-                cwd=project_root,
-                env=env
             )
             os.unlink(f.name)
         # Should fail because --draft-file requires --thread-id, but should mention that
         assert result.returncode != 0
         assert "thread-id" in result.stderr.lower()
 
-    @pytest.mark.skip(reason="Subprocess tests require complex PYTHONPATH setup after refactor")
     def test_draft_file_missing_error(self):
         """Should error if draft file doesn't exist"""
         script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "email-canvas.py"))
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-        env = os.environ.copy()
-        env["PYTHONPATH"] = project_root
         result = subprocess.run(
             ["python3", script_path, "--thread-id", "fake", "--draft-file", "/nonexistent/file.txt"],
             capture_output=True,
             text=True,
-            cwd=project_root,
-            env=env
         )
         assert result.returncode != 0
         assert "not found" in result.stderr.lower()
 
-    @pytest.mark.skip(reason="Subprocess tests require complex PYTHONPATH setup after refactor")
     def test_draft_and_draft_file_both_require_thread_id(self):
         """Both --draft and --draft-file should require --thread-id"""
         script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "email-canvas.py"))
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-        env = os.environ.copy()
-        env["PYTHONPATH"] = project_root
         # Test --draft
         result1 = subprocess.run(
             ["python3", script_path, "--draft", "Some draft"],
             capture_output=True,
             text=True,
-            cwd=project_root,
-            env=env
         )
         assert result1.returncode != 0
         assert "thread-id" in result1.stderr.lower()

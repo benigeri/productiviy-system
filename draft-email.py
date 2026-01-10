@@ -17,6 +17,11 @@ warnings.filterwarnings("ignore", message=".*OpenSSL.*")
 import requests
 
 # Import from shared library
+# draft-email.py is at project root, so email_utils is in same directory
+# But we still add project root to path for consistency
+_project_root = os.path.dirname(os.path.abspath(__file__))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 import email_utils
 
 # Get config from email_utils
