@@ -6,12 +6,10 @@ Shows threads, single thread details, and drafts in a clean format.
 
 import argparse
 import os
-import re
 import sys
 import textwrap
 import unicodedata
 import warnings
-from html import unescape
 from typing import Dict, List, Optional
 
 warnings.filterwarnings("ignore", message=".*OpenSSL.*")
@@ -113,6 +111,38 @@ def box_empty(width: int = PANEL_WIDTH) -> str:
     return box_line("", width)
 
 
+def clean_markdown(text: str) -> str:
+    """Clean up markdown escaping and HTML remnants from Nylas conversation field."""
+    if not text:
+        return ""
+
+    import re
+
+    # Remove HTML links, keep text: <a href='...'>text</a> → text
+    text = re.sub(r"<a [^>]*>([^<]*)</a>", r"\1", text)
+    # Remove any remaining HTML tags
+    text = re.sub(r"<[^>]+>", "", text)
+
+    # Unescape markdown characters FIRST (before processing markdown syntax)
+    text = text.replace("\\-", "-")
+    text = text.replace("\\[", "[")
+    text = text.replace("\\]", "]")
+    text = text.replace("\\*", "*")
+    text = text.replace("\\(", "(")
+    text = text.replace("\\)", ")")
+
+    # Remove markdown links, keep text: [text](url) → text
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+
+    # Convert markdown bullets to actual bullets
+    text = text.replace("\n- ", "\n• ")
+    # Handle line-start bullets
+    if text.startswith("- "):
+        text = "• " + text[2:]
+
+    return text
+
+
 def wrap_text(text: str, width: int = PANEL_WIDTH - 4) -> str:
     """Wrap text to fit panel width, preserving paragraph breaks."""
     # Split on double newlines for paragraph breaks
@@ -125,49 +155,19 @@ def wrap_text(text: str, width: int = PANEL_WIDTH - 4) -> str:
         for line in lines:
             line_text = " ".join(line.split())
             if line_text:
-                wrapped = textwrap.fill(line_text, width=width)
+                # Use textwrap with break_long_words to prevent overflow
+                wrapped = textwrap.fill(
+                    line_text,
+                    width=width,
+                    break_long_words=True,
+                    break_on_hyphens=True
+                )
                 wrapped_lines.append(wrapped)
             else:
                 wrapped_lines.append("")  # PRESERVE blank lines
         if wrapped_lines:
             wrapped_paragraphs.append("\n".join(wrapped_lines))
     return "\n\n".join(wrapped_paragraphs)
-
-
-def html_to_text(html: str) -> str:
-    """Convert HTML to plain text while preserving paragraph structure."""
-    if not html:
-        return ""
-
-    # Replace block elements with newlines to preserve structure
-    text = re.sub(r"</div>\s*<div", "</div>\n<div", html, flags=re.IGNORECASE)
-    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</p>\s*", "\n\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</div>\s*", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</li>\s*", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</tr>\s*", "\n", text, flags=re.IGNORECASE)
-
-    # Remove all remaining HTML tags
-    text = re.sub(r"<[^>]+>", "", text)
-
-    # Decode HTML entities
-    text = unescape(text)
-
-    # Remove zero-width spaces and other invisible Unicode characters
-    text = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", text)
-
-    # Normalize whitespace within lines (but preserve newlines)
-    lines = text.split("\n")
-    lines = [" ".join(line.split()) for line in lines]
-    text = "\n".join(lines)
-
-    # Collapse multiple blank lines into double newlines (paragraph breaks)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    # Strip leading/trailing whitespace
-    text = text.strip()
-
-    return text
 
 
 def list_threads() -> None:
@@ -239,8 +239,9 @@ def format_message_box(msg: dict, msg_index: int, total_messages: int, is_latest
 
     date_str = email_utils.format_date(msg.get("date", 0))
 
-    # Use conversation (plain text) for older messages, full body for latest
+    # Use conversation field from Clean Messages API (contains markdown formatting)
     body = msg.get("conversation", "") or msg.get("snippet", "")
+    body = clean_markdown(body)
 
     lines = []
     label = "📩 LATEST" if is_latest else f"[{msg_index}/{total_messages}]"
@@ -275,7 +276,7 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         print("Error: Thread has no messages", file=sys.stderr)
         sys.exit(1)
 
-    # Fetch and clean all messages
+    # Fetch and clean all messages (with markdown formatting)
     messages = email_utils.clean_messages(message_ids)
     if not messages:
         print("Error: Could not fetch messages", file=sys.stderr)
@@ -307,7 +308,9 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         from_list = latest.get("from", [])
         from_name = from_list[0].get("name", "Unknown") if from_list else "Unknown"
         date_str = email_utils.format_date(latest.get("date", 0))
+        # Use conversation field from Clean Messages API (contains markdown formatting)
         body = latest.get("conversation", "") or latest.get("snippet", "")
+        body = clean_markdown(body)
 
         abbrev_subject = subject[:60] + "..." if len(subject) > 63 else subject
         print(box_top())

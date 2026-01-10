@@ -38,13 +38,13 @@ setup_hotkeys() {
     # Commands are embedded directly in bind-key, not read at execution time
 
     # Bind Alt+A (approve) - sends "approve" to agent pane
-    tmux bind-key -n M-a run-shell "tmux send-keys -t '$agent_pane_id' 'approve' Enter"
+    tmux bind-key -n M-a run-shell "tmux send-keys -t '$agent_pane_id' approve Enter"
 
     # Bind Alt+S (skip) - sends "skip" to agent pane
-    tmux bind-key -n M-s run-shell "tmux send-keys -t '$agent_pane_id' 'skip' Enter"
+    tmux bind-key -n M-s run-shell "tmux send-keys -t '$agent_pane_id' skip Enter"
 
     # Bind Alt+D (done) - sends "done" to agent pane
-    tmux bind-key -n M-d run-shell "tmux send-keys -t '$agent_pane_id' 'done' Enter"
+    tmux bind-key -n M-d run-shell "tmux send-keys -t '$agent_pane_id' done Enter"
 
     # Bind Alt+V (paste from clipboard) - paste multi-line clipboard to agent pane
     # SECURITY: Use load-buffer with pipe to avoid command injection
