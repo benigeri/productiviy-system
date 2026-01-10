@@ -1,0 +1,3 @@
+# Disallow all crawlers (security through obscurity for MVP)
+User-agent: *
+Disallow: /
