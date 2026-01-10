@@ -217,6 +217,90 @@ class TestWrapText:
         result = email_canvas.wrap_text("")
         assert result == ""
 
+    def test_preserves_blank_lines_within_paragraph(self):
+        """Should preserve blank lines within a paragraph (regression test for P0 bug)
+
+        This was the actual bug: line 215 `if line_text:` was discarding blank lines.
+        The fix adds an else clause to preserve them.
+
+        The bug manifests when you have 3+ consecutive newlines, which splits into
+        paragraphs where one starts with \n, creating an empty line.
+        """
+        # Test case 1: Triple newline (should preserve the extra spacing)
+        text = "Line one\n\n\nLine two"
+        result = email_canvas.wrap_text(text, width=40)
+        # Should have triple newline preserved
+        assert "\n\n\n" in result, f"Expected triple newline in: {repr(result)}"
+
+        # Test case 2: Quad newline
+        text_quad = "Line one\n\n\n\nLine two"
+        result_quad = email_canvas.wrap_text(text_quad, width=40)
+        # Should have quad newline preserved
+        assert "\n\n\n\n" in result_quad, f"Expected quad newline in: {repr(result_quad)}"
+
+        # Test case 3: Verify double newline still works (baseline)
+        text_double = "Line one\n\nLine two"
+        result_double = email_canvas.wrap_text(text_double, width=40)
+        assert result_double == "Line one\n\nLine two"
+
+    def test_preserves_blank_lines_in_formatted_email_draft(self):
+        """Test realistic email draft with blank lines for spacing
+
+        Real-world scenario: AI drafts email with:
+        - Greeting
+        - (blank line)
+        - Body paragraph
+        - (blank line)
+        - Closing
+
+        The bug would collapse all blank lines, making it hard to read.
+        """
+        draft = "Hi John,\n\nThanks for reaching out about the project.\n\nLooking forward to discussing this further.\n\nBest,\nPaul"
+        result = email_canvas.wrap_text(draft, width=60)
+
+        # Should have paragraph breaks (double newlines) preserved
+        lines = result.split("\n")
+        # Check that we have multiple segments separated by blank lines
+        assert len([l for l in lines if l == ""]) >= 2  # At least 2 blank lines
+
+        # Verify all content is present
+        assert "Hi John," in result
+        assert "Thanks for reaching out" in result
+        assert "Looking forward" in result
+        assert "Best," in result
+        assert "Paul" in result
+
+    def test_wrap_text_does_not_add_extra_blank_lines(self):
+        """Ensure fix doesn't add unwanted blank lines where there were none"""
+        text = "Line one\nLine two\nLine three"
+        result = email_canvas.wrap_text(text, width=40)
+
+        # These are single newlines within a paragraph, should be preserved as-is
+        # not converted to paragraph breaks
+        assert "Line one" in result
+        assert "Line two" in result
+        assert "Line three" in result
+
+        # Should not have double newlines (paragraph breaks) unless in original
+        lines = result.split("\n")
+        # Count consecutive blank lines
+        blank_runs = []
+        current_run = 0
+        for line in lines:
+            if line == "":
+                current_run += 1
+            else:
+                if current_run > 0:
+                    blank_runs.append(current_run)
+                current_run = 0
+        if current_run > 0:
+            blank_runs.append(current_run)
+
+        # With paragraph structure (split on \n\n then join with \n\n),
+        # we should get exactly one blank line between paragraphs
+        # No blank lines within this single paragraph
+        assert len(blank_runs) == 0 or all(r == 1 for r in blank_runs)
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -215,6 +215,8 @@ def wrap_text(text: str, width: int = PANEL_WIDTH - 4) -> str:
             if line_text:
                 wrapped = textwrap.fill(line_text, width=width)
                 wrapped_lines.append(wrapped)
+            else:
+                wrapped_lines.append("")  # PRESERVE blank lines
         if wrapped_lines:
             wrapped_paragraphs.append("\n".join(wrapped_lines))
     return "\n\n".join(wrapped_paragraphs)
@@ -304,9 +306,50 @@ def list_threads() -> None:
     print(box_bottom())
 
 
+def format_message_box(msg: dict, msg_index: int, total_messages: int, is_latest: bool = False) -> list:
+    """Format a single message as box lines.
+
+    Args:
+        msg: Message dict from Nylas
+        msg_index: 1-based index of this message
+        total_messages: Total messages in thread
+        is_latest: Whether this is the most recent message
+
+    Returns:
+        List of formatted lines (without box borders)
+    """
+    from_list = msg.get("from", [])
+    from_name = from_list[0].get("name", "") if from_list else ""
+    from_email = from_list[0].get("email", "") if from_list else ""
+
+    # Show name, or email if no name, or "Unknown" if both empty
+    from_display = from_name if from_name and from_name != from_email else (from_email or "Unknown")
+
+    date_str = format_date(msg.get("date", 0))
+
+    # Use conversation (plain text) for older messages, full body for latest
+    body = msg.get("conversation", "") or msg.get("snippet", "")
+
+    lines = []
+    label = "📩 LATEST" if is_latest else f"[{msg_index}/{total_messages}]"
+    lines.append(f"{label} From: {from_display} | {date_str}")
+    lines.append("")
+
+    # Wrap body text
+    wrapped_body = wrap_text(body.strip(), width=PANEL_WIDTH - 6)
+    for line in wrapped_body.split("\n"):
+        lines.append(line)
+
+    return lines
+
+
 def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None, total_threads: int = None,
                 drafted_count: int = 0, skipped_count: int = 0) -> None:
-    """Show single thread details with optional draft."""
+    """Show single thread details with optional draft.
+
+    Displays ALL messages in the thread with visual separation.
+    Messages are sorted oldest to newest (most recent at bottom).
+    """
     thread = nylas_get(f"/threads/{thread_id}")
 
     if not thread:
@@ -326,28 +369,9 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         print("Error: Could not fetch messages", file=sys.stderr)
         sys.exit(1)
 
-    # Sort by date (newest last)
+    # Sort by date (oldest first, newest last at bottom)
     messages = sorted(messages, key=lambda m: m.get("date", 0))
     latest = messages[-1]
-    latest_id = latest.get("id", message_ids[-1])
-
-    # Fetch latest message directly to get HTML body (clean_messages doesn't include it)
-    latest_full = nylas_get(f"/messages/{latest_id}")
-
-    # Get recipient info for reply
-    from_list = latest.get("from", [])
-    to_list = latest.get("to", [])
-    cc_list = latest.get("cc", [])
-
-    from_str = ", ".join(format_participant(p) for p in from_list)
-    to_str = ", ".join(format_participant(p) for p in to_list)
-    cc_str = ", ".join(format_participant(p) for p in cc_list) if cc_list else None
-
-    date_str = format_date(latest.get("date", 0))
-    # Use HTML body and convert to text to preserve paragraph structure
-    # The 'conversation' field loses formatting; 'body' has HTML with structure
-    html_body = latest_full.get("body", "") if latest_full else ""
-    body = html_to_text(html_body) if html_body else latest.get("snippet", "")
 
     # Build thread position string
     position = ""
@@ -367,11 +391,15 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
     print()
 
     if draft_text:
-        # Abbreviated view when showing draft - ORIGINAL EMAIL box
+        # Abbreviated view when showing draft - show only latest message summary
+        from_list = latest.get("from", [])
+        from_name = from_list[0].get("name", "Unknown") if from_list else "Unknown"
+        date_str = format_date(latest.get("date", 0))
+        body = latest.get("conversation", "") or latest.get("snippet", "")
+
         abbrev_subject = subject[:60] + "..." if len(subject) > 63 else subject
         print(box_top())
         print(box_line(f"📧 ORIGINAL:{position} {abbrev_subject}{progress}"))
-        from_name = from_list[0].get('name', 'Unknown') if from_list else 'Unknown'
         print(box_line(f"From: {from_name} | {date_str}"))
         print(box_separator())
         # Show abbreviated body
@@ -385,23 +413,26 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         print(box_empty())
         print(box_bottom())
     else:
-        # Full view - THREAD box
+        # Full view - THREAD box with ALL messages
         print(box_top())
         print(box_line(f"📧 Thread{position} {subject}{progress}"))
-        print(box_line(f"From: {from_str}"))
-        print(box_line(f"To: {to_str}"))
-        if cc_str:
-            print(box_line(f"CC: {cc_str}"))
-        print(box_line(f"Date: {date_str} | {len(messages)} messages"))
+        print(box_line(f"{len(messages)} messages"))
         print(box_separator())
-        print(box_empty())
-        # Show full body with word wrapping
-        wrapped_body = wrap_text(body, width=PANEL_WIDTH - 6)
-        for line in wrapped_body.split("\n"):
-            print(box_line(line))
-        print(box_empty())
-        print(box_separator())
-        print(box_line("Scroll up for earlier messages"))
+
+        # Display all messages with separators (oldest first, newest at bottom)
+        for i, msg in enumerate(messages, 1):
+            is_latest = (i == len(messages))
+            msg_lines = format_message_box(msg, i, len(messages), is_latest)
+
+            print(box_empty())
+            for line in msg_lines:
+                print(box_line(line))
+            print(box_empty())
+
+            # Add separator between messages (but not after the last one)
+            if i < len(messages):
+                print(box_separator())
+
         print(box_bottom())
 
     # Show draft if provided - YOUR DRAFT box

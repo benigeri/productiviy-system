@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 import warnings
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -289,6 +290,61 @@ def parse_draft_response(response: str) -> dict:
         return {"body": response, "to": [], "cc": [], "subject": ""}
 
 
+def normalize_recipient(recipient) -> dict:
+    """Normalize a recipient to {email, name} format.
+
+    Handles:
+    - String: "email@example.com" -> {"email": "email@example.com", "name": ""}
+    - Dict without name: {"email": "..."} -> {"email": "...", "name": ""}
+    - Dict with name: {"email": "...", "name": "..."} -> unchanged
+    """
+    if isinstance(recipient, str):
+        return {"email": recipient, "name": ""}
+    if isinstance(recipient, dict):
+        return {
+            "email": recipient.get("email", ""),
+            "name": recipient.get("name", "")
+        }
+    return {"email": "", "name": ""}
+
+
+def normalize_draft(draft: dict) -> dict:
+    """Normalize draft to ensure all recipients are in {email, name} format.
+
+    The AI sometimes returns CC as plain strings instead of objects.
+    This ensures consistent format for the Nylas API.
+
+    Returns a new dict (does not mutate the input).
+    """
+    result = dict(draft)  # Shallow copy
+    for field in ["to", "cc", "bcc"]:
+        if field in result and isinstance(result[field], list):
+            result[field] = [normalize_recipient(r) for r in result[field]]
+    return result
+
+
+def atomic_write(filepath: str, content: str) -> None:
+    """Write content to file atomically.
+
+    Writes to a temp file first, then renames. This ensures the output file
+    is never truncated before we're ready to write, allowing safe use of the
+    same file for both --previous-draft input and --output.
+    """
+    dir_path = os.path.dirname(filepath) or "."
+    fd, temp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(temp_path, filepath)
+    except Exception:
+        # Clean up temp file on error
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate an email draft response using AI",
@@ -297,7 +353,11 @@ def main():
 Examples:
   %(prog)s THREAD_ID -d "Let's meet Tuesday at 2pm"
   %(prog)s THREAD_ID -d "Yes, sounds good" --body-only
-  %(prog)s THREAD_ID -d "..." --feedback "Make it shorter" --previous-draft /tmp/draft.json
+  %(prog)s THREAD_ID -d "..." -o /tmp/draft.json
+  %(prog)s THREAD_ID -d "..." --feedback "Make it shorter" --previous-draft /tmp/draft.json -o /tmp/draft.json
+
+Note: Use -o/--output instead of shell redirection (>) when iterating on drafts.
+      This allows safe use of the same file for input and output.
         """,
     )
     parser.add_argument("thread_id", help="Nylas thread ID to respond to")
@@ -315,6 +375,10 @@ Examples:
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Show thread content")
     parser.add_argument("--body-only", action="store_true", help="Output only the email body")
+    parser.add_argument(
+        "-o", "--output",
+        help="Output file path (uses atomic write, safe to use same file as --previous-draft)"
+    )
 
     args = parser.parse_args()
 
@@ -388,11 +452,19 @@ Examples:
         raw_response = generate_draft(thread_content, args.dictation)
 
     draft = parse_draft_response(raw_response)
+    draft = normalize_draft(draft)
 
+    # Format output
     if args.body_only:
-        print(draft.get("body", raw_response))
+        output_content = draft.get("body", raw_response)
     else:
-        print(json.dumps(draft, indent=2))
+        output_content = json.dumps(draft, indent=2)
+
+    # Write to file or stdout
+    if args.output:
+        atomic_write(args.output, output_content + "\n")
+    else:
+        print(output_content)
 
 
 if __name__ == "__main__":

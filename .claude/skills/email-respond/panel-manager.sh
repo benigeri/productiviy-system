@@ -45,7 +45,7 @@ create_panel() {
     # Create new pane with bash shell (persists after commands)
     # -P prints the new pane's info, -F formats it to just the pane_id
     local new_pane_id
-    new_pane_id=$(tmux split-window -h -p 40 -d -P -F '#{pane_id}')
+    new_pane_id=$(tmux split-window -h -l 102 -d -P -F '#{pane_id}')
 
     # Store the new pane ID for later targeting
     echo "$new_pane_id" > "$PANEL_ID_FILE"
