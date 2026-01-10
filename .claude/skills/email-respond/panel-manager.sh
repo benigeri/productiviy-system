@@ -116,6 +116,8 @@ show_draft() {
     draft_body=$(jq -r '.body' "$draft_file" 2>/dev/null | \
         sed 's/<br[[:space:]]*\/?>/\n/gi' | \
         sed 's/<\/p>/\n\n/gi' | \
+        sed 's/<li[^>]*>/• /gi' | \
+        sed 's/<\/li>/\n/gi' | \
         sed 's/<[^>]*>//g')
 
     if [ -z "$draft_body" ]; then
