@@ -125,7 +125,13 @@ def wrap_text(text: str, width: int = PANEL_WIDTH - 4) -> str:
         for line in lines:
             line_text = " ".join(line.split())
             if line_text:
-                wrapped = textwrap.fill(line_text, width=width)
+                # Use textwrap with break_long_words to prevent overflow
+                wrapped = textwrap.fill(
+                    line_text,
+                    width=width,
+                    break_long_words=True,
+                    break_on_hyphens=True
+                )
                 wrapped_lines.append(wrapped)
             else:
                 wrapped_lines.append("")  # PRESERVE blank lines
@@ -144,7 +150,10 @@ def html_to_text(html: str) -> str:
     text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"</p>\s*", "\n\n", text, flags=re.IGNORECASE)
     text = re.sub(r"</div>\s*", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<li[^>]*>", "• ", text, flags=re.IGNORECASE)  # Add bullets
     text = re.sub(r"</li>\s*", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</ul>\s*", "\n\n", text, flags=re.IGNORECASE)  # Paragraph break after lists
+    text = re.sub(r"</ol>\s*", "\n\n", text, flags=re.IGNORECASE)
     text = re.sub(r"</tr>\s*", "\n", text, flags=re.IGNORECASE)
 
     # Remove all remaining HTML tags
@@ -239,8 +248,11 @@ def format_message_box(msg: dict, msg_index: int, total_messages: int, is_latest
 
     date_str = email_utils.format_date(msg.get("date", 0))
 
-    # Use conversation (plain text) for older messages, full body for latest
-    body = msg.get("conversation", "") or msg.get("snippet", "")
+    # Use body field and convert HTML to plain text, preserving structure
+    body = msg.get("body", "") or msg.get("snippet", "")
+    # Convert HTML to plain text if needed
+    if body and ("<" in body):  # Likely HTML
+        body = html_to_text(body)
 
     lines = []
     label = "📩 LATEST" if is_latest else f"[{msg_index}/{total_messages}]"
@@ -275,8 +287,13 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         print("Error: Thread has no messages", file=sys.stderr)
         sys.exit(1)
 
-    # Fetch and clean all messages
-    messages = email_utils.clean_messages(message_ids)
+    # Fetch all messages with full body (we'll parse HTML ourselves)
+    messages = []
+    for msg_id in message_ids:
+        msg = email_utils.nylas_get(f"/messages/{msg_id}")
+        if msg:
+            messages.append(msg)
+
     if not messages:
         print("Error: Could not fetch messages", file=sys.stderr)
         sys.exit(1)
@@ -307,7 +324,10 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         from_list = latest.get("from", [])
         from_name = from_list[0].get("name", "Unknown") if from_list else "Unknown"
         date_str = email_utils.format_date(latest.get("date", 0))
-        body = latest.get("conversation", "") or latest.get("snippet", "")
+        body = latest.get("body", "") or latest.get("snippet", "")
+        # Convert HTML to plain text if needed
+        if body and ("<" in body):
+            body = html_to_text(body)
 
         abbrev_subject = subject[:60] + "..." if len(subject) > 63 else subject
         print(box_top())
