@@ -62,21 +62,21 @@ def handle_notification_hook(data: dict) -> None:
     if notification_type == "idle_prompt":
         # Claude is waiting for user input
         send_notification(
-            title="🤔 Claude waiting",
+            title="Claude waiting",
             body="Claude needs your input",
             priority=1,  # High priority
         )
     elif notification_type == "permission_prompt":
         # Claude needs permission for a tool
         send_notification(
-            title="🔐 Permission needed",
+            title="Permission needed",
             body=message or "Claude needs permission",
             priority=1,
         )
     else:
         # Other notification types
         send_notification(
-            title="🔔 Claude notification",
+            title="Claude notification",
             body=message or "Check your session",
             priority=0,
         )
@@ -89,7 +89,7 @@ def handle_stop_hook(data: dict) -> None:
     project_name = os.path.basename(cwd) if cwd else "session"
 
     send_notification(
-        title="✅ Claude finished",
+        title="Claude finished",
         body=f"Task complete in {project_name}",
         priority=0,  # Normal priority
     )
