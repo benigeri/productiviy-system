@@ -65,10 +65,11 @@ async function getMessages(messageIds: string[]): Promise<Message[]> {
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: { thread?: string };
+  searchParams: Promise<{ thread?: string }>;
 }) {
   const threads = await getThreads();
-  const selectedThreadId = searchParams.thread;
+  const params = await searchParams;
+  const selectedThreadId = params.thread;
 
   let messages: Message[] = [];
   let selectedThread: Thread | undefined;
