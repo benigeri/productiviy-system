@@ -6,12 +6,10 @@ Shows threads, single thread details, and drafts in a clean format.
 
 import argparse
 import os
-import re
 import sys
 import textwrap
 import unicodedata
 import warnings
-from html import unescape
 from typing import Dict, List, Optional
 
 warnings.filterwarnings("ignore", message=".*OpenSSL.*")
@@ -140,49 +138,6 @@ def wrap_text(text: str, width: int = PANEL_WIDTH - 4) -> str:
     return "\n\n".join(wrapped_paragraphs)
 
 
-def html_to_text(html: str) -> str:
-    """Convert HTML to plain text while preserving paragraph structure."""
-    if not html:
-        return ""
-
-    # Remove style and script tags with their contents
-    text = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.IGNORECASE | re.DOTALL)
-
-    # Replace block elements with newlines to preserve structure
-    text = re.sub(r"</div>\s*<div", "</div>\n<div", text, flags=re.IGNORECASE)
-    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</p>\s*", "\n\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</div>\s*", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"<li[^>]*>", "• ", text, flags=re.IGNORECASE)  # Add bullets
-    text = re.sub(r"</li>\s*", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</ul>\s*", "\n\n", text, flags=re.IGNORECASE)  # Paragraph break after lists
-    text = re.sub(r"</ol>\s*", "\n\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</tr>\s*", "\n", text, flags=re.IGNORECASE)
-
-    # Remove all remaining HTML tags
-    text = re.sub(r"<[^>]+>", "", text)
-
-    # Decode HTML entities
-    text = unescape(text)
-
-    # Remove zero-width spaces and other invisible Unicode characters
-    text = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", text)
-
-    # Normalize whitespace within lines (but preserve newlines)
-    lines = text.split("\n")
-    lines = [" ".join(line.split()) for line in lines]
-    text = "\n".join(lines)
-
-    # Collapse multiple blank lines into double newlines (paragraph breaks)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    # Strip leading/trailing whitespace
-    text = text.strip()
-
-    return text
-
-
 def list_threads() -> None:
     """List all threads with to-respond-paul label."""
     threads = email_utils.nylas_get(f"/threads?in={TO_RESPOND_LABEL}&limit=20")
@@ -252,11 +207,8 @@ def format_message_box(msg: dict, msg_index: int, total_messages: int, is_latest
 
     date_str = email_utils.format_date(msg.get("date", 0))
 
-    # Use body field and convert HTML to plain text, preserving structure
-    body = msg.get("body", "") or msg.get("snippet", "")
-    # Convert HTML to plain text if needed
-    if body and ("<" in body):  # Likely HTML
-        body = html_to_text(body)
+    # Use conversation field from Clean Messages API (plain text, no HTML)
+    body = msg.get("conversation", "") or msg.get("snippet", "")
 
     lines = []
     label = "📩 LATEST" if is_latest else f"[{msg_index}/{total_messages}]"
@@ -291,13 +243,8 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         print("Error: Thread has no messages", file=sys.stderr)
         sys.exit(1)
 
-    # Fetch all messages with full body (we'll parse HTML ourselves)
-    messages = []
-    for msg_id in message_ids:
-        msg = email_utils.nylas_get(f"/messages/{msg_id}")
-        if msg:
-            messages.append(msg)
-
+    # Fetch and clean all messages (with markdown formatting)
+    messages = email_utils.clean_messages(message_ids)
     if not messages:
         print("Error: Could not fetch messages", file=sys.stderr)
         sys.exit(1)
@@ -328,10 +275,8 @@ def show_thread(thread_id: str, draft_text: str = None, thread_index: int = None
         from_list = latest.get("from", [])
         from_name = from_list[0].get("name", "Unknown") if from_list else "Unknown"
         date_str = email_utils.format_date(latest.get("date", 0))
-        body = latest.get("body", "") or latest.get("snippet", "")
-        # Convert HTML to plain text if needed
-        if body and ("<" in body):
-            body = html_to_text(body)
+        # Use conversation field from Clean Messages API (plain text, no HTML)
+        body = latest.get("conversation", "") or latest.get("snippet", "")
 
         abbrev_subject = subject[:60] + "..." if len(subject) > 63 else subject
         print(box_top())
