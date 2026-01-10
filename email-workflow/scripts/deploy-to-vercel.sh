@@ -30,6 +30,7 @@ echo ""
 # Deploy to Vercel with environment variables
 echo "📦 Deploying to Vercel..."
 vercel deploy \
+  --yes \
   --env NYLAS_API_KEY="${NYLAS_API_KEY}" \
   --env NYLAS_GRANT_ID="${NYLAS_GRANT_ID}" \
   --env BRAINTRUST_API_KEY="${BRAINTRUST_API_KEY}" \
