@@ -8,8 +8,8 @@ const DraftRequestSchema = z.object({
   subject: z.string(),
   messages: z.array(
     z.object({
-      from: z.array(z.object({ name: z.string(), email: z.string() })),
-      to: z.array(z.object({ name: z.string(), email: z.string() })),
+      from: z.array(z.object({ name: z.string().optional(), email: z.string() })),
+      to: z.array(z.object({ name: z.string().optional(), email: z.string() })),
       date: z.number(),
       body: z.string(),
     })
