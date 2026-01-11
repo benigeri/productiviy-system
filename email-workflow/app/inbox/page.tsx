@@ -48,7 +48,7 @@ async function getMessages(messageIds: string[]): Promise<Message[]> {
       },
       body: JSON.stringify({
         message_id: messageIds,
-        ignore_images: true,
+        ignore_images: false, // Changed: don't ignore images to avoid 'span' text
         html_as_markdown: true,
       }),
       cache: 'no-store',
