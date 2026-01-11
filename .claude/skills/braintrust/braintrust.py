@@ -58,20 +58,20 @@ class BraintrustAPI:
             print(f"Error: Network error - {e.reason}", file=sys.stderr)
             sys.exit(1)
 
-    def list_prompts(self, project_name: Optional[str] = None) -> List[Dict]:
+    def list_prompts(self, project_id: Optional[str] = None) -> List[Dict]:
         """List all prompts, optionally filtered by project."""
         params = {}
-        if project_name:
-            params["project_name"] = project_name
+        if project_id:
+            params["project_id"] = project_id
 
         response = self._make_request("GET", "/prompt", params=params)
         return response.get("objects", [])
 
-    def get_prompt_by_slug(self, slug: str, project_name: str) -> Optional[Dict]:
-        """Get a prompt by slug and project name."""
-        prompts = self.list_prompts(project_name)
+    def get_prompt_by_slug(self, slug: str, project_id: str) -> Optional[Dict]:
+        """Get a prompt by slug and project ID."""
+        prompts = self.list_prompts(project_id)
         for prompt in prompts:
-            if prompt.get("slug") == slug and prompt.get("project_name") == project_name:
+            if prompt.get("slug") == slug:
                 return prompt
         return None
 
@@ -79,14 +79,14 @@ class BraintrustAPI:
         self,
         slug: str,
         name: str,
-        project_name: str,
+        project_id: str,
         prompt_data: Dict,
     ) -> Dict:
         """Create a new prompt."""
         data = {
             "slug": slug,
             "name": name,
-            "project_name": project_name,
+            "project_id": project_id,
             "prompt_data": prompt_data,
         }
         return self._make_request("POST", "/prompt", data=data)
@@ -109,29 +109,27 @@ class BraintrustAPI:
 
 def create_command(args, api: BraintrustAPI) -> None:
     """Create a new prompt."""
-    project_name = args.project or os.getenv("BRAINTRUST_PROJECT_NAME")
-    if not project_name:
-        print("Error: --project or BRAINTRUST_PROJECT_NAME required", file=sys.stderr)
+    project_id = args.project or os.getenv("BRAINTRUST_PROJECT_ID")
+    if not project_id:
+        print("Error: --project or BRAINTRUST_PROJECT_ID required", file=sys.stderr)
         sys.exit(1)
 
     # Check if prompt already exists
-    existing = api.get_prompt_by_slug(args.slug, project_name)
+    existing = api.get_prompt_by_slug(args.slug, project_id)
     if existing:
-        print(f"Error: Prompt '{args.slug}' already exists in project '{project_name}'", file=sys.stderr)
+        print(f"Error: Prompt '{args.slug}' already exists in project '{project_id}'", file=sys.stderr)
         print(f"Use 'update' command to modify it.", file=sys.stderr)
         sys.exit(1)
 
     # Build prompt_data
-    prompt_data = {"prompt": {}}
+    prompt_data = {"prompt": {"type": "chat", "messages": []}}
 
     if args.system:
-        prompt_data["prompt"]["messages"] = [
+        prompt_data["prompt"]["messages"].append(
             {"role": "system", "content": args.system}
-        ]
+        )
 
     if args.user:
-        if "messages" not in prompt_data["prompt"]:
-            prompt_data["prompt"]["messages"] = []
         prompt_data["prompt"]["messages"].append(
             {"role": "user", "content": args.user}
         )
@@ -140,26 +138,26 @@ def create_command(args, api: BraintrustAPI) -> None:
     result = api.create_prompt(
         slug=args.slug,
         name=args.name,
-        project_name=project_name,
+        project_id=project_id,
         prompt_data=prompt_data,
     )
 
-    print(f"✓ Created prompt '{args.slug}' in project '{project_name}'")
+    print(f"✓ Created prompt '{args.slug}' in project '{project_id}'")
     print(f"  ID: {result.get('id')}")
-    print(f"  View at: https://www.braintrust.dev/app/{project_name}/prompts/{args.slug}")
+    print(f"  View at: https://www.braintrust.dev/app/project/{project_id}/prompts/{args.slug}")
 
 
 def update_command(args, api: BraintrustAPI) -> None:
     """Update an existing prompt."""
-    project_name = args.project or os.getenv("BRAINTRUST_PROJECT_NAME")
-    if not project_name:
-        print("Error: --project or BRAINTRUST_PROJECT_NAME required", file=sys.stderr)
+    project_id = args.project or os.getenv("BRAINTRUST_PROJECT_ID")
+    if not project_id:
+        print("Error: --project or BRAINTRUST_PROJECT_ID required", file=sys.stderr)
         sys.exit(1)
 
     # Get existing prompt
-    existing = api.get_prompt_by_slug(args.slug, project_name)
+    existing = api.get_prompt_by_slug(args.slug, project_id)
     if not existing:
-        print(f"Error: Prompt '{args.slug}' not found in project '{project_name}'", file=sys.stderr)
+        print(f"Error: Prompt '{args.slug}' not found in project '{project_id}'", file=sys.stderr)
         print(f"Use 'create' command to create it.", file=sys.stderr)
         sys.exit(1)
 
@@ -184,16 +182,16 @@ def update_command(args, api: BraintrustAPI) -> None:
         name=args.name,
     )
 
-    print(f"✓ Updated prompt '{args.slug}' in project '{project_name}'")
+    print(f"✓ Updated prompt '{args.slug}' in project '{project_id}'")
     print(f"  ID: {result.get('id')}")
-    print(f"  View at: https://www.braintrust.dev/app/{project_name}/prompts/{args.slug}")
+    print(f"  View at: https://www.braintrust.dev/app/project/{project_id}/prompts/{args.slug}")
 
 
 def list_command(args, api: BraintrustAPI) -> None:
     """List all prompts."""
-    project_name = args.project or os.getenv("BRAINTRUST_PROJECT_NAME")
+    project_id = args.project or os.getenv("BRAINTRUST_PROJECT_ID")
 
-    prompts = api.list_prompts(project_name)
+    prompts = api.list_prompts(project_id)
 
     if not prompts:
         print("No prompts found")
@@ -217,15 +215,15 @@ def list_command(args, api: BraintrustAPI) -> None:
 
 def generate_command(args, api: BraintrustAPI) -> None:
     """Generate TypeScript usage code for a prompt."""
-    project_name = args.project or os.getenv("BRAINTRUST_PROJECT_NAME")
-    if not project_name:
-        print("Error: --project or BRAINTRUST_PROJECT_NAME required", file=sys.stderr)
+    project_id = args.project or os.getenv("BRAINTRUST_PROJECT_ID")
+    if not project_id:
+        print("Error: --project or BRAINTRUST_PROJECT_ID required", file=sys.stderr)
         sys.exit(1)
 
     # Get prompt to verify it exists
-    existing = api.get_prompt_by_slug(args.slug, project_name)
+    existing = api.get_prompt_by_slug(args.slug, project_id)
     if not existing:
-        print(f"Error: Prompt '{args.slug}' not found in project '{project_name}'", file=sys.stderr)
+        print(f"Error: Prompt '{args.slug}' not found in project '{project_id}'", file=sys.stderr)
         sys.exit(1)
 
     # Extract variables from prompt template
@@ -258,7 +256,7 @@ dotenv.config();
 
 const {function_name} = wrapTraced(async function {function_name}(input: {{ {", ".join(f"{v}: string" for v in sorted(variables))} }}) {{
   return await invoke({{
-    projectName: process.env.BRAINTRUST_PROJECT_NAME,
+    projectName: process.env.BRAINTRUST_PROJECT_ID,
     slug: '{args.slug}',
     input: {{ {input_fields} }},
   }});
@@ -266,7 +264,7 @@ const {function_name} = wrapTraced(async function {function_name}(input: {{ {", 
 
 // Example usage
 (async () => {{
-  initLogger({{ projectName: process.env.BRAINTRUST_PROJECT_NAME }});
+  initLogger({{ projectName: process.env.BRAINTRUST_PROJECT_ID }});
   await login({{ apiKey: process.env.BRAINTRUST_API_KEY }});
 
   const result = await {function_name}({{
@@ -292,14 +290,14 @@ def main():
     create_parser = subparsers.add_parser("create", help="Create a new prompt")
     create_parser.add_argument("--slug", required=True, help="Prompt slug (unique identifier)")
     create_parser.add_argument("--name", required=True, help="Prompt display name")
-    create_parser.add_argument("--project", help="Project name (or use BRAINTRUST_PROJECT_NAME)")
+    create_parser.add_argument("--project", help="Project name (or use BRAINTRUST_PROJECT_ID)")
     create_parser.add_argument("--system", help="System message content")
     create_parser.add_argument("--user", help="User message content (supports {{variables}})")
 
     # Update command
     update_parser = subparsers.add_parser("update", help="Update an existing prompt")
     update_parser.add_argument("--slug", required=True, help="Prompt slug to update")
-    update_parser.add_argument("--project", help="Project name (or use BRAINTRUST_PROJECT_NAME)")
+    update_parser.add_argument("--project", help="Project name (or use BRAINTRUST_PROJECT_ID)")
     update_parser.add_argument("--name", help="New prompt display name")
     update_parser.add_argument("--system", help="New system message content")
     update_parser.add_argument("--user", help="New user message content")
@@ -311,7 +309,7 @@ def main():
     # Generate command
     generate_parser = subparsers.add_parser("generate", help="Generate TypeScript usage code")
     generate_parser.add_argument("--slug", required=True, help="Prompt slug")
-    generate_parser.add_argument("--project", help="Project name (or use BRAINTRUST_PROJECT_NAME)")
+    generate_parser.add_argument("--project", help="Project name (or use BRAINTRUST_PROJECT_ID)")
 
     args = parser.parse_args()
 

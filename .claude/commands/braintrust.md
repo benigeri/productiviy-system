@@ -19,4 +19,4 @@ If no specific request provided, ask what they need help with:
 - Setting up Braintrust environment variables
 
 For all operations, ensure BRAINTRUST_API_KEY is set in .env.
-Default project comes from BRAINTRUST_PROJECT_NAME env var (can be overridden with --project flag).
+Default project comes from BRAINTRUST_PROJECT_ID env var (can be overridden with --project flag).

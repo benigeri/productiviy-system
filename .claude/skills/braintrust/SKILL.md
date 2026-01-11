@@ -11,7 +11,7 @@ Add your Braintrust credentials to `.env`:
 ```bash
 # Add to .env
 BRAINTRUST_API_KEY=sk-...
-BRAINTRUST_PROJECT_NAME=Your_Project_Name
+BRAINTRUST_PROJECT_ID=Your_Project_Name
 ```
 
 Get your API key from: https://www.braintrust.dev/app/settings/api-keys
@@ -66,7 +66,7 @@ python3 .claude/skills/braintrust/braintrust.py create \
 **Arguments:**
 - `--slug` (required): Unique identifier for the prompt (e.g., "email-draft")
 - `--name` (required): Display name for the prompt (e.g., "Email Draft Generation")
-- `--project` (optional): Project name (defaults to `BRAINTRUST_PROJECT_NAME` env var)
+- `--project` (optional): Project name (defaults to `BRAINTRUST_PROJECT_ID` env var)
 - `--system` (optional): System message content
 - `--user` (optional): User message content (supports `{{variable}}` syntax)
 
@@ -113,7 +113,7 @@ python3 .claude/skills/braintrust/braintrust.py update \
 
 **Arguments:**
 - `--slug` (required): Slug of the prompt to update
-- `--project` (optional): Project name (defaults to `BRAINTRUST_PROJECT_NAME` env var)
+- `--project` (optional): Project name (defaults to `BRAINTRUST_PROJECT_ID` env var)
 - `--name` (optional): New display name
 - `--system` (optional): New system message
 - `--user` (optional): New user message
@@ -202,7 +202,7 @@ python3 .claude/skills/braintrust/braintrust.py generate \
 
 **Arguments:**
 - `--slug` (required): Slug of the prompt to generate code for
-- `--project` (optional): Project name (defaults to `BRAINTRUST_PROJECT_NAME` env var)
+- `--project` (optional): Project name (defaults to `BRAINTRUST_PROJECT_ID` env var)
 
 **Examples:**
 
@@ -228,7 +228,7 @@ dotenv.config();
 
 const emailDraft = wrapTraced(async function emailDraft(input: { topic: string }) {
   return await invoke({
-    projectName: process.env.BRAINTRUST_PROJECT_NAME,
+    projectName: process.env.BRAINTRUST_PROJECT_ID,
     slug: 'email-draft',
     input: { topic: input.topic || '' },
   });
@@ -236,7 +236,7 @@ const emailDraft = wrapTraced(async function emailDraft(input: { topic: string }
 
 // Example usage
 (async () => {
-  initLogger({ projectName: process.env.BRAINTRUST_PROJECT_NAME });
+  initLogger({ projectName: process.env.BRAINTRUST_PROJECT_ID });
   await login({ apiKey: process.env.BRAINTRUST_API_KEY });
 
   const result = await emailDraft({
@@ -252,13 +252,13 @@ const emailDraft = wrapTraced(async function emailDraft(input: { topic: string }
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `BRAINTRUST_API_KEY` | Yes | Your Braintrust API key (starts with `sk-`) |
-| `BRAINTRUST_PROJECT_NAME` | No | Default project name (can override with `--project` flag) |
+| `BRAINTRUST_PROJECT_ID` | No | Default project name (can override with `--project` flag) |
 
 **Setup:**
 ```bash
 # Add to .env file
 echo "BRAINTRUST_API_KEY=sk-your-key-here" >> .env
-echo "BRAINTRUST_PROJECT_NAME=Your_Project_Name" >> .env
+echo "BRAINTRUST_PROJECT_ID=Your_Project_Name" >> .env
 ```
 
 **Get API Key:**
@@ -306,12 +306,12 @@ The script uses the Braintrust REST API v1:
 echo "BRAINTRUST_API_KEY=sk-your-key-here" >> .env
 ```
 
-### Error: --project or BRAINTRUST_PROJECT_NAME required
+### Error: --project or BRAINTRUST_PROJECT_ID required
 
 **Solution:** Either set the env var or use `--project` flag:
 ```bash
 # Option 1: Set env var
-echo "BRAINTRUST_PROJECT_NAME=Your_Project" >> .env
+echo "BRAINTRUST_PROJECT_ID=Your_Project" >> .env
 
 # Option 2: Use flag
 python3 .claude/skills/braintrust/braintrust.py create --project "Your_Project" ...
