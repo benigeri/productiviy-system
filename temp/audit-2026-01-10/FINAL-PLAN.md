@@ -35,8 +35,8 @@ This is a **cross-repo standardization project** where we'll update 4 repos to u
 |-------|------|--------|-------|
 | **Phase 1** | productiviy-system | ✅ DONE | Create templates folder |
 | **Phase 2** | deep-research-archive | ✅ DONE | Beads migration + CLAUDE.md update |
-| **Phase 3** | productiviy-system | ⏳ NOT STARTED | Beads migration + CLAUDE.md update |
-| **Phase 4** | recruiting-docs | ⏳ NOT STARTED | Init beads + hooks + CLAUDE.md |
+| **Phase 3** | productiviy-system | ✅ DONE | Beads migration + CLAUDE.md update |
+| **Phase 4** | recruiting-docs | ✅ DONE | Init beads + hooks + CLAUDE.md |
 | **Phase 5** | product-marketing-bot | ⏳ NOT STARTED | Beads migration + hooks + CLAUDE.md |
 | **Phase 6** | All repos | ⏳ NOT STARTED | Final verification & testing |
 
