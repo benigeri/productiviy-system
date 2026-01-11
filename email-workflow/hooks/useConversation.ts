@@ -9,6 +9,9 @@ import {
   updateDraft as updateDraftInStorage,
 } from '../lib/conversation';
 
+const STORAGE_QUOTA_EXCEEDED_MESSAGE =
+  'Storage limit reached. Old conversations were pruned. Please try again.';
+
 export function useConversation(threadId: string) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -24,9 +27,7 @@ export function useConversation(threadId: string) {
   const addMessage = (role: 'user' | 'assistant', content: string) => {
     const updated = addMessageToStorage(threadId, role, content);
     if (updated === null) {
-      setStorageWarning(
-        'Storage limit reached. Old conversations were pruned. Please try again.'
-      );
+      setStorageWarning(STORAGE_QUOTA_EXCEEDED_MESSAGE);
     } else {
       setConversation(updated);
       setStorageWarning(null);
@@ -36,9 +37,7 @@ export function useConversation(threadId: string) {
   const updateDraft = (draft: string) => {
     const updated = updateDraftInStorage(threadId, draft);
     if (updated === null) {
-      setStorageWarning(
-        'Storage limit reached. Old conversations were pruned. Please try again.'
-      );
+      setStorageWarning(STORAGE_QUOTA_EXCEEDED_MESSAGE);
     } else {
       setConversation(updated);
       setStorageWarning(null);
