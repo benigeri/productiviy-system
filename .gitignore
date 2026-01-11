@@ -4,5 +4,8 @@ __pycache__/
 .venv/
 venv/
 
+# Temporary files and working directories
+temp/
+
 # Beads auto-generates this - we use CLAUDE.md instead
 AGENTS.md
