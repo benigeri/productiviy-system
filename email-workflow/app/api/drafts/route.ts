@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { invoke } from 'braintrust';
 import { z } from 'zod';
 
-// Request validation schema
+// Request validation schemas
 const DraftRequestSchema = z.object({
   threadId: z.string().min(1),
   subject: z.string(),
@@ -15,6 +15,15 @@ const DraftRequestSchema = z.object({
     })
   ),
   instructions: z.string().min(1),
+  latestMessageId: z.string(),
+});
+
+const SaveDraftSchema = z.object({
+  threadId: z.string().min(1),
+  subject: z.string(),
+  draftBody: z.string().min(1),
+  to: z.array(z.object({ name: z.string().optional(), email: z.string() })),
+  cc: z.array(z.object({ name: z.string().optional(), email: z.string() })),
   latestMessageId: z.string(),
 });
 
@@ -59,6 +68,44 @@ export async function POST(request: Request) {
       },
     });
 
+    // Return draft body only - no Gmail save or label updates yet
+    return NextResponse.json({
+      success: true,
+      body: draftBody,
+    });
+  } catch (error) {
+    console.error('Draft generation error:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString(),
+    });
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error ? error.message : 'Failed to generate draft',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    // Parse and validate request
+    const body = await request.json();
+    const result = SaveDraftSchema.safeParse(body);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Invalid request', details: result.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const { threadId, subject, draftBody, to, cc, latestMessageId } =
+      result.data;
+
     // Save draft to Gmail via Nylas
     const draftRes = await fetch(
       `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/drafts`,
@@ -71,8 +118,8 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           subject: `Re: ${subject}`,
           body: draftBody,
-          to: lastMessage.from,
-          cc: lastMessage.to.slice(1), // Exclude first recipient (sender)
+          to,
+          cc,
           reply_to_message_id: latestMessageId,
         }),
       }
@@ -94,8 +141,8 @@ export async function POST(request: Request) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           threadId,
-          addLabels: ['Label_215'],
-          removeLabels: ['Label_139'],
+          addLabels: ['Label_215'], // drafted label
+          removeLabels: ['Label_139'], // to-respond-paul label
         }),
       }
     );
@@ -103,10 +150,9 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       draftId: draft.data.id,
-      body: draftBody,
     });
   } catch (error) {
-    console.error('Draft generation error:', {
+    console.error('Draft save error:', {
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
       timestamp: new Date().toISOString(),
@@ -114,8 +160,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        error:
-          error instanceof Error ? error.message : 'Failed to generate draft',
+        error: error instanceof Error ? error.message : 'Failed to save draft',
       },
       { status: 500 }
     );

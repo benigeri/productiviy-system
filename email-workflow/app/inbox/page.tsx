@@ -87,7 +87,7 @@ export default async function InboxPage({
       {!selectedThreadId ? (
         <ThreadList threads={threads} />
       ) : (
-        <ThreadDetail thread={selectedThread!} messages={messages} />
+        <ThreadDetail thread={selectedThread!} messages={messages} allThreads={threads} />
       )}
     </div>
   );
