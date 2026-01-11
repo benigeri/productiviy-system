@@ -17,6 +17,9 @@ jobs:
         with:
           version: latest
 
+      - name: Remove deno.lock files (unsupported by Edge Runtime)
+        run: find supabase/functions -name "deno.lock" -delete
+
       - name: Deploy telegram-webhook function
         run: supabase functions deploy telegram-webhook --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
         env:
@@ -24,5 +27,15 @@ jobs:
 
       - name: Deploy create-issue function
         run: supabase functions deploy create-issue --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy slack-webhook function
+        run: supabase functions deploy slack-webhook --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy nylas-webhook function
+        run: supabase functions deploy nylas-webhook --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
