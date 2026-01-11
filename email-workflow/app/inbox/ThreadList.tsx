@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { ComposeFAB } from './ComposeFAB';
 
 interface Thread {
   id: string;
@@ -54,6 +55,9 @@ export function ThreadList({ threads }: { threads: Thread[] }) {
           ))
         )}
       </div>
+
+      {/* Compose FAB */}
+      <ComposeFAB />
     </div>
   );
 }
