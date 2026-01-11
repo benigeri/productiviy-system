@@ -1,6 +1,20 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+// Type definitions for Nylas API responses
+interface NylasGrantResponse {
+  data: {
+    email: string;
+    id: string;
+  };
+}
+
+interface NylasDraftResponse {
+  data: {
+    id: string;
+  };
+}
+
 const SaveDraftSchema = z.object({
   threadId: z.string().min(1),
   subject: z.string(),
@@ -40,7 +54,9 @@ export async function POST(request: Request) {
       console.warn('Failed to fetch grant details, using CC as-is');
     }
 
-    const grant = grantRes.ok ? await grantRes.json() : null;
+    const grant: NylasGrantResponse | null = grantRes.ok
+      ? await grantRes.json()
+      : null;
     const userEmail = grant?.data?.email;
 
     // Filter current user from CC to avoid duplicate recipients
@@ -75,9 +91,11 @@ export async function POST(request: Request) {
 
     // Parallelize draft save JSON parsing and label update
     // Use Promise.allSettled to run both independently
-    const [draftResult, labelResult] = await Promise.allSettled([
+    const [draftResult, labelResult] = await Promise.allSettled<
+      [Promise<NylasDraftResponse>, Promise<{ success: boolean }>]
+    >([
       // Parse draft JSON
-      draftRes.json(),
+      draftRes.json() as Promise<NylasDraftResponse>,
 
       // Update thread labels with retry logic (runs in parallel)
       (async () => {

@@ -37,6 +37,7 @@ export function ThreadDetail({
     clear: clearConversation,
     messages: conversationMessages,
     currentDraft: storedDraft,
+    storageWarning,
   } = useConversation(thread.id);
 
   const [instructions, setInstructions] = useState('');
@@ -49,7 +50,7 @@ export function ThreadDetail({
   // Sync draft state with storedDraft when thread changes (prevents stale drafts)
   useEffect(() => {
     setDraft(storedDraft || '');
-  }, [storedDraft]);
+  }, [storedDraft, thread.id]);
 
   async function generateDraft() {
     setLoading(true);
@@ -281,6 +282,13 @@ export function ThreadDetail({
       {error && (
         <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
           {error}
+        </div>
+      )}
+
+      {/* Storage warning message */}
+      {storageWarning && (
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-700 text-sm">
+          {storageWarning}
         </div>
       )}
 

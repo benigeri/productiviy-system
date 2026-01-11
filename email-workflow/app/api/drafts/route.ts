@@ -43,10 +43,22 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate required environment variables
+    const projectName = process.env.BRAINTRUST_PROJECT_NAME;
+    const draftSlug = process.env.BRAINTRUST_DRAFT_SLUG;
+
+    if (!projectName || !draftSlug) {
+      console.error('Missing required Braintrust configuration');
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
     // Generate draft via Braintrust
     const draftBody = await invoke({
-      projectName: process.env.BRAINTRUST_PROJECT_NAME!,
-      slug: process.env.BRAINTRUST_DRAFT_SLUG!,
+      projectName,
+      slug: draftSlug,
       input: {
         thread_subject: subject,
         messages: messages.map((m) => ({
