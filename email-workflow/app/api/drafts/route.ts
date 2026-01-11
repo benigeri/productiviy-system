@@ -18,6 +18,44 @@ const DraftRequestSchema = z.object({
   latestMessageId: z.string(),
 });
 
+// Format thread history as Gmail-style quoted text
+function formatThreadHistory(
+  messages: Array<{
+    from: Array<{ name?: string; email: string }>;
+    date: number;
+    body: string;
+  }>,
+  currentUserEmail: string
+): string {
+  return messages
+    .filter((m) => m.from[0]?.email !== currentUserEmail) // Skip own messages
+    .sort((a, b) => a.date - b.date) // Chronological order
+    .map((msg) => {
+      const sender = msg.from[0];
+      const date = new Date(msg.date * 1000);
+      const dateStr = date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+      const timeStr = date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+
+      // Quote each line with >
+      const quotedLines = msg.body
+        .split('\n')
+        .map((line) => `> ${line}`)
+        .join('\n');
+
+      return `On ${dateStr} at ${timeStr} ${sender.name || sender.email} <${sender.email}> wrote:\n${quotedLines}`;
+    })
+    .join('\n\n');
+}
+
 export async function POST(request: Request) {
   try {
     // Parse and validate request
@@ -71,10 +109,19 @@ export async function POST(request: Request) {
       },
     });
 
+    // Format thread history
+    const currentUserEmail = process.env.USER_EMAIL || process.env.NYLAS_USER_EMAIL || '';
+    const threadHistory = formatThreadHistory(messages, currentUserEmail);
+
+    // Combine AI response with quoted history
+    const fullBody = threadHistory
+      ? `${draftBody}\n\n${threadHistory}`
+      : draftBody;
+
     // Return draft body only - no Gmail save or label updates yet
     return NextResponse.json({
       success: true,
-      body: draftBody,
+      body: fullBody,
     });
   } catch (error) {
     console.error('Draft generation error:', {
