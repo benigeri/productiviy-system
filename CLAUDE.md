@@ -75,24 +75,37 @@ deno test
 
 ---
 
-## Todo Tracking (Beads Process)
+## Task Tracking (Beads)
 
-### When Starting a Task:
-1. Mark the todo as `in_progress`
-2. Only one task should be `in_progress` at a time
+**See `BEADS-WORKFLOW.md` for the complete guide.** Here's the essential workflow:
 
-### While Working:
-- Keep todos updated as you discover sub-tasks
-- Add new todos if scope expands
+### Daily Cycle
+```bash
+bd ready                              # Find unblocked work
+bd update <id> --status in_progress   # Start working
+# ... do the work ...
+bd close <id> --reason "What you did" # Mark complete
+bd sync                               # Commit to git
+```
 
-### When Finishing:
-1. **Verify your work** - Test that changes actually work:
-   - For code: run tests, verify functionality
-   - For config/credentials: test the connection/integration
-   - For setup tasks: confirm the service responds correctly
-2. Ensure all tests pass
-3. Create PR and push
-4. Mark todo as `completed` only **after PR is merged AND work is verified**
+### For Big Features (3+ tasks)
+1. **Create Epic:** `bd create "Feature Name" --type epic --priority 1`
+2. **Create Tasks:** `bd create "Task" --priority 1` (repeat for each)
+3. **Link to Epic:** `bd dep add <task-id> <epic-id>` (each task blocks epic)
+4. **Work Through Tasks:** Use `bd ready` to see unblocked work
+5. **Close Epic:** When all tasks done, `bd close <epic-id>`
+
+### Integration With Compound Engineering
+- **Plan Mode:** Put the plan in the Epic description (no separate plan files)
+- **Work Mode:** Pick Beads from `bd ready`, execute normally
+- **After Work:** Close Bead, sync, push
+
+### Key Principles
+- Use `bd ready` daily to find work (not `bd list`)
+- Mark work `in_progress` so you know what's active
+- Write close reasons documenting what you did
+- Sync after closing to commit Beads to git
+- Epic descriptions contain plans (no separate files needed)
 
 ---
 
