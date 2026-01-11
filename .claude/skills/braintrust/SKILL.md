@@ -11,8 +11,14 @@ Add your Braintrust credentials to `.env`:
 ```bash
 # Add to .env
 BRAINTRUST_API_KEY=sk-...
-BRAINTRUST_PROJECT_ID=Your_Project_Name
+BRAINTRUST_PROJECT_ID=183dc023-466f-4dd9-8a33-ccfdf798a0e5  # UUID from project settings
+BRAINTRUST_PROJECT_NAME=2026_01 Email Flow  # Human-readable name from dashboard
 ```
+
+**IMPORTANT: Project ID vs Project Name**
+- **Project ID** (UUID like `183dc023-...`): Used by this CLI tool for REST API operations (create, update, list). Find it in your Braintrust project settings URL or project details.
+- **Project Name** (string like `2026_01 Email Flow`): Used by the Braintrust SDK's `invoke()` function for testing prompts. This is the human-readable name you see in the dashboard.
+- **Both are required**: Set both environment variables for full functionality.
 
 Get your API key from: https://www.braintrust.dev/app/settings/api-keys
 
@@ -252,17 +258,25 @@ const emailDraft = wrapTraced(async function emailDraft(input: { topic: string }
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `BRAINTRUST_API_KEY` | Yes | Your Braintrust API key (starts with `sk-`) |
-| `BRAINTRUST_PROJECT_ID` | No | Default project name (can override with `--project` flag) |
+| `BRAINTRUST_PROJECT_ID` | For create/update/list | Default project UUID for REST API operations (can override with `--project` flag) |
+| `BRAINTRUST_PROJECT_NAME` | For test/invoke | Default project name for SDK invoke operations (can override with `--project-name` flag) |
 
 **Setup:**
 ```bash
 # Add to .env file
 echo "BRAINTRUST_API_KEY=sk-your-key-here" >> .env
-echo "BRAINTRUST_PROJECT_ID=Your_Project_Name" >> .env
+echo "BRAINTRUST_PROJECT_ID=183dc023-466f-4dd9-8a33-ccfdf798a0e5" >> .env
+echo "BRAINTRUST_PROJECT_NAME=2026_01 Email Flow" >> .env
 ```
 
 **Get API Key:**
 https://www.braintrust.dev/app/settings/api-keys
+
+**Get Project ID:**
+1. Go to your project in Braintrust dashboard
+2. Look at the URL: `https://www.braintrust.dev/app/[org]/p/[project-name]`
+3. Click project settings to see the UUID
+4. Or check the project details page for "Project ID"
 
 ## API Reference
 
@@ -338,8 +352,49 @@ https://www.braintrust.dev/app/settings/api-keys
 
 ### HTTP 404 - Not Found
 
-**Solution:** The project name doesn't exist. Check your projects at:
+**Solution:** The project ID doesn't exist or you don't have access. Verify:
+1. Check the Project ID (UUID) in Braintrust dashboard project settings
+2. Ensure it's the UUID (like `183dc023-...`), not the project name
+3. Verify you have access to this project
+
 https://www.braintrust.dev/app
+
+### Error: Function not found when invoking
+
+**Symptom:** When running generated TypeScript invoke code, you get:
+```
+404: Function not found (searching for {"project_name":"...", "slug":"..."})
+```
+
+**Cause:** The `invoke()` SDK function requires the **project name** (human-readable string), not the **project ID** (UUID).
+
+**Solution:**
+1. Check the project name in Braintrust dashboard (e.g., "2026_01 Email Flow")
+2. The `test` command uses the API to fetch the correct project name
+3. If still failing, verify the prompt exists by running `list` command
+
+**Understanding the Difference:**
+- **REST API** (this CLI tool): Uses `project_id` (UUID like `183dc023-...`)
+- **SDK invoke()**: Uses `projectName` (string like `"2026_01 Email Flow"`)
+- The CLI's `test` command automatically handles this conversion
+
+### Error: No model specified when invoking
+
+**Symptom:** When running invoke, you get:
+```
+400: Bad Request (No model specified. Either specify it in the prompt or as a default)
+```
+
+**Cause:** The Braintrust project doesn't have any AI providers configured.
+
+**Solution:**
+1. Go to Braintrust dashboard: https://www.braintrust.dev/app
+2. Select your project ("2026_01 Email Flow")
+3. Navigate to Settings > AI Providers
+4. Configure Anthropic (or another provider) with your API key
+5. Set a default model for the project (optional but recommended)
+
+Once providers are configured, prompts can use models specified in their configuration or you can pass models directly to `invoke()`.
 
 ## Advanced Usage
 

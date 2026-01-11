@@ -353,6 +353,13 @@ def test_command(args, api: BraintrustAPI) -> None:
         print("Error: --project or BRAINTRUST_PROJECT_ID required", file=sys.stderr)
         sys.exit(1)
 
+    # Get project name for SDK (required for invoke)
+    project_name = args.project_name or os.getenv("BRAINTRUST_PROJECT_NAME")
+    if not project_name:
+        print("Error: --project-name or BRAINTRUST_PROJECT_NAME required for invoke", file=sys.stderr)
+        print("       The SDK requires the project name (e.g., '2026_01 Email Flow'), not the UUID", file=sys.stderr)
+        sys.exit(1)
+
     # Parse input variables from --input arguments
     input_vars = {}
     if args.input:
@@ -373,6 +380,7 @@ def test_command(args, api: BraintrustAPI) -> None:
 
     # Show what would be sent
     print(f"🧪 Testing prompt '{args.slug}'")
+    print(f"   Project: {project_name}")
     print(f"   Model: {prompt_data.get('model', 'default')}")
     print(f"   Input: {json.dumps(input_vars, indent=2)}")
     print()
@@ -388,14 +396,14 @@ def test_command(args, api: BraintrustAPI) -> None:
     # Build input object for code
     input_obj = ", ".join([f'{k}: "{v}"' for k, v in input_vars.items()])
 
-    test_code = f"""import {{ login, invoke, initLogger }} from 'braintrust';
+    test_code = f"""import {{ login, initLogger, invoke }} from 'braintrust';
 
 (async () => {{
-  initLogger({{ projectId: '{project_id}' }});
+  initLogger({{ projectName: '{project_name}' }});
   await login({{ apiKey: process.env.BRAINTRUST_API_KEY }});
 
   const result = await invoke({{
-    projectId: '{project_id}',
+    projectName: '{project_name}',
     slug: '{args.slug}',
     input: {{ {input_obj} }},
   }});
@@ -467,6 +475,7 @@ def main():
     test_parser = subparsers.add_parser("test", help="Test/invoke a prompt with input variables")
     test_parser.add_argument("--slug", required=True, help="Prompt slug to test")
     test_parser.add_argument("--project", help="Project ID (or use BRAINTRUST_PROJECT_ID)")
+    test_parser.add_argument("--project-name", help="Project name for SDK invoke (or use BRAINTRUST_PROJECT_NAME)")
     test_parser.add_argument("--input", action="append", help="Input variable (key=value). Can be used multiple times.")
 
     args = parser.parse_args()
