@@ -8,51 +8,70 @@ This document defines how AI agents should work on this codebase.
 
 1. **Never commit directly to `main`** - All changes go through pull requests
 2. **Test-Driven Development** - Write tests before implementation
-3. **Track progress with todos** - Use the beads process for visibility
+3. **Track progress with Beads** - Use `bd` commands for issue tracking across sessions
 4. **Small, focused PRs** - One feature/fix per PR for easy review
 5. **Verify before closing** - Always test/verify your work before marking a bead complete
 6. **Never use `cd` commands** - Always use absolute paths to avoid breaking the shell session
 
 ---
 
-## Pull Request Workflow
+## Feature Development Workflow
 
-### For Every Change:
+**See `BEADS-WORKFLOW.md` for the complete guide.**
 
-1. **Create a feature branch** from `main`:
+### For Every Feature or Fix:
+
+1. **Find or create work in Beads:**
+   ```bash
+   bd ready                          # Check for existing work
+   # OR create new work:
+   bd create "Add feature X" --type feature --priority 1
+   ```
+
+2. **Create a feature branch** from `main`:
    ```bash
    git checkout main && git pull
    git checkout -b feature/short-description
    ```
 
-2. **Make changes** following TDD (see below)
+3. **Mark Bead as in-progress:**
+   ```bash
+   bd update <bead-id> --status in_progress
+   ```
 
-3. **Test locally** - CRITICAL: Always verify your changes work before pushing:
+4. **Follow TDD** (see Test-Driven Development section below):
+   - Write failing test (Red)
+   - Write code to pass test (Green)
+   - Refactor while keeping tests green
+
+5. **Test locally** - CRITICAL: Always verify your changes work before pushing:
    - For web apps: Start dev server, open in browser, test all modified functionality
    - For APIs: Use curl/Postman to test endpoints
    - For CLI tools: Run the command with various inputs
    - For libraries: Run the test suite
    - **NEVER skip this step** - broken code wastes everyone's time
 
-4. **Commit with clear messages**:
+6. **Commit with clear messages:**
    ```bash
    git commit -m "Brief description of change"
    ```
 
-5. **Push and create PR**:
+7. **Push and create PR:**
    ```bash
    git push -u origin feature/short-description
    ```
    Then create PR with summary of changes.
 
-6. **Run code review** - Use compound engineering review agents to catch issues
+8. **Run code review** - Use compound engineering review agents to catch issues
 
-7. **Wait for review** - User will review diff and approve
+9. **Wait for review** - User will review diff and approve
 
-8. **After merge**, switch back to main:
-   ```bash
-   git checkout main && git pull
-   ```
+10. **After merge**, switch back to main and close Bead:
+    ```bash
+    git checkout main && git pull
+    bd close <bead-id> --reason "What you implemented and verified"
+    bd sync
+    ```
 
 ---
 
@@ -75,37 +94,107 @@ deno test
 
 ---
 
-## Task Tracking (Beads)
+## Creating Plans (MANDATORY)
 
-**See `BEADS-WORKFLOW.md` for the complete guide.** Here's the essential workflow:
+**When you create a plan using plan mode or compound engineering:**
 
-### Daily Cycle
+### 1. Save Plan to Repo
 ```bash
-bd ready                              # Find unblocked work
-bd update <id> --status in_progress   # Start working
-# ... do the work ...
-bd close <id> --reason "What you did" # Mark complete
-bd sync                               # Commit to git
+# Save to plans/ directory with timestamp
+# (Plan content from plan mode conversation)
+cat > plans/2026-01-10-feature-name.md << 'EOF'
+[paste full plan here]
+EOF
+
+git add plans/2026-01-10-feature-name.md
+git commit -m "Add plan for feature name"
+git push
 ```
 
-### For Big Features (3+ tasks)
-1. **Create Epic:** `bd create "Feature Name" --type epic --priority 1`
-2. **Create Tasks:** `bd create "Task" --priority 1` (repeat for each)
-3. **Link to Epic:** `bd dep add <task-id> <epic-id>` (each task blocks epic)
-4. **Work Through Tasks:** Use `bd ready` to see unblocked work
-5. **Close Epic:** When all tasks done, `bd close <epic-id>`
+### 2. Create Epic with FULL Plan in Description
+```bash
+bd create "Feature Name" --type epic --priority 1 \
+  --description "$(cat plans/2026-01-10-feature-name.md)"
+```
 
-### Integration With Compound Engineering
-- **Plan Mode:** Put the plan in the Epic description (no separate plan files)
-- **Work Mode:** Pick Beads from `bd ready`, execute normally
+**Why both?**
+- **Plan file in git**: Versioned, never lost, easy to reference
+- **Epic description**: Single source of truth in Beads, visible in `bd show <epic-id>`
+- Created together = no drift between plan and tracking
+
+### 3. Create Child Beads and Link to Epic
+```bash
+# Break down plan into tasks
+bd create "Task 1: Setup infrastructure" --priority 1
+bd create "Task 2: Implement core logic" --priority 1
+bd create "Task 3: Add tests" --priority 1
+
+# Link each task to epic (task blocks epic)
+bd dep add <task1-id> <epic-id>
+bd dep add <task2-id> <epic-id>
+bd dep add <task3-id> <epic-id>
+
+# Sync everything
+bd sync
+```
+
+---
+
+## Epic Workflow (Big Features with 3+ Tasks)
+
+**Use this pattern for any feature with multiple related tasks:**
+
+### 1. Create Plan (see above)
+- Save to `plans/2026-01-10-feature-name.md`
+- Create Epic with full plan in description
+
+### 2. Break Down Into Tasks
+```bash
+bd create "Task 1" --priority 1
+bd create "Task 2" --priority 1
+bd create "Task 3" --priority 1
+```
+
+### 3. Link Tasks to Epic
+```bash
+bd dep add <task-id> <epic-id>  # Each task blocks the epic
+```
+
+### 4. Work Through Tasks
+```bash
+bd ready                          # Shows unblocked tasks
+bd update <task-id> --status in_progress
+# ... do the work following Feature Development Workflow ...
+bd close <task-id> --reason "What you did"
+bd sync
+```
+
+### 5. Track Progress
+```bash
+bd epic status                    # See completion status
+```
+
+### 6. Close Epic When All Tasks Done
+```bash
+bd ready                          # Epic appears when all tasks closed
+bd close <epic-id> --reason "All features implemented and tested"
+bd sync
+```
+
+---
+
+## Integration With Compound Engineering
+
+- **Plan Mode:** Save plan to `plans/`, create Epic with full plan in description
+- **Work Mode:** Pick Beads from `bd ready`, follow Feature Development Workflow
 - **After Work:** Close Bead, sync, push
 
-### Key Principles
+### Key Beads Principles
 - Use `bd ready` daily to find work (not `bd list`)
 - Mark work `in_progress` so you know what's active
 - Write close reasons documenting what you did
 - Sync after closing to commit Beads to git
-- Epic descriptions contain plans (no separate files needed)
+- **ALWAYS save plans to repo AND Epic description**
 
 ---
 
@@ -393,36 +482,66 @@ Brief description of what this PR does.
 
 ---
 
-## Example Workflow
+## Example Workflows
+
+### Example 1: Add New Feature
 
 ```
 User: "Add voice transcription support"
 
 Agent:
-1. git checkout -b feature/voice-transcription
-2. TodoWrite: mark "Write tests for deepgram.ts" as in_progress
-3. Write deepgram.test.ts with test cases
-4. Run tests → confirm they fail (Red)
-5. Implement deepgram.ts
-6. Run tests → confirm they pass (Green)
-7. Refactor if needed
-8. **Verify**: Test the integration works (e.g., curl the API, check responses)
-9. git commit -m "Add Deepgram voice transcription"
-10. git push -u origin feature/voice-transcription
-11. Create PR with summary
-12. Wait for user to review and merge
-13. TodoWrite: mark task as completed
+1. bd create "Add Deepgram voice transcription" --type feature --priority 1
+   # Creates bead: productiviy-system-abc
+2. git checkout -b feature/voice-transcription
+3. bd update productiviy-system-abc --status in_progress
+4. Write deepgram.test.ts with test cases
+5. Run tests → confirm they fail (Red)
+6. Implement deepgram.ts
+7. Run tests → confirm they pass (Green)
+8. Refactor if needed
+9. **Verify**: Test the integration works (e.g., curl the API, check responses)
+10. git commit -m "Add Deepgram voice transcription"
+11. git push -u origin feature/voice-transcription
+12. Create PR with summary
+13. Wait for user to review and merge
 14. git checkout main && git pull
+15. bd close productiviy-system-abc --reason "Implemented Deepgram transcription with tests"
+16. bd sync
 ```
 
-### Setup Task Example:
+### Example 2: Work on Existing Bead
+
+```
+User: "Continue work on the email workflow epic"
+
+Agent:
+1. bd ready                       # See available tasks
+2. bd show productiviy-system-def # Review task details
+3. git checkout -b feature/email-workflow-feedback
+4. bd update productiviy-system-def --status in_progress
+5. Follow TDD to implement the feature
+6. **Verify**: Test locally
+7. git commit and push
+8. Create PR, wait for merge
+9. git checkout main && git pull
+10. bd close productiviy-system-def --reason "Added feedback loop UI with state management"
+11. bd sync
+```
+
+### Example 3: Setup Task
 
 ```
 User: "Set up Supabase project"
 
 Agent:
-1. Guide user through Supabase dashboard setup
-2. Store credentials in .env
-3. **Verify**: Test the connection works (curl the API endpoint)
-4. Only after verification succeeds → close the bead
+1. bd create "Setup Supabase project" --type task --priority 0
+   # Creates bead: productiviy-system-xyz
+2. bd update productiviy-system-xyz --status in_progress
+3. Guide user through Supabase dashboard setup
+4. Store credentials in .env
+5. **Verify**: Test the connection works (curl the API endpoint)
+6. git commit -m "Add Supabase configuration"
+7. Only after verification succeeds:
+   bd close productiviy-system-xyz --reason "Supabase configured and verified"
+   bd sync
 ```
