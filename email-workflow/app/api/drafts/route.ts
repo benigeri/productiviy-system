@@ -134,6 +134,10 @@ export async function POST(request: Request) {
 
     console.log('Draft generation completed:', {
       duration,
+      threadSubject: subject,
+      instructions,
+      to: draftResponse.to,
+      cc: draftResponse.cc,
       hasCc: Array.isArray(draftResponse.cc) && draftResponse.cc.length > 0,
       ccCount: Array.isArray(draftResponse.cc) ? draftResponse.cc.length : 0,
     });

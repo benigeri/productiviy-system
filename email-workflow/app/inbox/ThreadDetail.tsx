@@ -91,7 +91,12 @@ export function ThreadDetail({
 
       // Extract structured response: to, cc, body
       const { to = [], cc = [], body } = data;
-      console.log('Draft generated:', { to, cc, bodyLength: body.length });
+      console.log('Draft generated - structured response:', {
+        to,
+        cc,
+        bodyLength: body.length,
+        instructions,
+      });
 
       // Save assistant's draft to conversation history
       addMessage('assistant', body);
@@ -99,6 +104,11 @@ export function ThreadDetail({
       setDraft(body);
       setDraftTo(to);
       setDraftCc(cc);
+
+      console.log('Draft state updated:', {
+        draftTo: to,
+        draftCc: cc,
+      });
       setInstructions(''); // Clear instructions after generating
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to generate draft';
@@ -143,7 +153,12 @@ export function ThreadDetail({
 
       // Extract structured response: to, cc, body
       const { to = [], cc = [], body } = data;
-      console.log('Draft regenerated:', { to, cc, bodyLength: body.length });
+      console.log('Draft regenerated - structured response:', {
+        to,
+        cc,
+        bodyLength: body.length,
+        feedback,
+      });
 
       // Update draft with new version
       addMessage('assistant', body);
@@ -151,6 +166,11 @@ export function ThreadDetail({
       setDraft(body);
       setDraftTo(to);
       setDraftCc(cc);
+
+      console.log('Draft state updated after regeneration:', {
+        draftTo: to,
+        draftCc: cc,
+      });
       setFeedback(''); // Clear feedback after regenerating
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to regenerate draft';
@@ -203,7 +223,13 @@ export function ThreadDetail({
       // Use CC from Braintrust prompt - if empty, no CC is added (don't fallback to lastMessage.to)
       const ccRecipients = draftCc.map(email => ({ email }));
 
-      console.log('Saving draft with:', { to: toRecipients, cc: ccRecipients });
+      console.log('Approving draft - before save:', {
+        draftTo,
+        draftCc,
+        toRecipients,
+        ccRecipients,
+        threadId: thread.id,
+      });
 
       const res = await fetch('/api/drafts/save', {
         method: 'POST',

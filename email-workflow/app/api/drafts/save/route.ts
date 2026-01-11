@@ -64,6 +64,24 @@ export async function POST(request: Request) {
       ? cc.filter((recipient) => recipient.email !== userEmail)
       : cc;
 
+    // Convert plain text line breaks to HTML for better Gmail rendering
+    // Nylas supports both plain text with \n and HTML, but explicit HTML gives us more control
+    const htmlBody = draftBody
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => `<p>${line}</p>`)
+      .join('');
+
+    console.log('Saving draft to Nylas:', {
+      threadId,
+      latestMessageId,
+      to: to.map(r => r.email),
+      cc: filteredCc.map(r => r.email),
+      bodyLines: draftBody.split('\n').length,
+      subject: `Re: ${subject}`,
+    });
+
     // Save draft to Gmail via Nylas
     const draftRes = await fetch(
       `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/drafts`,
@@ -75,7 +93,7 @@ export async function POST(request: Request) {
         },
         body: JSON.stringify({
           subject: `Re: ${subject}`,
-          body: draftBody,
+          body: htmlBody,
           to,
           cc: filteredCc,
           reply_to_message_id: latestMessageId,
