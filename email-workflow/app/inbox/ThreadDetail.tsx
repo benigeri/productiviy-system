@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useConversation } from '../../hooks/useConversation';
 
@@ -151,6 +151,13 @@ export function ThreadDetail({
     return allThreads[currentIndex + 1].id;
   }
 
+  function getPrevThreadId(): string | null {
+    if (!allThreads || allThreads.length === 0) return null;
+    const currentIndex = allThreads.findIndex(t => t.id === thread.id);
+    if (currentIndex === -1 || currentIndex === 0) return null;
+    return allThreads[currentIndex - 1].id;
+  }
+
   function handleSkip() {
     clearConversation();
     const nextThreadId = getNextThreadId();
@@ -217,13 +224,44 @@ export function ThreadDetail({
     }
   }
 
-  return (
-    <div className="p-4 max-w-4xl mx-auto space-y-4">
-      <a href="/inbox" className="text-blue-600 hover:underline inline-block mb-2">
-        ← Back to Inbox
-      </a>
+  const prevThreadId = useMemo(() => getPrevThreadId(), [allThreads, thread.id]);
+  const nextThreadId = useMemo(() => getNextThreadId(), [allThreads, thread.id]);
 
-      <h1 className="text-2xl font-bold">{thread.subject}</h1>
+  return (
+    <div className="h-screen h-dvh flex flex-col">
+      {/* Sticky Top Navigation */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+        <a href="/inbox" className="text-blue-600 hover:underline">
+          ← Back to Inbox
+        </a>
+        <div className="flex gap-2">
+          {prevThreadId ? (
+            <a
+              href={`/inbox?thread=${prevThreadId}`}
+              className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+            >
+              ← Prev
+            </a>
+          ) : (
+            <span className="px-3 py-1 text-sm text-gray-400 rounded">← Prev</span>
+          )}
+          {nextThreadId ? (
+            <a
+              href={`/inbox?thread=${nextThreadId}`}
+              className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+            >
+              Next →
+            </a>
+          ) : (
+            <span className="px-3 py-1 text-sm text-gray-400 rounded">Next →</span>
+          )}
+        </div>
+      </div>
+
+      {/* Scrollable Middle Section */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 max-w-4xl mx-auto space-y-4">
+          <h1 className="text-2xl font-bold">{thread.subject}</h1>
 
       {/* Messages */}
       <div className="space-y-4">
@@ -245,8 +283,19 @@ export function ThreadDetail({
                 </p>
               </div>
             </div>
-            <div className="text-sm whitespace-pre-wrap leading-relaxed">
-              {msg.conversation}
+            <div className="text-sm leading-relaxed">
+              {msg.conversation.split('\n').map((line, idx) => {
+                // Check if line is a quoted reply (starts with >)
+                const isQuoted = line.trim().startsWith('>');
+                return (
+                  <p
+                    key={idx}
+                    className={isQuoted ? 'text-gray-500 italic pl-4 border-l-2 border-gray-300' : ''}
+                  >
+                    {line.replace(/^>\s*/, '') || '\u00A0'}
+                  </p>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -278,13 +327,6 @@ export function ThreadDetail({
         </div>
       )}
 
-      {/* Error message */}
-      {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-          {error}
-        </div>
-      )}
-
       {/* Storage warning message */}
       {storageWarning && (
         <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-700 text-sm">
@@ -292,82 +334,92 @@ export function ThreadDetail({
         </div>
       )}
 
-      {/* Draft form or draft preview */}
-      {!draft ? (
-        <div className="space-y-4 sticky bottom-4 bg-white p-6 rounded-lg border-2 border-gray-200 shadow-lg">
-          <label className="block">
-            <span className="text-sm font-semibold mb-2 block text-gray-700">
-              What should I say?
-            </span>
-            <textarea
-              placeholder="Tell me what to say in the reply..."
-              value={instructions}
-              onChange={e => setInstructions(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              rows={4}
-            />
-          </label>
-          <button
-            onClick={generateDraft}
-            disabled={loading || !instructions.trim()}
-            className="w-full bg-blue-600 text-white p-4 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition shadow-sm"
-          >
-            {loading ? 'Generating Draft...' : 'Generate Draft'}
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Draft preview */}
-          <div className="p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
-            <h3 className="font-semibold text-blue-800 mb-3 text-lg">Draft Reply</h3>
-            <div className="text-sm whitespace-pre-wrap leading-relaxed p-4 bg-white rounded border">
-              {draft}
-            </div>
-          </div>
-
-          {/* Feedback for iteration */}
-          <div className="space-y-3 p-6 bg-white rounded-lg border-2 border-gray-200">
-            <label className="block">
-              <span className="text-sm font-semibold mb-2 block text-gray-700">
-                Need changes? Tell me what to improve:
-              </span>
-              <textarea
-                placeholder="e.g., Make it shorter, add more details about X, change the tone..."
-                value={feedback}
-                onChange={e => setFeedback(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                rows={3}
-                disabled={loading}
-              />
-            </label>
-            <button
-              onClick={regenerateDraft}
-              disabled={loading || !feedback.trim()}
-              className="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
-            >
-              {loading ? 'Regenerating...' : 'Regenerate Draft'}
-            </button>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={handleSkip}
-              disabled={saving}
-              className="flex-1 bg-gray-500 text-white p-4 rounded-lg font-semibold hover:bg-gray-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
-            >
-              Skip
-            </button>
-            <button
-              onClick={handleApprove}
-              disabled={saving}
-              className="flex-1 bg-green-600 text-white p-4 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
-            >
-              {saving ? 'Saving...' : 'Approve & Send to Gmail'}
-            </button>
+      {/* Draft preview (if exists) */}
+      {draft && (
+        <div className="p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
+          <h3 className="font-semibold text-blue-800 mb-3 text-lg">Draft Reply</h3>
+          <div className="text-sm whitespace-pre-wrap leading-relaxed p-4 bg-white rounded border">
+            {draft}
           </div>
         </div>
       )}
+        </div>
+      </div>
+
+      {/* Sticky Bottom Controls */}
+      <div className="sticky bottom-0 z-10 bg-white border-t border-gray-200 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className="max-w-4xl mx-auto">
+          {/* Error message */}
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm mb-3">
+              {error}
+            </div>
+          )}
+
+          {!draft ? (
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-sm font-semibold mb-2 block text-gray-700">
+                  What should I say?
+                </span>
+                <textarea
+                  placeholder="Tell me what to say in the reply..."
+                  value={instructions}
+                  onChange={e => setInstructions(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows={3}
+                />
+              </label>
+              <button
+                onClick={generateDraft}
+                disabled={loading || !instructions.trim()}
+                className="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+              >
+                {loading ? 'Generating Draft...' : 'Generate Draft'}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-sm font-semibold mb-2 block text-gray-700">
+                  Need changes? Tell me what to improve:
+                </span>
+                <textarea
+                  placeholder="e.g., Make it shorter, add more details about X, change the tone..."
+                  value={feedback}
+                  onChange={e => setFeedback(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows={2}
+                  disabled={loading}
+                />
+              </label>
+              <button
+                onClick={regenerateDraft}
+                disabled={loading || !feedback.trim()}
+                className="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition mb-2"
+              >
+                {loading ? 'Regenerating...' : 'Regenerate Draft'}
+              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleSkip}
+                  disabled={saving}
+                  className="flex-1 bg-gray-500 text-white p-3 rounded-lg font-semibold hover:bg-gray-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+                >
+                  Skip
+                </button>
+                <button
+                  onClick={handleApprove}
+                  disabled={saving}
+                  className="flex-1 bg-green-600 text-white p-3 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+                >
+                  {saving ? 'Saving...' : 'Approve & Send to Gmail'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

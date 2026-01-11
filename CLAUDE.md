@@ -622,3 +622,38 @@ https://supabase.com/dashboard/project/aadqqdsclktlyeuweqrv/functions/telegram-w
 
 ---
 
+## Email Workflow Guidelines
+
+### Nylas API Email Rendering
+
+**Always use Nylas `/messages/clean` endpoint for email content:**
+
+1. **Use `ignore_images: false`** - Setting `ignore_images: true` causes the API to replace `<img>` tags with literal 'span' text, breaking email rendering. Always set to `false` to preserve proper content.
+
+2. **Enable `html_as_markdown: true`** - Convert HTML emails to markdown for easier parsing and rendering.
+
+3. **Preserve line breaks** - Split email content by `\n` and render each line as a separate paragraph element to maintain proper formatting.
+
+4. **Style quoted replies** - Detect lines starting with `>` and style them with gray text, italic font, left padding, and a left border to visually distinguish quoted content.
+
+**Example:**
+```typescript
+const res = await fetch(
+  `https://api.us.nylas.com/v3/grants/${grantId}/messages/clean`,
+  {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message_id: messageIds,
+      ignore_images: false, // Don't ignore images - prevents 'span' text
+      html_as_markdown: true,
+    }),
+  }
+);
+```
+
+---
+

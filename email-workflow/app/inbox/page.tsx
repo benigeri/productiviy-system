@@ -48,7 +48,7 @@ async function getMessages(messageIds: string[]): Promise<Message[]> {
       },
       body: JSON.stringify({
         message_id: messageIds,
-        ignore_images: true,
+        ignore_images: false, // 2026-01-11: Nylas API bug - ignore_images:true causes 'span' text in markdown
         html_as_markdown: true,
       }),
       cache: 'no-store',
@@ -86,8 +86,10 @@ export default async function InboxPage({
     <div className="min-h-screen bg-gray-50">
       {!selectedThreadId ? (
         <ThreadList threads={threads} />
+      ) : selectedThread ? (
+        <ThreadDetail thread={selectedThread} messages={messages} allThreads={threads} />
       ) : (
-        <ThreadDetail thread={selectedThread!} messages={messages} allThreads={threads} />
+        <div className="p-4">Thread not found</div>
       )}
     </div>
   );
