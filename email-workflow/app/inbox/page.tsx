@@ -48,8 +48,9 @@ async function getMessages(messageIds: string[]): Promise<Message[]> {
       },
       body: JSON.stringify({
         message_id: messageIds,
-        ignore_images: false, // 2026-01-11: Nylas API bug - ignore_images:true causes 'span' text in markdown
-        html_as_markdown: true,
+        ignore_links: false,     // Keep URLs in content
+        ignore_images: true,     // Remove images for chat view
+        html_as_markdown: false, // Plain text instead of markdown (fixes link rendering)
       }),
       cache: 'no-store',
     }

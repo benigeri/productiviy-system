@@ -227,6 +227,27 @@ export function ThreadDetail({
   const prevThreadId = useMemo(() => getPrevThreadId(), [allThreads, thread.id]);
   const nextThreadId = useMemo(() => getNextThreadId(), [allThreads, thread.id]);
 
+  // Auto-link URLs in plain text
+  function autoLinkUrls(text: string): (string | JSX.Element)[] {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return text.split(urlRegex).map((part, i) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={i}
+            href={part}
+            className="text-blue-600 hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  }
+
   return (
     <div className="h-screen h-dvh flex flex-col">
       {/* Sticky Top Navigation */}
@@ -283,7 +304,7 @@ export function ThreadDetail({
                 </p>
               </div>
             </div>
-            <div className="text-sm leading-relaxed">
+            <div className="text-sm leading-relaxed whitespace-pre-wrap">
               {msg.conversation.split('\n').map((line, idx) => {
                 // Check if line is a quoted reply (starts with >)
                 const isQuoted = line.trim().startsWith('>');
@@ -292,7 +313,7 @@ export function ThreadDetail({
                     key={idx}
                     className={isQuoted ? 'text-gray-500 italic pl-4 border-l-2 border-gray-300' : ''}
                   >
-                    {line.replace(/^>\s*/, '') || '\u00A0'}
+                    {autoLinkUrls(line.replace(/^>\s*/, '') || '\u00A0')}
                   </p>
                 );
               })}
