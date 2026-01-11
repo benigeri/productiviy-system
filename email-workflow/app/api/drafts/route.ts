@@ -114,6 +114,15 @@ export async function POST(request: Request) {
     const currentUserEmail = process.env.USER_EMAIL || process.env.NYLAS_USER_EMAIL || '';
     const threadHistory = formatThreadHistory(messages, currentUserEmail);
 
+    // Debug logging
+    console.log('Draft generation debug:', {
+      currentUserEmail,
+      messageCount: messages.length,
+      threadHistoryLength: threadHistory.length,
+      threadHistoryPreview: threadHistory.substring(0, 200),
+      draftBodyLength: draftBody.length,
+    });
+
     // Combine AI response with quoted history
     const fullBody = threadHistory
       ? `${draftBody}\n\n${threadHistory}`
