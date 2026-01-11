@@ -1,4 +1,4 @@
-# Agent Development Guidelines
+# Productivity System - Agent Development Guidelines
 
 This document defines how AI agents should work on this codebase.
 
@@ -12,6 +12,39 @@ This document defines how AI agents should work on this codebase.
 4. **Small, focused PRs** - One feature/fix per PR for easy review
 5. **Verify before closing** - Always test/verify your work before marking a bead complete
 6. **Never use `cd` commands** - Always use absolute paths to avoid breaking the shell session
+
+---
+
+## Git Safety Guidelines
+
+**Safe Operations:**
+- git status/diff/log are always safe - use freely for understanding state
+- Destructive operations (reset --hard, clean -fd, force push) require explicit user request
+
+**Commit Practices:**
+- Never amend commits unless explicitly asked
+- Check git status/diff before making edits (other agents may have changed files)
+- For large diffs: Use `git --no-pager diff --color=never` for review
+
+**Agentic Workflow:**
+- Create feature branches as part of workflow (Feature Development steps)
+- Commit and push as part of completing work
+- Small, focused commits over large batches
+
+---
+
+## Critical Thinking Guidelines
+
+**Problem Solving:**
+- Fix root cause, not band-aids
+- If unsure: read more code; if still stuck, ask user with short, clear options
+- When conflicts arise: call out the issue and pick the safer path
+
+**Multi-Agent Workflows:**
+- Check git status/diff before editing (other agents may have changed changes)
+- If you see unrecognized changes: assume another agent made them, keep going, focus on your changes
+- If unrecognized changes cause issues: stop and ask user
+- Leave breadcrumb notes in conversation thread for context
 
 ---
 
@@ -77,20 +110,35 @@ This document defines how AI agents should work on this codebase.
 
 ## Test-Driven Development (TDD)
 
-### The Process:
+**For EVERY new feature or fix:**
 
-1. **Red** - Write a failing test that defines expected behavior
-2. **Green** - Write minimal code to make the test pass
-3. **Refactor** - Clean up while keeping tests green
+1. **Write test first (Red)**
+   - Create test file: `tests/unit/my-feature.test.ts`
+   - Write test that defines expected behavior
+   - Run test - should fail
 
-### Test File Convention:
-- Source: `lib/module.ts`
-- Tests: `lib/module.test.ts`
+2. **Run test (should fail)**
+   ```bash
+   deno test
+   ```
 
-### Running Tests:
-```bash
-deno test
-```
+3. **Write implementation (Green)**
+   - Create implementation: `src/lib/my-feature.ts`
+   - Write minimal code to pass test
+
+4. **Run test (should pass)**
+   ```bash
+   deno test
+   ```
+
+5. **Refactor while tests pass**
+   - Clean up code
+   - Keep tests green
+
+6. **Run full test suite**
+   ```bash
+   deno test
+   ```
 
 ---
 
@@ -101,7 +149,6 @@ deno test
 ### 1. Save Plan to Repo
 ```bash
 # Save to plans/ directory with timestamp
-# (Plan content from plan mode conversation)
 cat > plans/2026-01-10-feature-name.md << 'EOF'
 [paste full plan here]
 EOF
@@ -183,18 +230,28 @@ bd sync
 
 ---
 
-## Integration With Compound Engineering
+## Before Clearing Context / Compacting
 
-- **Plan Mode:** Save plan to `plans/`, create Epic with full plan in description
-- **Work Mode:** Pick Beads from `bd ready`, follow Feature Development Workflow
-- **After Work:** Close Bead, sync, push
+**When you run `/clear` or context gets compacted, ensure:**
 
-### Key Beads Principles
-- Use `bd ready` daily to find work (not `bd list`)
-- Mark work `in_progress` so you know what's active
-- Write close reasons documenting what you did
-- Sync after closing to commit Beads to git
-- **ALWAYS save plans to repo AND Epic description**
+```bash
+# Check for work
+git status                        # Uncommitted changes?
+bd list --status in_progress      # Active beads?
+
+# Sync everything
+bd sync                           # Commit beads changes
+git add .                         # Stage changes
+git commit -m "..."               # Commit code
+bd sync                           # Sync beads again (if new beads created)
+git push                          # Push to remote
+
+# Verify
+git status                        # Should be clean
+bd sync --status                  # Should be synced
+```
+
+**Work is not saved until pushed.**
 
 ---
 
@@ -203,9 +260,9 @@ bd sync
 Before every commit, ensure:
 
 ```bash
-deno fmt --check      # Code formatting
-deno lint             # Linting rules
-deno test             # All tests pass
+deno test      # Tests pass
+deno lint      # Linting passes
+deno fmt    # Formatting correct
 ```
 
 ---
@@ -235,12 +292,6 @@ Hooks are configured in `.claude/settings.json` and run automatically when Claud
 ### Bypassing (Emergency Only):
 If you absolutely need to bypass hooks, the user can manually run git commands outside Claude Code. But this should be rare.
 
-### Verifying Hooks:
-```bash
-# In Claude Code, run:
-/hooks
-```
-
 ---
 
 ## Shell Commands (Critical)
@@ -254,7 +305,7 @@ cd supabase/functions/telegram-webhook && deno test
 
 ### Good:
 ```bash
-deno test /Users/benigeri/Projects/productiviy-system/supabase/functions/telegram-webhook/lib/telegram.test.ts
+deno test /Users/benigeri/Projects/[repo]/path/to/test.ts
 ```
 
 ### If the shell breaks:
@@ -270,6 +321,113 @@ The hook in `.claude/settings.json` must use `$CLAUDE_PROJECT_DIR` for the scrip
 Never use relative paths like `.claude/hooks/...` - they break when cwd changes.
 
 ---
+
+## Frontend Development Guidelines
+
+**Avoid "AI slop" UI - Be opinionated and distinctive.**
+
+### Do:
+- **Typography:** Pick a real font; avoid Inter/Roboto/Arial/system defaults
+- **Theme:** Commit to a palette; use CSS variables; bold accents over timid gradients
+- **Motion:** 1-2 high-impact moments (staggered reveal beats random micro-animations)
+- **Background:** Add depth (gradients/patterns), not flat defaults
+
+### Avoid:
+- Purple-on-white clichés
+- Generic component grids
+- Predictable layouts
+- Default system fonts
+- Timid design choices
+
+**Be bold. Be distinctive. Ship interfaces that feel intentional.**
+
+---
+
+## PR Description Template
+
+```markdown
+## Summary
+Brief description of what this PR does.
+
+## Changes
+- List of specific changes made
+
+## Test plan
+- [ ] How to verify this works
+
+## Related
+- Links to relevant issues/docs
+```
+
+---
+
+## Example Workflows
+
+### Example 1: Add New Feature
+
+```
+User: "Add voice transcription support"
+
+Agent:
+1. bd create "Add Deepgram voice transcription" --type feature --priority 1
+   # Creates bead: psabc
+2. git checkout -b feature/voice-transcription
+3. bd update psabc --status in_progress
+4. Write deepgram.test.ts with test cases
+5. Run tests → confirm they fail (Red)
+6. Implement deepgram.ts
+7. Run tests → confirm they pass (Green)
+8. Refactor if needed
+9. **Verify**: Test the integration works (e.g., curl the API, check responses)
+10. git commit -m "Add Deepgram voice transcription"
+11. git push -u origin feature/voice-transcription
+12. Create PR with summary
+13. Wait for user to review and merge
+14. git checkout main && git pull
+15. bd close psabc --reason "Implemented Deepgram transcription with tests"
+16. bd sync
+```
+
+### Example 2: Work on Existing Bead
+
+```
+User: "Continue work on the email workflow epic"
+
+Agent:
+1. bd ready                       # See available tasks
+2. bd show psdef            # Review task details
+3. git checkout -b feature/email-workflow-feedback
+4. bd update psdef --status in_progress
+5. Follow TDD to implement the feature
+6. **Verify**: Test locally
+7. git commit and push
+8. Create PR, wait for merge
+9. git checkout main && git pull
+10. bd close psdef --reason "Added feedback loop UI with state management"
+11. bd sync
+```
+
+### Example 3: Setup Task
+
+```
+User: "Set up [service] project"
+
+Agent:
+1. bd create "Setup [service] project" --type task --priority 0
+   # Creates bead: psxyz
+2. bd update psxyz --status in_progress
+3. Guide user through setup
+4. Store credentials in .env
+5. **Verify**: Test the connection works
+6. git commit -m "Add [service] configuration"
+7. Only after verification succeeds:
+   bd close psxyz --reason "[Service] configured and verified"
+   bd sync
+```
+
+---
+
+## [REPO-SPECIFIC SECTIONS BELOW]
 
 ## Code Style
 
@@ -464,84 +622,3 @@ https://supabase.com/dashboard/project/aadqqdsclktlyeuweqrv/functions/telegram-w
 
 ---
 
-## PR Description Template
-
-```markdown
-## Summary
-Brief description of what this PR does.
-
-## Changes
-- List of specific changes made
-
-## Test plan
-- [ ] How to verify this works
-
-## Related
-- Links to relevant issues/docs
-```
-
----
-
-## Example Workflows
-
-### Example 1: Add New Feature
-
-```
-User: "Add voice transcription support"
-
-Agent:
-1. bd create "Add Deepgram voice transcription" --type feature --priority 1
-   # Creates bead: productiviy-system-abc
-2. git checkout -b feature/voice-transcription
-3. bd update productiviy-system-abc --status in_progress
-4. Write deepgram.test.ts with test cases
-5. Run tests → confirm they fail (Red)
-6. Implement deepgram.ts
-7. Run tests → confirm they pass (Green)
-8. Refactor if needed
-9. **Verify**: Test the integration works (e.g., curl the API, check responses)
-10. git commit -m "Add Deepgram voice transcription"
-11. git push -u origin feature/voice-transcription
-12. Create PR with summary
-13. Wait for user to review and merge
-14. git checkout main && git pull
-15. bd close productiviy-system-abc --reason "Implemented Deepgram transcription with tests"
-16. bd sync
-```
-
-### Example 2: Work on Existing Bead
-
-```
-User: "Continue work on the email workflow epic"
-
-Agent:
-1. bd ready                       # See available tasks
-2. bd show productiviy-system-def # Review task details
-3. git checkout -b feature/email-workflow-feedback
-4. bd update productiviy-system-def --status in_progress
-5. Follow TDD to implement the feature
-6. **Verify**: Test locally
-7. git commit and push
-8. Create PR, wait for merge
-9. git checkout main && git pull
-10. bd close productiviy-system-def --reason "Added feedback loop UI with state management"
-11. bd sync
-```
-
-### Example 3: Setup Task
-
-```
-User: "Set up Supabase project"
-
-Agent:
-1. bd create "Setup Supabase project" --type task --priority 0
-   # Creates bead: productiviy-system-xyz
-2. bd update productiviy-system-xyz --status in_progress
-3. Guide user through Supabase dashboard setup
-4. Store credentials in .env
-5. **Verify**: Test the connection works (curl the API endpoint)
-6. git commit -m "Add Supabase configuration"
-7. Only after verification succeeds:
-   bd close productiviy-system-xyz --reason "Supabase configured and verified"
-   bd sync
-```
