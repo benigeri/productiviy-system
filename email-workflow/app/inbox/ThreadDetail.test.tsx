@@ -189,3 +189,110 @@ describe('ThreadDetail - Navigation fix (Issue #6)', () => {
     });
   });
 });
+
+describe('ThreadDetail - Hook Integration (storage warnings)', () => {
+  const mockRouter = {
+    push: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (useRouter as any).mockReturnValue(mockRouter);
+  });
+
+  it('displays storage warning from hook to user', async () => {
+    const thread = {
+      id: 'thread-1',
+      subject: 'Test Thread',
+      message_ids: ['msg-1'],
+    };
+
+    const messages = [
+      {
+        id: 'msg-1',
+        from: [{ name: 'Sender', email: 'sender@example.com' }],
+        to: [{ name: 'User', email: 'user@example.com' }],
+        date: Date.now(),
+        conversation: 'Test message',
+      },
+    ];
+
+    // Simulate hook returning storage warning
+    const mockConversation = {
+      conversation: [],
+      isLoaded: true,
+      addMessage: vi.fn(),
+      updateDraft: vi.fn(),
+      clear: vi.fn(),
+      messages: [],
+      currentDraft: '',
+      storageWarning: 'Storage limit reached. Old conversations were pruned. Please try again.',
+    };
+
+    (useConversation as any).mockReturnValue(mockConversation);
+
+    render(
+      <ThreadDetail thread={thread} messages={messages} allThreads={[]} />
+    );
+
+    // Verify warning displays to user
+    await waitFor(() => {
+      const warning = screen.queryByText(/Storage limit reached/i);
+      expect(warning).toBeInTheDocument();
+    });
+  });
+
+  it('clears conversation when skipping thread', async () => {
+    const thread1 = {
+      id: 'thread-1',
+      subject: 'Thread 1',
+      message_ids: ['msg-1'],
+    };
+
+    const thread2 = {
+      id: 'thread-2',
+      subject: 'Thread 2',
+      message_ids: ['msg-2'],
+    };
+
+    const messages = [
+      {
+        id: 'msg-1',
+        from: [{ name: 'Sender', email: 'sender@example.com' }],
+        to: [{ name: 'User', email: 'user@example.com' }],
+        date: Date.now(),
+        conversation: 'Test message',
+      },
+    ];
+
+    const clearMock = vi.fn();
+    const mockConversation = {
+      conversation: [],
+      isLoaded: true,
+      addMessage: vi.fn(),
+      updateDraft: vi.fn(),
+      clear: clearMock,
+      messages: [],
+      currentDraft: 'Test draft',
+      storageWarning: null,
+    };
+
+    (useConversation as any).mockReturnValue(mockConversation);
+
+    render(
+      <ThreadDetail
+        thread={thread1}
+        messages={messages}
+        allThreads={[thread1, thread2]}
+      />
+    );
+
+    const skipButton = await screen.findByText(/Skip/i);
+    skipButton.click();
+
+    // Verify clear() was called on the hook
+    await waitFor(() => {
+      expect(clearMock).toHaveBeenCalled();
+    });
+  });
+});
