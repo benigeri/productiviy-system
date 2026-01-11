@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useConversation } from '../../hooks/useConversation';
 
 interface Thread {
@@ -27,6 +28,7 @@ export function ThreadDetail({
   messages: Message[];
   allThreads?: Thread[];
 }) {
+  const router = useRouter();
   const {
     conversation,
     isLoaded,
@@ -43,6 +45,11 @@ export function ThreadDetail({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Sync draft state with storedDraft when thread changes (prevents stale drafts)
+  useEffect(() => {
+    setDraft(storedDraft || '');
+  }, [storedDraft]);
 
   async function generateDraft() {
     setLoading(true);
@@ -147,9 +154,9 @@ export function ThreadDetail({
     clearConversation();
     const nextThreadId = getNextThreadId();
     if (nextThreadId) {
-      window.location.href = `/inbox?thread=${nextThreadId}`;
+      router.push(`/inbox?thread=${nextThreadId}`);
     } else {
-      window.location.href = '/inbox';
+      router.push('/inbox');
     }
   }
 
@@ -163,15 +170,15 @@ export function ThreadDetail({
       const lastMessage = messages[messages.length - 1];
 
       // Save draft to Gmail and update labels
-      const res = await fetch('/api/drafts', {
-        method: 'PUT',
+      const res = await fetch('/api/drafts/save', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           threadId: thread.id,
           subject: thread.subject,
           draftBody: draft,
           to: lastMessage.from,
-          cc: lastMessage.to.slice(1), // Exclude first recipient (sender)
+          cc: lastMessage.to, // Include all original recipients (API filters out self)
           latestMessageId: messages[messages.length - 1].id,
         }),
       });
@@ -179,6 +186,11 @@ export function ThreadDetail({
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Failed to save draft');
+      }
+
+      // Log warning if label update failed (but continue - draft was saved)
+      if (data.warning) {
+        console.warn('Label update warning:', data.warning);
       }
 
       // Update session count in localStorage
@@ -192,9 +204,9 @@ export function ThreadDetail({
       clearConversation();
       const nextThreadId = getNextThreadId();
       if (nextThreadId) {
-        window.location.href = `/inbox?thread=${nextThreadId}`;
+        router.push(`/inbox?thread=${nextThreadId}`);
       } else {
-        window.location.href = '/inbox';
+        router.push('/inbox');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to save draft';
