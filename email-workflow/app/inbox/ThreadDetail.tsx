@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useConversation } from '../../hooks/useConversation';
 
 interface Thread {
@@ -21,10 +22,13 @@ interface Message {
 export function ThreadDetail({
   thread,
   messages,
+  allThreads,
 }: {
   thread: Thread;
   messages: Message[];
+  allThreads?: Thread[];
 }) {
+  const router = useRouter();
   const {
     conversation,
     isLoaded,
@@ -33,12 +37,20 @@ export function ThreadDetail({
     clear: clearConversation,
     messages: conversationMessages,
     currentDraft: storedDraft,
+    storageWarning,
   } = useConversation(thread.id);
 
   const [instructions, setInstructions] = useState('');
-  const [draft, setDraft] = useState('');
+  const [feedback, setFeedback] = useState('');
+  const [draft, setDraft] = useState(storedDraft || '');
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Sync draft state with storedDraft when thread changes (prevents stale drafts)
+  useEffect(() => {
+    setDraft(storedDraft || '');
+  }, [storedDraft, thread.id]);
 
   async function generateDraft() {
     setLoading(true);
@@ -76,6 +88,111 @@ export function ThreadDetail({
       addMessage('assistant', data.body);
       updateDraft(data.body);
       setDraft(data.body);
+      setInstructions(''); // Clear instructions after generating
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate draft';
+      setError(message);
+      console.error('Draft generation error:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function regenerateDraft() {
+    if (!feedback.trim()) return;
+
+    setLoading(true);
+    setError('');
+
+    // Add feedback to conversation history
+    addMessage('user', feedback);
+
+    try {
+      const res = await fetch('/api/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          threadId: thread.id,
+          subject: thread.subject,
+          messages: messages.map(m => ({
+            from: m.from,
+            to: m.to,
+            date: m.date,
+            body: m.conversation,
+          })),
+          instructions: feedback,
+          latestMessageId: messages[messages.length - 1].id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to regenerate draft');
+      }
+
+      // Update draft with new version
+      addMessage('assistant', data.body);
+      updateDraft(data.body);
+      setDraft(data.body);
+      setFeedback(''); // Clear feedback after regenerating
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to regenerate draft';
+      setError(message);
+      console.error('Draft regeneration error:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function getNextThreadId(): string | null {
+    if (!allThreads || allThreads.length === 0) return null;
+    const currentIndex = allThreads.findIndex(t => t.id === thread.id);
+    if (currentIndex === -1 || currentIndex === allThreads.length - 1) return null;
+    return allThreads[currentIndex + 1].id;
+  }
+
+  function handleSkip() {
+    clearConversation();
+    const nextThreadId = getNextThreadId();
+    if (nextThreadId) {
+      router.push(`/inbox?thread=${nextThreadId}`);
+    } else {
+      router.push('/inbox');
+    }
+  }
+
+  async function handleApprove() {
+    if (!draft) return;
+
+    setSaving(true);
+    setError('');
+
+    try {
+      const lastMessage = messages[messages.length - 1];
+
+      // Save draft to Gmail and update labels
+      const res = await fetch('/api/drafts/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          threadId: thread.id,
+          subject: thread.subject,
+          draftBody: draft,
+          to: lastMessage.from,
+          cc: lastMessage.to, // Include all original recipients (API filters out self)
+          latestMessageId: messages[messages.length - 1].id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to save draft');
+      }
+
+      // Log warning if label update failed (but continue - draft was saved)
+      if (data.warning) {
+        console.warn('Label update warning:', data.warning);
+      }
 
       // Update session count in localStorage
       if (typeof window !== 'undefined') {
@@ -84,16 +201,19 @@ export function ThreadDetail({
         localStorage.setItem('session', JSON.stringify(session));
       }
 
-      // Redirect back to list after showing success
-      setTimeout(() => {
-        window.location.href = '/inbox';
-      }, 2000);
+      // Clear conversation and navigate to next thread
+      clearConversation();
+      const nextThreadId = getNextThreadId();
+      if (nextThreadId) {
+        router.push(`/inbox?thread=${nextThreadId}`);
+      } else {
+        router.push('/inbox');
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to generate draft';
+      const message = error instanceof Error ? error.message : 'Failed to save draft';
       setError(message);
-      console.error('Draft generation error:', error);
-    } finally {
-      setLoading(false);
+      console.error('Draft save error:', error);
+      setSaving(false);
     }
   }
 
@@ -158,14 +278,23 @@ export function ThreadDetail({
         </div>
       )}
 
-      {/* Draft form */}
+      {/* Error message */}
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Storage warning message */}
+      {storageWarning && (
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-700 text-sm">
+          {storageWarning}
+        </div>
+      )}
+
+      {/* Draft form or draft preview */}
       {!draft ? (
         <div className="space-y-4 sticky bottom-4 bg-white p-6 rounded-lg border-2 border-gray-200 shadow-lg">
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-              {error}
-            </div>
-          )}
           <label className="block">
             <span className="text-sm font-semibold mb-2 block text-gray-700">
               What should I say?
@@ -187,23 +316,54 @@ export function ThreadDetail({
           </button>
         </div>
       ) : (
-        <div className="p-6 bg-green-50 rounded-lg border-2 border-green-200">
-          <h3 className="font-semibold text-green-800 mb-3 text-lg">✓ Draft Created</h3>
-          <div className="text-sm whitespace-pre-wrap leading-relaxed mb-4 p-4 bg-white rounded border">
-            {draft}
+        <div className="space-y-4">
+          {/* Draft preview */}
+          <div className="p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
+            <h3 className="font-semibold text-blue-800 mb-3 text-lg">Draft Reply</h3>
+            <div className="text-sm whitespace-pre-wrap leading-relaxed p-4 bg-white rounded border">
+              {draft}
+            </div>
           </div>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-green-700 font-medium">
-              Draft saved to Gmail. Redirecting back to inbox...
-            </p>
+
+          {/* Feedback for iteration */}
+          <div className="space-y-3 p-6 bg-white rounded-lg border-2 border-gray-200">
+            <label className="block">
+              <span className="text-sm font-semibold mb-2 block text-gray-700">
+                Need changes? Tell me what to improve:
+              </span>
+              <textarea
+                placeholder="e.g., Make it shorter, add more details about X, change the tone..."
+                value={feedback}
+                onChange={e => setFeedback(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                rows={3}
+                disabled={loading}
+              />
+            </label>
             <button
-              onClick={() => {
-                clearConversation();
-                window.location.href = '/inbox';
-              }}
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium"
+              onClick={regenerateDraft}
+              disabled={loading || !feedback.trim()}
+              className="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
             >
-              Approve & Clear
+              {loading ? 'Regenerating...' : 'Regenerate Draft'}
+            </button>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-3">
+            <button
+              onClick={handleSkip}
+              disabled={saving}
+              className="flex-1 bg-gray-500 text-white p-4 rounded-lg font-semibold hover:bg-gray-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+            >
+              Skip
+            </button>
+            <button
+              onClick={handleApprove}
+              disabled={saving}
+              className="flex-1 bg-green-600 text-white p-4 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+            >
+              {saving ? 'Saving...' : 'Approve & Send to Gmail'}
             </button>
           </div>
         </div>

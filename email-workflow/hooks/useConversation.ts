@@ -12,6 +12,7 @@ import {
 export function useConversation(threadId: string) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
   // Load conversation on mount
   useEffect(() => {
@@ -22,17 +23,32 @@ export function useConversation(threadId: string) {
 
   const addMessage = (role: 'user' | 'assistant', content: string) => {
     const updated = addMessageToStorage(threadId, role, content);
-    setConversation(updated);
+    if (updated === null) {
+      setStorageWarning(
+        'Storage limit reached. Old conversations were pruned. Please try again.'
+      );
+    } else {
+      setConversation(updated);
+      setStorageWarning(null);
+    }
   };
 
   const updateDraft = (draft: string) => {
     const updated = updateDraftInStorage(threadId, draft);
-    setConversation(updated);
+    if (updated === null) {
+      setStorageWarning(
+        'Storage limit reached. Old conversations were pruned. Please try again.'
+      );
+    } else {
+      setConversation(updated);
+      setStorageWarning(null);
+    }
   };
 
   const clear = () => {
     clearConversationStorage(threadId);
     setConversation(null);
+    setStorageWarning(null);
   };
 
   return {
@@ -43,5 +59,6 @@ export function useConversation(threadId: string) {
     clear,
     messages: conversation?.messages || [],
     currentDraft: conversation?.currentDraft || '',
+    storageWarning,
   };
 }

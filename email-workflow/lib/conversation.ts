@@ -61,17 +61,72 @@ function getStore(): ConversationStore {
 }
 
 /**
- * Save all conversations to localStorage
+ * Prune old conversations to free up space
+ * Keeps last 20 conversations and removes conversations older than 7 days
  */
-function setStore(store: ConversationStore): void {
+function pruneOldConversations(store: ConversationStore): ConversationStore {
+  const now = Date.now();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const maxConversations = 20;
+
+  // Filter out conversations older than 7 days
+  const recentConversations = Object.entries(store).filter(
+    ([_, conv]) => now - conv.timestamp < sevenDaysMs
+  );
+
+  // Sort by timestamp (newest first) and keep only last N
+  const sortedConversations = recentConversations.sort(
+    ([_, a], [__, b]) => b.timestamp - a.timestamp
+  );
+
+  const prunedConversations = sortedConversations.slice(0, maxConversations);
+
+  return Object.fromEntries(prunedConversations);
+}
+
+/**
+ * Save all conversations to localStorage with quota handling
+ * Returns true if save succeeded, false if quota exceeded after pruning
+ */
+function setStore(store: ConversationStore): boolean {
   if (typeof window === 'undefined') {
-    return;
+    return false;
   }
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+    return true;
   } catch (error) {
+    // Handle quota exceeded error
+    if (
+      error instanceof DOMException &&
+      (error.name === 'QuotaExceededError' ||
+        error.name === 'NS_ERROR_DOM_QUOTA_REACHED')
+    ) {
+      console.warn(
+        'localStorage quota exceeded - pruning old conversations...'
+      );
+
+      // Prune old conversations and retry
+      const prunedStore = pruneOldConversations(store);
+
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(prunedStore));
+        console.log(
+          `Successfully pruned ${Object.keys(store).length - Object.keys(prunedStore).length} old conversations`
+        );
+        return true;
+      } catch (retryError) {
+        console.error(
+          'Failed to save even after pruning - localStorage may be full:',
+          retryError
+        );
+        return false;
+      }
+    }
+
     console.error('Failed to save conversations to localStorage:', error);
+    return false;
   }
 }
 
@@ -85,17 +140,18 @@ export function getConversation(threadId: string): Conversation | null {
 
 /**
  * Save conversation for a specific thread
+ * Returns true if save succeeded, false if quota exceeded
  */
 export function saveConversation(
   threadId: string,
   conversation: Conversation
-): void {
+): boolean {
   const store = getStore();
   store[threadId] = {
     ...conversation,
     timestamp: Date.now(),
   };
-  setStore(store);
+  return setStore(store);
 }
 
 /**
@@ -109,12 +165,13 @@ export function clearConversation(threadId: string): void {
 
 /**
  * Add a message to a conversation
+ * Returns conversation on success, null if quota exceeded
  */
 export function addMessage(
   threadId: string,
   role: 'user' | 'assistant',
   content: string
-): Conversation {
+): Conversation | null {
   const existing = getConversation(threadId);
 
   const conversation: Conversation = existing
@@ -129,14 +186,18 @@ export function addMessage(
         timestamp: Date.now(),
       };
 
-  saveConversation(threadId, conversation);
-  return conversation;
+  const success = saveConversation(threadId, conversation);
+  return success ? conversation : null;
 }
 
 /**
  * Update the current draft in a conversation
+ * Returns conversation on success, null if quota exceeded
  */
-export function updateDraft(threadId: string, draft: string): Conversation {
+export function updateDraft(
+  threadId: string,
+  draft: string
+): Conversation | null {
   const existing = getConversation(threadId);
 
   const conversation: Conversation = existing
@@ -151,6 +212,6 @@ export function updateDraft(threadId: string, draft: string): Conversation {
         timestamp: Date.now(),
       };
 
-  saveConversation(threadId, conversation);
-  return conversation;
+  const success = saveConversation(threadId, conversation);
+  return success ? conversation : null;
 }

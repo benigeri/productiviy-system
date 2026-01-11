@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { invoke } from 'braintrust';
 import { z } from 'zod';
 
-// Request validation schema
+// Request validation schemas
 const DraftRequestSchema = z.object({
   threadId: z.string().min(1),
   subject: z.string(),
@@ -43,10 +43,22 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate required environment variables
+    const projectName = process.env.BRAINTRUST_PROJECT_NAME;
+    const draftSlug = process.env.BRAINTRUST_DRAFT_SLUG;
+
+    if (!projectName || !draftSlug) {
+      console.error('Missing required Braintrust configuration');
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
     // Generate draft via Braintrust
     const draftBody = await invoke({
-      projectName: process.env.BRAINTRUST_PROJECT_NAME!,
-      slug: process.env.BRAINTRUST_DRAFT_SLUG!,
+      projectName,
+      slug: draftSlug,
       input: {
         thread_subject: subject,
         messages: messages.map((m) => ({
@@ -59,50 +71,9 @@ export async function POST(request: Request) {
       },
     });
 
-    // Save draft to Gmail via Nylas
-    const draftRes = await fetch(
-      `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/drafts`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.NYLAS_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          subject: `Re: ${subject}`,
-          body: draftBody,
-          to: lastMessage.from,
-          cc: lastMessage.to.slice(1), // Exclude first recipient (sender)
-          reply_to_message_id: latestMessageId,
-        }),
-      }
-    );
-
-    if (!draftRes.ok) {
-      const error = await draftRes.text();
-      console.error('Nylas draft creation failed:', error);
-      throw new Error('Failed to save draft to Gmail');
-    }
-
-    const draft = await draftRes.json();
-
-    // Update thread labels (remove to-respond-paul, add drafted)
-    await fetch(
-      `${request.headers.get('origin') || 'http://localhost:3000'}/api/threads`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          threadId,
-          addLabels: ['Label_215'],
-          removeLabels: ['Label_139'],
-        }),
-      }
-    );
-
+    // Return draft body only - no Gmail save or label updates yet
     return NextResponse.json({
       success: true,
-      draftId: draft.data.id,
       body: draftBody,
     });
   } catch (error) {
