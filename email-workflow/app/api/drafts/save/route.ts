@@ -73,57 +73,72 @@ export async function POST(request: Request) {
       throw new Error('Failed to save draft to Gmail');
     }
 
-    const draft = await draftRes.json();
+    // Parallelize draft save JSON parsing and label update
+    // Use Promise.allSettled to run both independently
+    const [draftResult, labelResult] = await Promise.allSettled([
+      // Parse draft JSON
+      draftRes.json(),
 
-    // Update thread labels (remove to-respond-paul, add drafted) with retry logic
-    let labelUpdateSuccess = false;
-    let labelUpdateError: string | null = null;
-    const maxRetries = 3;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const labelRes = await fetch(
-          `${request.headers.get('origin') || 'http://localhost:3000'}/api/threads`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              threadId,
-              addLabels: ['Label_215'], // drafted label
-              removeLabels: ['Label_139'], // to-respond-paul label
-            }),
-          }
-        );
-
-        if (labelRes.ok) {
-          labelUpdateSuccess = true;
-          break;
-        } else {
-          const errorText = await labelRes.text();
-          labelUpdateError = `Label update failed (attempt ${attempt}/${maxRetries}): ${errorText}`;
-          console.warn(labelUpdateError);
-
-          // Exponential backoff: wait 100ms, 200ms, 400ms
-          if (attempt < maxRetries) {
-            await new Promise((resolve) =>
-              setTimeout(resolve, 100 * Math.pow(2, attempt - 1))
+      // Update thread labels with retry logic (runs in parallel)
+      (async () => {
+        const maxRetries = 3;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const labelRes = await fetch(
+              `${request.headers.get('origin') || 'http://localhost:3000'}/api/threads`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  threadId,
+                  addLabels: ['Label_215'], // drafted label
+                  removeLabels: ['Label_139'], // to-respond-paul label
+                }),
+              }
             );
+
+            if (labelRes.ok) {
+              return { success: true };
+            }
+
+            const errorText = await labelRes.text();
+            console.warn(
+              `Label update failed (attempt ${attempt}/${maxRetries}): ${errorText}`
+            );
+
+            // Exponential backoff before retry
+            if (attempt < maxRetries) {
+              await new Promise((resolve) =>
+                setTimeout(resolve, 100 * Math.pow(2, attempt - 1))
+              );
+            }
+          } catch (err) {
+            console.warn(
+              `Label update error (attempt ${attempt}/${maxRetries}): ${
+                err instanceof Error ? err.message : 'Unknown error'
+              }`
+            );
+
+            // Exponential backoff before retry
+            if (attempt < maxRetries) {
+              await new Promise((resolve) =>
+                setTimeout(resolve, 100 * Math.pow(2, attempt - 1))
+              );
+            }
           }
         }
-      } catch (err) {
-        labelUpdateError = `Label update error (attempt ${attempt}/${maxRetries}): ${
-          err instanceof Error ? err.message : 'Unknown error'
-        }`;
-        console.warn(labelUpdateError);
+        throw new Error('Label update failed after all retries');
+      })(),
+    ]);
 
-        // Exponential backoff before retry
-        if (attempt < maxRetries) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, 100 * Math.pow(2, attempt - 1))
-          );
-        }
-      }
+    // Check if draft parsing succeeded
+    if (draftResult.status === 'rejected') {
+      throw new Error('Failed to parse draft response');
     }
+    const draft = draftResult.value;
+
+    // Check label update result
+    const labelUpdateSuccess = labelResult.status === 'fulfilled';
 
     return NextResponse.json({
       success: true,
