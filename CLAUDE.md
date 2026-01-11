@@ -255,6 +255,54 @@ bd sync --status                  # Should be synced
 
 ---
 
+## Beads Maintenance & Troubleshooting
+
+### Common Issue: Beads Show as Open After Closing
+
+**Symptom:** You run `bd close <id>` successfully, but `bd list --status=open` or `bd ready` still shows the bead as open.
+
+**Root Cause:** The beads system uses both a SQLite database and JSONL files. Sometimes they get out of sync, especially when switching branches or after merges.
+
+**Solution - Run after closing beads:**
+```bash
+bd close <bead-id> --reason "..."    # Close the bead
+bd doctor --fix                       # Fix sync issues automatically
+bd list --status=open                 # Verify bead is closed
+```
+
+**When to run `bd doctor --fix`:**
+- After closing multiple beads
+- After switching branches
+- After merging branches
+- When `bd ready` shows beads you know are closed
+- Periodically (once per session is good practice)
+
+**What it fixes:**
+- DB-JSONL sync issues (most common)
+- Merge artifacts
+- Sync branch staleness
+- Other automatic fixes
+
+### Best Practice: Always Use Feature Branches for Beads
+
+**ALWAYS create a feature branch when closing beads**, even for administrative tasks:
+
+```bash
+# Good - Feature branch for bead cleanup
+git checkout -b feature/close-completed-beads origin/main
+bd close <bead-id> --reason "..."
+bd doctor --fix
+git add .beads/issues.jsonl && git commit -m "Close completed beads"
+git push && gh pr create && gh pr merge --squash
+
+# Bad - Closing beads on a branch with unrelated work
+# (causes conflicts when merging)
+```
+
+**Why:** Beads changes on unrelated branches (like debug branches) cause merge conflicts and make it hard to track what was closed when.
+
+---
+
 ## Pre-commit Checks
 
 Before every commit, ensure:
