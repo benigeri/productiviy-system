@@ -28,6 +28,7 @@ const DraftRequestSchema = z.object({
 
 // Zod schema for Braintrust response validation
 const DraftResponseSchema = z.object({
+  subject: z.string().optional(), // AI returns this (unified prompt), but reply endpoint ignores it
   to: z.array(z.string()),
   cc: z.array(z.string()),
   body: z.string(),
