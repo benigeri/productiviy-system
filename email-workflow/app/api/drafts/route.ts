@@ -35,6 +35,45 @@ const DraftResponseSchema = z.object({
 
 type DraftResponse = z.infer<typeof DraftResponseSchema>;
 
+// Format thread history as Gmail-style quoted text
+function formatThreadHistory(
+  messages: Array<{
+    from: Array<{ name?: string; email: string }>;
+    to: Array<{ name?: string; email: string }>;
+    date: number;
+    body: string;
+  }>,
+  currentUserEmail: string
+): string {
+  return messages
+    .filter((m) => m.from[0]?.email !== currentUserEmail) // Skip own messages
+    .sort((a, b) => a.date - b.date) // Chronological order
+    .map((msg) => {
+      const sender = msg.from[0];
+      const date = new Date(msg.date * 1000);
+      const dateStr = date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+      const timeStr = date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+
+      // Quote each line with > prefix
+      const quotedLines = msg.body
+        .split('\n')
+        .map((line) => `> ${line}`)
+        .join('\n');
+
+      return `On ${dateStr} at ${timeStr} ${sender?.name || sender?.email} <${sender?.email}> wrote:\n${quotedLines}`;
+    })
+    .join('\n\n');
+}
+
 // Wrapped function for Braintrust tracing
 const generateEmailDraft = wrapTraced(async function generateEmailDraft(input: {
   thread_subject: string;
@@ -137,6 +176,26 @@ export async function POST(request: Request) {
       user_instructions: instructions,
     });
 
+    // Get current user's email for filtering history
+    const grantRes = await fetch(
+      `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.NYLAS_API_KEY}`,
+        },
+      }
+    );
+
+    let currentUserEmail = '';
+    if (grantRes.ok) {
+      const grant = await grantRes.json();
+      currentUserEmail = grant.data?.email || '';
+    }
+
+    // Format thread history and append to body
+    const history = formatThreadHistory(messages, currentUserEmail);
+    const fullBody = history ? `${draftResponse.body}\n\n${history}` : draftResponse.body;
+
     const duration = Date.now() - startTime;
 
     console.log('Draft generation completed:', {
@@ -147,14 +206,15 @@ export async function POST(request: Request) {
       cc: draftResponse.cc,
       hasCc: Array.isArray(draftResponse.cc) && draftResponse.cc.length > 0,
       ccCount: Array.isArray(draftResponse.cc) ? draftResponse.cc.length : 0,
+      historyLength: history.length,
     });
 
-    // Return structured response with to, cc, and body
+    // Return structured response with to, cc, and body (with history)
     return NextResponse.json({
       success: true,
       to: draftResponse.to,
       cc: draftResponse.cc,
-      body: draftResponse.body,
+      body: fullBody,
     });
   } catch (error) {
     const duration = Date.now() - startTime;
