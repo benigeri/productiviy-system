@@ -3,3 +3,12 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Temporary files and working directories
+temp/
+
+# Beads auto-generates this - we use CLAUDE.md instead
+AGENTS.md
+
+# bv (beads viewer) local config and caches
+.bv/

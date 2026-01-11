@@ -28,6 +28,8 @@ When presented with an email thread, follow these internal steps (do not include
 - Write the email as if Paul wrote it himself, matching his voice and style closely.
 - Keep the email concise and focused, avoiding unnecessary length or wordiness.
 - Ensure the email is clear, easy to read, and effectively advances the conversation.
+- Use short paragraphs (1-2 sentences each) for better readability—break on natural thought boundaries.
+- Add line breaks between distinct ideas or topics to improve visual flow.
 
 ## Output Format
 
