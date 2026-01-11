@@ -1,7 +1,14 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
-import { invoke, wrapTraced } from 'braintrust';
+import { invoke, wrapTraced, initLogger } from 'braintrust';
 import { z } from 'zod';
+
+// Initialize Braintrust logger for tracing (REQUIRED for logging to work)
+const logger = initLogger({
+  projectName: process.env.BRAINTRUST_PROJECT_NAME!,
+  apiKey: process.env.BRAINTRUST_API_KEY,
+  asyncFlush: false, // CRITICAL: Prevents log loss in serverless (Vercel)
+});
 
 // Request validation schemas
 const DraftRequestSchema = z.object({
