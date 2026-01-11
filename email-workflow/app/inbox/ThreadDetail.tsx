@@ -53,6 +53,8 @@ export function ThreadDetail({
   // Sync draft state with storedDraft when thread changes (prevents stale drafts)
   useEffect(() => {
     setDraft(storedDraft || '');
+    setDraftTo([]);
+    setDraftCc([]);
   }, [storedDraft, thread.id]);
 
   async function generateDraft() {
@@ -198,9 +200,8 @@ export function ThreadDetail({
         ? draftTo.map(email => ({ email }))
         : lastMessage.from;
 
-      const ccRecipients = draftCc.length > 0
-        ? draftCc.map(email => ({ email }))
-        : lastMessage.to;
+      // Use CC from Braintrust prompt - if empty, no CC is added (don't fallback to lastMessage.to)
+      const ccRecipients = draftCc.map(email => ({ email }));
 
       console.log('Saving draft with:', { to: toRecipients, cc: ccRecipients });
 

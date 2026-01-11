@@ -1,12 +1,7 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
-import { invoke, wrapTraced, initLogger } from 'braintrust';
+import { invoke, wrapTraced } from 'braintrust';
 import { z } from 'zod';
-
-// Initialize Braintrust logger
-const logger = initLogger({
-  projectName: process.env.BRAINTRUST_PROJECT_NAME,
-});
 
 // Request validation schemas
 const DraftRequestSchema = z.object({
@@ -24,12 +19,14 @@ const DraftRequestSchema = z.object({
   latestMessageId: z.string(),
 });
 
-// Type for Braintrust response
-type DraftResponse = {
-  to: string[];
-  cc: string[];
-  body: string;
-};
+// Zod schema for Braintrust response validation
+const DraftResponseSchema = z.object({
+  to: z.array(z.string()),
+  cc: z.array(z.string()),
+  body: z.string(),
+});
+
+type DraftResponse = z.infer<typeof DraftResponseSchema>;
 
 // Wrapped function for Braintrust tracing
 const generateEmailDraft = wrapTraced(async function generateEmailDraft(input: {
@@ -51,22 +48,33 @@ const generateEmailDraft = wrapTraced(async function generateEmailDraft(input: {
 
   const startTime = Date.now();
 
-  const result = await invoke({
+  const rawResult = await invoke({
     projectName,
     slug: draftSlug,
     input: {
       user_input: JSON.stringify(input),
     },
-  }) as DraftResponse;
+  });
 
+  // Validate Braintrust response structure
+  const validationResult = DraftResponseSchema.safeParse(rawResult);
+  if (!validationResult.success) {
+    console.error('Invalid Braintrust response:', {
+      issues: validationResult.error.issues,
+      rawResult,
+    });
+    throw new Error('Invalid response from AI model');
+  }
+
+  const result = validationResult.data;
   const duration = Date.now() - startTime;
 
   console.log('Draft generated:', {
     duration,
     threadSubject: input.thread_subject,
     messageCount: input.messages.length,
-    hasCc: Array.isArray(result.cc) && result.cc.length > 0,
-    ccCount: Array.isArray(result.cc) ? result.cc.length : 0,
+    hasCc: result.cc.length > 0,
+    ccCount: result.cc.length,
   });
 
   return result;

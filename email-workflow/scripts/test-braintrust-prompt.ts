@@ -8,7 +8,7 @@
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
-import { invoke, wrapTraced, initLogger } from 'braintrust';
+import { invoke, wrapTraced } from 'braintrust';
 
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
@@ -17,11 +17,6 @@ config({ path: resolve(__dirname, '../.env.local') });
 
 const PROJECT_NAME = process.env.BRAINTRUST_PROJECT_NAME!;
 const DRAFT_SLUG = process.env.BRAINTRUST_DRAFT_SLUG!;
-
-// Initialize Braintrust logger
-const logger = initLogger({
-  projectName: PROJECT_NAME,
-});
 
 // Test inputs
 const testInput = {
