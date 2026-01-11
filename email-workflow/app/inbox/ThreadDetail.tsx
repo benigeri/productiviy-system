@@ -57,9 +57,13 @@ export function ThreadDetail({
   // Sync draft state with storedDraft when thread changes (prevents stale drafts)
   useEffect(() => {
     setDraft(storedDraft || '');
+  }, [storedDraft]);
+
+  // Clear recipients only when thread changes (not when draft content changes)
+  useEffect(() => {
     setDraftTo([]);
     setDraftCc([]);
-  }, [storedDraft, thread.id]);
+  }, [thread.id]);
 
   async function generateDraft() {
     setLoading(true);
@@ -482,8 +486,19 @@ export function ThreadDetail({
           </CardHeader>
 
           <CardContent>
-            <div className="text-sm whitespace-pre-wrap leading-relaxed">
-              {draft}
+            <div className="text-sm leading-relaxed whitespace-pre-wrap">
+              {draft.split('\n').map((line, idx) => {
+                // Check if line is a quoted reply (starts with >)
+                const isQuoted = line.trim().startsWith('>');
+                return (
+                  <p
+                    key={idx}
+                    className={isQuoted ? 'text-muted-foreground italic pl-4 border-l-2 border-muted' : ''}
+                  >
+                    {autoLinkUrls(line.replace(/^>\s*/, '') || '\u00A0')}
+                  </p>
+                );
+              })}
             </div>
           </CardContent>
         </Card>

@@ -15,6 +15,76 @@ interface NylasDraftResponse {
   };
 }
 
+// Helper to escape HTML in user-generated content
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// Helper to build Gmail-native quoted reply HTML
+function buildGmailQuotedReply(draftBody: string): string {
+  const lines = draftBody.split('\n');
+  const replyLines: string[] = [];
+  const quotedLines: string[] = [];
+  let inQuotedSection = false;
+  let quoteAttribution = '';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Detect quote attribution line (e.g., "On Jan 10, 2024 at 3:45 PM John Doe <john@example.com> wrote:")
+    if (trimmed.startsWith('On ') && trimmed.includes('wrote:')) {
+      inQuotedSection = true;
+      quoteAttribution = trimmed.replace(' wrote:', '');
+      continue;
+    }
+
+    if (trimmed.startsWith('>')) {
+      inQuotedSection = true;
+      quotedLines.push(trimmed.slice(1).trim()); // Remove > prefix
+    } else if (inQuotedSection) {
+      // Still in quoted section, but no > prefix (blank line or continuation)
+      quotedLines.push(trimmed);
+    } else if (trimmed.length > 0) {
+      // Reply content (before quoted section)
+      replyLines.push(trimmed);
+    }
+  }
+
+  // Escape and format reply body
+  const escapedReply = replyLines
+    .map(line => escapeHtml(line))
+    .join('<br>');
+
+  // Escape and format quoted body
+  const escapedQuoted = quotedLines
+    .map(line => escapeHtml(line) || '&nbsp;')
+    .join('<br>');
+
+  // Build Gmail-native HTML structure
+  if (quotedLines.length > 0) {
+    const attributionHtml = quoteAttribution
+      ? `<div dir="ltr">${escapeHtml(quoteAttribution)} wrote:<br></div>`
+      : '';
+
+    return `<div>${escapedReply}</div>
+
+<div class="gmail_quote">
+  ${attributionHtml}
+  <blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex">
+    ${escapedQuoted}
+  </blockquote>
+</div>`;
+  }
+
+  // No quoted content, just return reply
+  return `<div>${escapedReply}</div>`;
+}
+
 const SaveDraftSchema = z.object({
   threadId: z.string().min(1),
   subject: z.string(),
@@ -40,6 +110,16 @@ export async function POST(request: Request) {
     const { threadId, subject, draftBody, to, cc, latestMessageId } =
       result.data;
 
+    console.log('Save API received request:', {
+      threadId,
+      subject: subject.slice(0, 50),
+      draftBodyPreview: draftBody.slice(0, 200),
+      to: to.map(r => r.email),
+      cc: cc.map(r => r.email),
+      toCount: to.length,
+      ccCount: cc.length,
+    });
+
     // Get current user's email from Nylas grant to filter from CC
     const grantRes = await fetch(
       `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}`,
@@ -64,14 +144,8 @@ export async function POST(request: Request) {
       ? cc.filter((recipient) => recipient.email !== userEmail)
       : cc;
 
-    // Convert plain text line breaks to HTML for better Gmail rendering
-    // Nylas supports both plain text with \n and HTML, but explicit HTML gives us more control
-    const htmlBody = draftBody
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
-      .map(line => `<p>${line}</p>`)
-      .join('');
+    // Convert to Gmail-native HTML format for proper rendering
+    const htmlBody = buildGmailQuotedReply(draftBody);
 
     console.log('Saving draft to Nylas:', {
       threadId,
@@ -80,6 +154,9 @@ export async function POST(request: Request) {
       cc: filteredCc.map(r => r.email),
       bodyLines: draftBody.split('\n').length,
       subject: `Re: ${subject}`,
+      plainTextPreview: draftBody.slice(0, 200),
+      htmlPreview: htmlBody.slice(0, 500),
+      isHtml: htmlBody.includes('<div class="gmail_quote">'),
     });
 
     // Save draft to Gmail via Nylas
