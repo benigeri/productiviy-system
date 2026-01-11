@@ -57,9 +57,13 @@ export function ThreadDetail({
   // Sync draft state with storedDraft when thread changes (prevents stale drafts)
   useEffect(() => {
     setDraft(storedDraft || '');
+  }, [storedDraft]);
+
+  // Clear recipients only when thread changes (not when draft content changes)
+  useEffect(() => {
     setDraftTo([]);
     setDraftCc([]);
-  }, [storedDraft, thread.id]);
+  }, [thread.id]);
 
   async function generateDraft() {
     setLoading(true);
