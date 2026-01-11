@@ -228,7 +228,7 @@ export function ThreadDetail({
   const nextThreadId = useMemo(() => getNextThreadId(), [allThreads, thread.id]);
 
   // Auto-link URLs in plain text
-  function autoLinkUrls(text: string): (string | JSX.Element)[] {
+  function autoLinkUrls(text: string): (string | React.ReactElement)[] {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     return text.split(urlRegex).map((part, i) => {
       if (part.match(urlRegex)) {

@@ -1,3 +1,4 @@
+import 'server-only';
 import { NextResponse } from 'next/server';
 import { invoke } from 'braintrust';
 import { z } from 'zod';
