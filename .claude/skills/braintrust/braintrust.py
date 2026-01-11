@@ -134,6 +134,40 @@ def create_command(args, api: BraintrustAPI) -> None:
             {"role": "user", "content": args.user}
         )
 
+    # Add model if specified
+    if args.model:
+        prompt_data["model"] = args.model
+
+    # Add options if any are specified
+    options = {}
+    if args.temperature is not None:
+        options["temperature"] = args.temperature
+    if args.max_tokens is not None:
+        options["max_tokens"] = args.max_tokens
+    if args.thinking_budget is not None:
+        options["thinking"] = {
+            "type": "enabled",
+            "budget_tokens": args.thinking_budget
+        }
+    if options:
+        prompt_data["options"] = options
+
+    # Add structured output schema if specified
+    if args.schema:
+        import json as json_lib
+        try:
+            schema_obj = json_lib.loads(args.schema)
+            prompt_data["tools"] = [{
+                "type": "function",
+                "function": {
+                    "name": "output_schema",
+                    "parameters": schema_obj
+                }
+            }]
+        except json_lib.JSONDecodeError as e:
+            print(f"Error: Invalid JSON schema - {e}", file=sys.stderr)
+            sys.exit(1)
+
     # Create prompt
     result = api.create_prompt(
         slug=args.slug,
@@ -174,6 +208,40 @@ def update_command(args, api: BraintrustAPI) -> None:
             messages.append({"role": "user", "content": args.user})
 
         prompt_data["prompt"]["messages"] = messages
+
+    # Update model if specified
+    if args.model:
+        prompt_data["model"] = args.model
+
+    # Update options if any are specified
+    if args.temperature is not None or args.max_tokens is not None or args.thinking_budget is not None:
+        options = prompt_data.get("options", {})
+        if args.temperature is not None:
+            options["temperature"] = args.temperature
+        if args.max_tokens is not None:
+            options["max_tokens"] = args.max_tokens
+        if args.thinking_budget is not None:
+            options["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": args.thinking_budget
+            }
+        prompt_data["options"] = options
+
+    # Update structured output schema if specified
+    if args.schema:
+        import json as json_lib
+        try:
+            schema_obj = json_lib.loads(args.schema)
+            prompt_data["tools"] = [{
+                "type": "function",
+                "function": {
+                    "name": "output_schema",
+                    "parameters": schema_obj
+                }
+            }]
+        except json_lib.JSONDecodeError as e:
+            print(f"Error: Invalid JSON schema - {e}", file=sys.stderr)
+            sys.exit(1)
 
     # Update prompt
     result = api.update_prompt(
@@ -278,6 +346,80 @@ const {function_name} = wrapTraced(async function {function_name}(input: {{ {", 
     print(code)
 
 
+def test_command(args, api: BraintrustAPI) -> None:
+    """Test/invoke a prompt with input variables (generates code to run)."""
+    project_id = args.project or os.getenv("BRAINTRUST_PROJECT_ID")
+    if not project_id:
+        print("Error: --project or BRAINTRUST_PROJECT_ID required", file=sys.stderr)
+        sys.exit(1)
+
+    # Parse input variables from --input arguments
+    input_vars = {}
+    if args.input:
+        for inp in args.input:
+            if "=" not in inp:
+                print(f"Error: Invalid input format '{inp}'. Use key=value", file=sys.stderr)
+                sys.exit(1)
+            key, value = inp.split("=", 1)
+            input_vars[key] = value
+
+    # Get the prompt
+    prompt = api.get_prompt_by_slug(args.slug, project_id)
+    if not prompt:
+        print(f"Error: Prompt '{args.slug}' not found", file=sys.stderr)
+        sys.exit(1)
+
+    prompt_data = prompt.get("prompt_data", {})
+
+    # Show what would be sent
+    print(f"🧪 Testing prompt '{args.slug}'")
+    print(f"   Model: {prompt_data.get('model', 'default')}")
+    print(f"   Input: {json.dumps(input_vars, indent=2)}")
+    print()
+
+    # Generate test script
+    import tempfile
+    import os as os_module
+
+    # Convert slug to function name
+    function_name = "".join(word.capitalize() for word in args.slug.split("-"))
+    function_name = function_name[0].lower() + function_name[1:]
+
+    # Build input object for code
+    input_obj = ", ".join([f'{k}: "{v}"' for k, v in input_vars.items()])
+
+    test_code = f"""import {{ login, invoke, initLogger }} from 'braintrust';
+
+(async () => {{
+  initLogger({{ projectId: '{project_id}' }});
+  await login({{ apiKey: process.env.BRAINTRUST_API_KEY }});
+
+  const result = await invoke({{
+    projectId: '{project_id}',
+    slug: '{args.slug}',
+    input: {{ {input_obj} }},
+  }});
+
+  console.log(JSON.stringify(result, null, 2));
+}})();
+"""
+
+    # Write to temp file
+    temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.ts', delete=False)
+    temp_file.write(test_code)
+    temp_file.close()
+
+    print(f"📝 Generated test script: {temp_file.name}")
+    print()
+    print("To run:")
+    print(f"  export BRAINTRUST_API_KEY={os.getenv('BRAINTRUST_API_KEY')}")
+    print(f"  npx tsx {temp_file.name}")
+    print()
+    print("Or install dependencies and run:")
+    print(f"  npm install braintrust")
+    print(f"  npx tsx {temp_file.name}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Braintrust Prompt Management CLI",
@@ -290,17 +432,27 @@ def main():
     create_parser = subparsers.add_parser("create", help="Create a new prompt")
     create_parser.add_argument("--slug", required=True, help="Prompt slug (unique identifier)")
     create_parser.add_argument("--name", required=True, help="Prompt display name")
-    create_parser.add_argument("--project", help="Project name (or use BRAINTRUST_PROJECT_ID)")
+    create_parser.add_argument("--project", help="Project ID (or use BRAINTRUST_PROJECT_ID)")
     create_parser.add_argument("--system", help="System message content")
     create_parser.add_argument("--user", help="User message content (supports {{variables}})")
+    create_parser.add_argument("--model", help="Model to use (e.g., claude-3-5-sonnet-20241022)")
+    create_parser.add_argument("--temperature", type=float, help="Temperature (0.0-1.0)")
+    create_parser.add_argument("--max-tokens", type=int, help="Maximum tokens in response")
+    create_parser.add_argument("--thinking-budget", type=int, help="Thinking budget tokens for reasoning")
+    create_parser.add_argument("--schema", help="JSON schema for structured output")
 
     # Update command
     update_parser = subparsers.add_parser("update", help="Update an existing prompt")
     update_parser.add_argument("--slug", required=True, help="Prompt slug to update")
-    update_parser.add_argument("--project", help="Project name (or use BRAINTRUST_PROJECT_ID)")
+    update_parser.add_argument("--project", help="Project ID (or use BRAINTRUST_PROJECT_ID)")
     update_parser.add_argument("--name", help="New prompt display name")
     update_parser.add_argument("--system", help="New system message content")
     update_parser.add_argument("--user", help="New user message content")
+    update_parser.add_argument("--model", help="Model to use (e.g., claude-3-5-sonnet-20241022)")
+    update_parser.add_argument("--temperature", type=float, help="Temperature (0.0-1.0)")
+    update_parser.add_argument("--max-tokens", type=int, help="Maximum tokens in response")
+    update_parser.add_argument("--thinking-budget", type=int, help="Thinking budget tokens for reasoning")
+    update_parser.add_argument("--schema", help="JSON schema for structured output")
 
     # List command
     list_parser = subparsers.add_parser("list", help="List all prompts")
@@ -310,6 +462,12 @@ def main():
     generate_parser = subparsers.add_parser("generate", help="Generate TypeScript usage code")
     generate_parser.add_argument("--slug", required=True, help="Prompt slug")
     generate_parser.add_argument("--project", help="Project name (or use BRAINTRUST_PROJECT_ID)")
+
+    # Test command
+    test_parser = subparsers.add_parser("test", help="Test/invoke a prompt with input variables")
+    test_parser.add_argument("--slug", required=True, help="Prompt slug to test")
+    test_parser.add_argument("--project", help="Project ID (or use BRAINTRUST_PROJECT_ID)")
+    test_parser.add_argument("--input", action="append", help="Input variable (key=value). Can be used multiple times.")
 
     args = parser.parse_args()
 
@@ -335,6 +493,8 @@ def main():
         list_command(args, api)
     elif args.command == "generate":
         generate_command(args, api)
+    elif args.command == "test":
+        test_command(args, api)
 
 
 if __name__ == "__main__":
