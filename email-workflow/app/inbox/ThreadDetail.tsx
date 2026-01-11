@@ -48,6 +48,7 @@ export function ThreadDetail({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [historyCollapsed, setHistoryCollapsed] = useState(true);
 
   // Sync draft state with storedDraft when thread changes (prevents stale drafts)
   useEffect(() => {
@@ -350,26 +351,39 @@ export function ThreadDetail({
       {/* Conversation History */}
       {isLoaded && conversationMessages.length > 0 && (
         <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <h3 className="font-semibold text-blue-800 mb-3">Draft Iteration History</h3>
-          <div className="space-y-2">
-            {conversationMessages.map((msg, i) => (
-              <div
-                key={i}
-                className={`p-3 rounded ${
-                  msg.role === 'user'
-                    ? 'bg-white border border-blue-200'
-                    : 'bg-blue-100 border border-blue-300'
-                }`}
-              >
-                <div className="text-xs font-semibold text-blue-700 mb-1">
-                  {msg.role === 'user' ? '👤 You' : '🤖 Assistant'}
+          <button
+            onClick={() => setHistoryCollapsed(!historyCollapsed)}
+            className="w-full flex items-center justify-between text-left mb-3 hover:opacity-70 transition"
+          >
+            <h3 className="font-semibold text-blue-800">
+              Draft Iteration History ({conversationMessages.length})
+            </h3>
+            <span className="text-blue-800">
+              {historyCollapsed ? '▶' : '▼'}
+            </span>
+          </button>
+
+          {!historyCollapsed && (
+            <div className="space-y-2">
+              {conversationMessages.map((msg, i) => (
+                <div
+                  key={i}
+                  className={`p-3 rounded ${
+                    msg.role === 'user'
+                      ? 'bg-white border border-blue-200'
+                      : 'bg-blue-100 border border-blue-300'
+                  }`}
+                >
+                  <div className="text-xs font-semibold text-blue-700 mb-1">
+                    {msg.role === 'user' ? '👤 You' : '🤖 Assistant'}
+                  </div>
+                  <div className="text-sm whitespace-pre-wrap">
+                    {msg.content}
+                  </div>
                 </div>
-                <div className="text-sm whitespace-pre-wrap">
-                  {msg.content}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -384,6 +398,16 @@ export function ThreadDetail({
       {draft && (
         <div className="p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
           <h3 className="font-semibold text-blue-800 mb-3 text-lg">Draft Reply</h3>
+
+          {/* Display To recipients */}
+          {draftTo.length > 0 && (
+            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded">
+              <div className="text-xs font-semibold text-blue-800 mb-1">To:</div>
+              <div className="text-sm text-blue-700">
+                {draftTo.join(', ')}
+              </div>
+            </div>
+          )}
 
           {/* Display CC recipients if present */}
           {draftCc.length > 0 && (
