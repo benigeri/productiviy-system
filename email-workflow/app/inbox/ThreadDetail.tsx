@@ -43,6 +43,8 @@ export function ThreadDetail({
   const [instructions, setInstructions] = useState('');
   const [feedback, setFeedback] = useState('');
   const [draft, setDraft] = useState(storedDraft || '');
+  const [draftTo, setDraftTo] = useState<string[]>([]);
+  const [draftCc, setDraftCc] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -84,10 +86,16 @@ export function ThreadDetail({
         throw new Error(data.error || 'Failed to generate draft');
       }
 
+      // Extract structured response: to, cc, body
+      const { to = [], cc = [], body } = data;
+      console.log('Draft generated:', { to, cc, bodyLength: body.length });
+
       // Save assistant's draft to conversation history
-      addMessage('assistant', data.body);
-      updateDraft(data.body);
-      setDraft(data.body);
+      addMessage('assistant', body);
+      updateDraft(body);
+      setDraft(body);
+      setDraftTo(to);
+      setDraftCc(cc);
       setInstructions(''); // Clear instructions after generating
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to generate draft';
@@ -130,10 +138,16 @@ export function ThreadDetail({
         throw new Error(data.error || 'Failed to regenerate draft');
       }
 
+      // Extract structured response: to, cc, body
+      const { to = [], cc = [], body } = data;
+      console.log('Draft regenerated:', { to, cc, bodyLength: body.length });
+
       // Update draft with new version
-      addMessage('assistant', data.body);
-      updateDraft(data.body);
-      setDraft(data.body);
+      addMessage('assistant', body);
+      updateDraft(body);
+      setDraft(body);
+      setDraftTo(to);
+      setDraftCc(cc);
       setFeedback(''); // Clear feedback after regenerating
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to regenerate draft';
@@ -178,6 +192,17 @@ export function ThreadDetail({
       const lastMessage = messages[messages.length - 1];
 
       // Save draft to Gmail and update labels
+      // Use draftTo/draftCc from Braintrust prompt if available, otherwise fallback to defaults
+      const toRecipients = draftTo.length > 0
+        ? draftTo.map(email => ({ email }))
+        : lastMessage.from;
+
+      const ccRecipients = draftCc.length > 0
+        ? draftCc.map(email => ({ email }))
+        : lastMessage.to;
+
+      console.log('Saving draft with:', { to: toRecipients, cc: ccRecipients });
+
       const res = await fetch('/api/drafts/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -185,8 +210,8 @@ export function ThreadDetail({
           threadId: thread.id,
           subject: thread.subject,
           draftBody: draft,
-          to: lastMessage.from,
-          cc: lastMessage.to, // Include all original recipients (API filters out self)
+          to: toRecipients,
+          cc: ccRecipients, // Use CC from Braintrust prompt (API filters out self)
           latestMessageId: messages[messages.length - 1].id,
         }),
       });
@@ -359,6 +384,17 @@ export function ThreadDetail({
       {draft && (
         <div className="p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
           <h3 className="font-semibold text-blue-800 mb-3 text-lg">Draft Reply</h3>
+
+          {/* Display CC recipients if present */}
+          {draftCc.length > 0 && (
+            <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
+              <div className="text-xs font-semibold text-yellow-800 mb-1">CC:</div>
+              <div className="text-sm text-yellow-700">
+                {draftCc.join(', ')}
+              </div>
+            </div>
+          )}
+
           <div className="text-sm whitespace-pre-wrap leading-relaxed p-4 bg-white rounded border">
             {draft}
           </div>

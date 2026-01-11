@@ -8,7 +8,7 @@
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
-import { invoke } from 'braintrust';
+import { invoke, wrapTraced, initLogger } from 'braintrust';
 
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
@@ -17,6 +17,11 @@ config({ path: resolve(__dirname, '../.env.local') });
 
 const PROJECT_NAME = process.env.BRAINTRUST_PROJECT_NAME!;
 const DRAFT_SLUG = process.env.BRAINTRUST_DRAFT_SLUG!;
+
+// Initialize Braintrust logger
+const logger = initLogger({
+  projectName: PROJECT_NAME,
+});
 
 // Test inputs
 const testInput = {
@@ -44,6 +49,25 @@ const testInput = {
   user_instructions: "Reply confirming Thursday and CC bob@example.com since he needs to be in the loop on budget decisions"
 };
 
+// Wrapped test function for tracing
+const runPromptTest = wrapTraced(async function runPromptTest(input: typeof testInput) {
+  const startTime = Date.now();
+
+  const result = await invoke({
+    projectName: PROJECT_NAME,
+    slug: DRAFT_SLUG,
+    input: {
+      user_input: JSON.stringify(input)
+    },
+  });
+
+  const duration = Date.now() - startTime;
+
+  console.log(`\n⏱️  Duration: ${duration}ms`);
+
+  return result;
+});
+
 async function testBraintrustPrompt() {
   console.log('Testing Braintrust Prompt...\n');
   console.log('Environment:', {
@@ -60,14 +84,9 @@ async function testBraintrustPrompt() {
   console.log(JSON.stringify(testInput, null, 2));
 
   try {
-    console.log('\nCalling Braintrust SDK invoke()...');
+    console.log('\nCalling Braintrust SDK invoke() with tracing...');
 
-    // Call Braintrust using SDK (same as app code)
-    const result = await invoke({
-      projectName: PROJECT_NAME,
-      slug: DRAFT_SLUG,
-      input: testInput,
-    });
+    const result = await runPromptTest(testInput);
 
     console.log('\n✓ Braintrust Response (raw):');
     console.log(typeof result);
