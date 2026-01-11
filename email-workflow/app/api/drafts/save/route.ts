@@ -79,6 +79,7 @@ export async function POST(request: Request) {
           to,
           cc: filteredCc,
           reply_to_message_id: latestMessageId,
+          thread_id: threadId, // Maintain thread structure in Gmail
         }),
       }
     );
