@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useConversation } from '../../hooks/useConversation';
 
@@ -224,11 +224,11 @@ export function ThreadDetail({
     }
   }
 
-  const prevThreadId = getPrevThreadId();
-  const nextThreadId = getNextThreadId();
+  const prevThreadId = useMemo(() => getPrevThreadId(), [allThreads, thread.id]);
+  const nextThreadId = useMemo(() => getNextThreadId(), [allThreads, thread.id]);
 
   return (
-    <div className="h-dvh flex flex-col">
+    <div className="h-screen h-dvh flex flex-col">
       {/* Sticky Top Navigation */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <a href="/inbox" className="text-blue-600 hover:underline">
@@ -347,7 +347,7 @@ export function ThreadDetail({
       </div>
 
       {/* Sticky Bottom Controls */}
-      <div className="sticky bottom-0 z-10 bg-white border-t border-gray-200 p-4">
+      <div className="sticky bottom-0 z-10 bg-white border-t border-gray-200 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <div className="max-w-4xl mx-auto">
           {/* Error message */}
           {error && (
