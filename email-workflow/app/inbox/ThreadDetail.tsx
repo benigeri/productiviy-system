@@ -2,7 +2,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import { useConversation } from '../../hooks/useConversation';
+import { Card, CardHeader, CardContent } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
 
 interface Thread {
   id: string;
@@ -340,47 +344,50 @@ export function ThreadDetail({
       {/* Messages */}
       <div className="space-y-4">
         {messages.map((msg, i) => (
-          <div key={msg.id} className="p-4 bg-white rounded-lg border">
-            <div className="flex justify-between mb-3 items-start">
-              <div>
-                <strong className="block text-lg">{msg.from[0]?.name || 'Unknown'}</strong>
-                <span className="text-xs text-gray-500">{msg.from[0]?.email}</span>
-              </div>
-              <div className="text-right">
-                {i === messages.length - 1 && (
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded mb-1 inline-block font-medium">
-                    Latest
-                  </span>
-                )}
-                <p className="text-xs text-gray-400">
-                  {new Date(msg.date * 1000).toLocaleString()}
-                </p>
-              </div>
-            </div>
-            <div className="text-sm leading-relaxed whitespace-pre-wrap">
-              {msg.conversation.split('\n').map((line, idx) => {
-                // Check if line is a quoted reply (starts with >)
-                const isQuoted = line.trim().startsWith('>');
-                return (
-                  <p
-                    key={idx}
-                    className={isQuoted ? 'text-gray-500 italic pl-4 border-l-2 border-gray-300' : ''}
-                  >
-                    {autoLinkUrls(line.replace(/^>\s*/, '') || '\u00A0')}
+          <Card key={msg.id}>
+            <CardHeader>
+              <div className="flex justify-between items-start">
+                <div>
+                  <strong className="block text-lg">{msg.from[0]?.name || 'Unknown'}</strong>
+                  <span className="text-xs text-muted-foreground">{msg.from[0]?.email}</span>
+                </div>
+                <div className="text-right flex flex-col items-end gap-1">
+                  {i === messages.length - 1 && (
+                    <Badge variant="default">Latest</Badge>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(msg.date * 1000).toLocaleString()}
                   </p>
-                );
-              })}
-            </div>
-          </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                {msg.conversation.split('\n').map((line, idx) => {
+                  // Check if line is a quoted reply (starts with >)
+                  const isQuoted = line.trim().startsWith('>');
+                  return (
+                    <p
+                      key={idx}
+                      className={isQuoted ? 'text-muted-foreground italic pl-4 border-l-2 border-muted' : ''}
+                    >
+                      {autoLinkUrls(line.replace(/^>\s*/, '') || '\u00A0')}
+                    </p>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       {/* Conversation History */}
       {isLoaded && conversationMessages.length > 0 && (
         <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <button
+          <Button
             onClick={() => setHistoryCollapsed(!historyCollapsed)}
-            className="w-full flex items-center justify-between text-left mb-3 hover:opacity-70 transition"
+            variant="ghost"
+            className="w-full flex items-center justify-between text-left mb-3 h-auto p-2"
           >
             <h3 className="font-semibold text-blue-800">
               Draft Iteration History ({conversationMessages.length})
@@ -388,7 +395,7 @@ export function ThreadDetail({
             <span className="text-blue-800">
               {historyCollapsed ? '▶' : '▼'}
             </span>
-          </button>
+          </Button>
 
           {!historyCollapsed && (
             <div className="space-y-2">
@@ -423,33 +430,63 @@ export function ThreadDetail({
 
       {/* Draft preview (if exists) */}
       {draft && (
-        <div className="p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
-          <h3 className="font-semibold text-blue-800 mb-3 text-lg">Draft Reply</h3>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-lg">Draft Reply</h3>
+              <span className="text-xs text-muted-foreground">Ready to send</span>
+            </div>
 
-          {/* Display To recipients */}
-          {draftTo.length > 0 && (
-            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded">
-              <div className="text-xs font-semibold text-blue-800 mb-1">To:</div>
-              <div className="text-sm text-blue-700">
-                {draftTo.join(', ')}
+            {/* Email Headers - Gmail-style */}
+            <div className="space-y-2 mt-4 text-sm">
+              {/* To Field */}
+              <div className="flex">
+                <span className="text-muted-foreground font-medium w-16 flex-shrink-0">To:</span>
+                <div className="flex-1">
+                  {draftTo.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {draftTo.map((email, i) => (
+                        <Badge key={i} variant="secondary" className="font-normal">
+                          {email}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground italic">No recipients specified</span>
+                  )}
+                </div>
+              </div>
+
+              {/* CC Field - only show if CC exists */}
+              {draftCc.length > 0 && (
+                <div className="flex">
+                  <span className="text-muted-foreground font-medium w-16 flex-shrink-0">Cc:</span>
+                  <div className="flex-1">
+                    <div className="flex flex-wrap gap-1">
+                      {draftCc.map((email, i) => (
+                        <Badge key={i} variant="outline" className="font-normal">
+                          {email}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Subject Field */}
+              <div className="flex">
+                <span className="text-muted-foreground font-medium w-16 flex-shrink-0">Subject:</span>
+                <span className="flex-1">{thread.subject}</span>
               </div>
             </div>
-          )}
+          </CardHeader>
 
-          {/* Display CC recipients if present */}
-          {draftCc.length > 0 && (
-            <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
-              <div className="text-xs font-semibold text-yellow-800 mb-1">CC:</div>
-              <div className="text-sm text-yellow-700">
-                {draftCc.join(', ')}
-              </div>
+          <CardContent>
+            <div className="text-sm whitespace-pre-wrap leading-relaxed">
+              {draft}
             </div>
-          )}
-
-          <div className="text-sm whitespace-pre-wrap leading-relaxed p-4 bg-white rounded border">
-            {draft}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
         </div>
       </div>
@@ -478,13 +515,14 @@ export function ThreadDetail({
                   rows={3}
                 />
               </label>
-              <button
+              <Button
                 onClick={generateDraft}
                 disabled={loading || !instructions.trim()}
-                className="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+                className="w-full h-12"
               >
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {loading ? 'Generating Draft...' : 'Generate Draft'}
-              </button>
+              </Button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -501,28 +539,31 @@ export function ThreadDetail({
                   disabled={loading}
                 />
               </label>
-              <button
+              <Button
                 onClick={regenerateDraft}
                 disabled={loading || !feedback.trim()}
-                className="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition mb-2"
+                className="w-full h-12 mb-2"
               >
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {loading ? 'Regenerating...' : 'Regenerate Draft'}
-              </button>
+              </Button>
               <div className="flex gap-3">
-                <button
+                <Button
                   onClick={handleSkip}
                   disabled={saving}
-                  className="flex-1 bg-gray-500 text-white p-3 rounded-lg font-semibold hover:bg-gray-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+                  variant="outline"
+                  className="flex-1 h-12"
                 >
                   Skip
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={handleApprove}
                   disabled={saving}
-                  className="flex-1 bg-green-600 text-white p-3 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+                  className="flex-1 h-12"
                 >
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {saving ? 'Saving...' : 'Approve & Send to Gmail'}
-                </button>
+                </Button>
               </div>
             </div>
           )}
