@@ -27,6 +27,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('');
 
   async function generateDraft() {
+    if (loading || saving) return; // Prevent double-click
     setLoading(true);
     setError('');
 
@@ -82,6 +83,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
 
   async function regenerateDraft() {
     if (!feedback.trim()) return;
+    if (loading || saving) return; // Prevent double-click
 
     setLoading(true);
     setError('');
@@ -140,6 +142,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
 
   async function handleApprove() {
     if (!draft) return;
+    if (loading || saving) return; // Prevent double-click
 
     setSaving(true);
     setError('');

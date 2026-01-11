@@ -14,6 +14,7 @@ describe('POST /api/compose', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.BRAINTRUST_PROJECT_NAME = 'test-project';
+    process.env.BRAINTRUST_API_KEY = 'test-api-key';
     process.env.BRAINTRUST_COMPOSE_SLUG = 'email-compose-v1';
   });
 

@@ -27,8 +27,8 @@ const ComposeRequestSchema = z.object({
 const ComposeResponseSchema = z.object({
   subject: z.string().min(1).max(200),
   body: z.string().min(1).max(50000),
-  to: z.array(z.string()).min(0).max(20),
-  cc: z.array(z.string()).default([]),
+  to: z.array(z.string().email()).min(0).max(20), // Validate email format
+  cc: z.array(z.string().email()).default([]),
 });
 
 type ComposeResponse = z.infer<typeof ComposeResponseSchema>;
@@ -82,6 +82,23 @@ const generateComposeEmail = wrapTraced(async function generateComposeEmail(inpu
 
 export async function POST(request: Request) {
   const startTime = Date.now();
+
+  // Validate required environment variables
+  const projectName = process.env.BRAINTRUST_PROJECT_NAME;
+  const apiKey = process.env.BRAINTRUST_API_KEY;
+  const composeSlug = process.env.BRAINTRUST_COMPOSE_SLUG;
+
+  if (!projectName || !apiKey || !composeSlug) {
+    console.error('Missing required Braintrust environment variables:', {
+      hasProjectName: !!projectName,
+      hasApiKey: !!apiKey,
+      hasComposeSlug: !!composeSlug,
+    });
+    return NextResponse.json(
+      { error: 'Service configuration error. Please contact support.' },
+      { status: 500 }
+    );
+  }
 
   try {
     // Parse and validate request

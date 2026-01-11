@@ -23,6 +23,21 @@ const SaveComposeSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // Validate required environment variables
+  const nylasApiKey = process.env.NYLAS_API_KEY;
+  const nylasGrantId = process.env.NYLAS_GRANT_ID;
+
+  if (!nylasApiKey || !nylasGrantId) {
+    console.error('Missing required Nylas environment variables:', {
+      hasApiKey: !!nylasApiKey,
+      hasGrantId: !!nylasGrantId,
+    });
+    return NextResponse.json(
+      { error: 'Service configuration error. Please contact support.' },
+      { status: 500 }
+    );
+  }
+
   try {
     // Parse and validate request
     const body = await request.json();
