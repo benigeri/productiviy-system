@@ -75,15 +75,20 @@ def main():
         input_data = json.load(sys.stdin)
     except json.JSONDecodeError:
         sys.exit(0)  # No input, allow
-    
+
     command = input_data.get("tool_input", {}).get("command", "")
-    
+
     # Check if this is a git commit or push command
     is_commit = "git commit" in command
     is_push = "git push" in command and "origin" in command
-    
+
     if not (is_commit or is_push):
         sys.exit(0)  # Not a commit/push, allow
+
+    # Skip hook if command is targeting a different repository
+    # (cross-repo workflow - other repos have their own hooks)
+    if command.startswith("cd ") and " && " in command:
+        sys.exit(0)  # Let the target repo's hook handle it
     
     current_branch = get_current_branch()
     
