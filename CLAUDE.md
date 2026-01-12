@@ -103,7 +103,7 @@ This document defines how AI agents should work on this codebase.
     ```bash
     git checkout main && git pull
     bd close <bead-id> --reason "What you implemented and verified"
-    bd sync
+    # Beads auto-save to .beads/issues.jsonl - commit with your next change
     ```
 
 ---
@@ -180,9 +180,7 @@ bd create "Task 3: Add tests" --priority 1
 bd dep add <task1-id> <epic-id>
 bd dep add <task2-id> <epic-id>
 bd dep add <task3-id> <epic-id>
-
-# Sync everything
-bd sync
+# Beads auto-save to .beads/issues.jsonl
 ```
 
 ---
@@ -213,7 +211,7 @@ bd ready                          # Shows unblocked tasks
 bd update <task-id> --status in_progress
 # ... do the work following Feature Development Workflow ...
 bd close <task-id> --reason "What you did"
-bd sync
+# Beads auto-save - include .beads/ in your commits
 ```
 
 ### 5. Track Progress
@@ -225,7 +223,7 @@ bd epic status                    # See completion status
 ```bash
 bd ready                          # Epic appears when all tasks closed
 bd close <epic-id> --reason "All features implemented and tested"
-bd sync
+# Beads auto-save - include .beads/ in your commits
 ```
 
 ---
@@ -239,46 +237,39 @@ bd sync
 git status                        # Uncommitted changes?
 bd list --status in_progress      # Active beads?
 
-# Sync everything
-bd sync                           # Commit beads changes
-git add .                         # Stage changes
-git commit -m "..."               # Commit code
-bd sync                           # Sync beads again (if new beads created)
+# Commit everything (beads auto-save to .beads/issues.jsonl)
+git add .                         # Stage changes including .beads/
+git commit -m "..."               # Commit code + beads
 git push                          # Push to remote
 
 # Verify
 git status                        # Should be clean
-bd sync --status                  # Should be synced
 ```
 
 **Work is not saved until pushed.**
 
 ---
 
-## Beads Sync Protocol
+## Beads Storage (JSONL-only Mode)
 
 This repo uses **JSONL-only mode** (`no-db: true` in `.beads/config.yaml`). This means:
 - No local SQLite database
-- All operations read/write directly to `.beads/issues.jsonl`
-- "Failed to sync" warnings on git operations are **harmless** - ignore them
+- All `bd` commands read/write directly to `.beads/issues.jsonl`
+- **No `bd sync` needed** - changes are saved automatically
+- Just commit `.beads/` with your other changes
 
-### Before Merging PRs
-Always sync beads before merging to prevent conflicts:
+### Workflow
 ```bash
-bd sync  # Commits beads changes to beads-sync branch
+bd create "My task" --type task   # Auto-saves to .beads/issues.jsonl
+bd close ps-123 --reason "Done"   # Auto-saves
+git add .beads/ && git commit     # Include beads in your commits
 ```
 
-### After Pulling Main
+### If You See Merge Conflicts in `.beads/issues.jsonl`
+The JSONL format is append-only, so conflicts are rare. If they occur:
 ```bash
-git checkout main && git pull
-# Ignore "Failed to sync" warnings - this is normal in JSONL-only mode
-```
-
-### If You See "Import requires SQLite storage backend"
-This is harmless in JSONL-only mode. Verify with:
-```bash
-grep "no-db" .beads/config.yaml  # Should show "no-db: true"
-bd list --status=open            # Should work fine
+# Accept both changes (each line is independent)
+git checkout --theirs .beads/issues.jsonl  # Or resolve manually
 ```
 
 ### If You See Merge Artifacts
@@ -288,7 +279,7 @@ rm .beads/beads.base.* .beads/beads.left.* .beads/beads.right.*
 
 ### Multi-Session Best Practices
 1. **One Session Per Feature Branch** - Don't have multiple sessions editing the same branch
-2. **Sync Before Switching Context** - Run `git status`, `bd sync`, then commit
+2. **Commit Before Switching Context** - Run `git status`, commit including `.beads/`
 3. **Check State When Resuming** - Run `git status`, `bd doctor | tail -10`, `bd list --status=in_progress`
 
 ---
@@ -423,7 +414,6 @@ Agent:
 13. Wait for user to review and merge
 14. git checkout main && git pull
 15. bd close psabc --reason "Implemented Deepgram transcription with tests"
-16. bd sync
 ```
 
 ### Example 2: Work on Existing Bead
@@ -442,7 +432,6 @@ Agent:
 8. Create PR, wait for merge
 9. git checkout main && git pull
 10. bd close psdef --reason "Added feedback loop UI with state management"
-11. bd sync
 ```
 
 ### Example 3: Setup Task
@@ -460,7 +449,6 @@ Agent:
 6. git commit -m "Add [service] configuration"
 7. Only after verification succeeds:
    bd close psxyz --reason "[Service] configured and verified"
-   bd sync
 ```
 
 ---

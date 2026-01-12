@@ -31,12 +31,10 @@ bd update productiviy-system-abc --status in_progress
 
 # 4. Close when done
 bd close productiviy-system-abc
-
-# 5. Sync to git
-bd sync
+# (auto-saves to .beads/issues.jsonl)
 ```
 
-**That's it.** Everything else builds on this cycle.
+**That's it.** Commit `.beads/` with your code changes. Everything else builds on this cycle.
 
 ---
 
@@ -72,10 +70,11 @@ bd list --parent <id>                  # Show children
 bd epic status                         # See epic progress
 ```
 
-### Syncing
+### Persistence (JSONL-only mode)
 ```bash
-bd sync                 # Commit Beads to git
-bd sync --status        # Check sync status
+# Beads auto-save to .beads/issues.jsonl
+# Just commit .beads/ with your other changes
+git add .beads/ && git commit -m "Update beads"
 ```
 
 ---
@@ -152,9 +151,7 @@ bd update productiviy-system-def --status in_progress
 
 # Close it
 bd close productiviy-system-def --reason "Installed shadcn with Dialog, Button, Textarea components"
-
-# Sync
-bd sync
+# Auto-saved to .beads/issues.jsonl
 ```
 
 ### Step 5: Track Progress
@@ -178,9 +175,7 @@ bd ready
 
 # Close it
 bd close productiviy-system-abc --reason "All features implemented and tested"
-
-# Sync
-bd sync
+# Auto-saved to .beads/issues.jsonl
 ```
 
 ---
@@ -244,7 +239,7 @@ Looking at your actual usage, you're already doing most of this right:
 **⚠️ What to Add:**
 1. **Mark work in-progress:** `bd update <id> --status in_progress`
 2. **Use `bd ready` daily:** Shows what's unblocked
-3. **Sync after closing:** `bd sync` to commit changes
+3. **Commit .beads/ with your changes:** Beads auto-save to JSONL
 
 ---
 
@@ -256,7 +251,7 @@ bd create "Fix: Button not working" --type bug --priority 0
 bd update <id> --status in_progress
 # Fix it...
 bd close <id> --reason "Fixed event handler typo"
-bd sync
+# Commit with your code changes
 ```
 
 ### Feature With Multiple PRs
@@ -367,15 +362,15 @@ bd note <id> "Implemented X, working on Y"
 **After completing:**
 ```bash
 bd close <id> --reason "What you did and how it was verified"
-bd sync
-git add/commit/push           # Normal git workflow
+git add . && git commit       # Include .beads/ with your changes
+git push
 ```
 
 **End of day:**
 ```bash
 bd list --status in_progress  # See what's still active
 bd stats                      # See progress
-bd sync                       # Ensure everything synced
+git status                    # Ensure .beads/ is committed
 ```
 
 ---
@@ -399,11 +394,11 @@ bd sync                       # Ensure everything synced
 
 ## Troubleshooting
 
-### "Beads out of sync"
+### "Beads not committed"
 ```bash
-bd sync --status              # Check sync status
-bd sync                       # Force sync
-git pull && bd sync           # Sync after pulling
+git status                    # Check if .beads/ has changes
+git add .beads/               # Stage beads
+git commit -m "Update beads"  # Commit
 ```
 
 ### "Can't find my issue"
@@ -437,7 +432,7 @@ bd ready                             # Find work
 bd create "Title"                    # New issue
 bd update <id> --status in_progress # Start work
 bd close <id>                        # Finish work
-bd sync                              # Save to git
+# (auto-saves to .beads/issues.jsonl)
 
 # Epic Workflow
 bd create "Epic" --type epic         # Create epic
@@ -485,13 +480,12 @@ bd ready  # Showed all 5 tasks
 bd update productiviy-system-rbm --status in_progress
 # ... implemented shadcn ...
 bd close productiviy-system-rbm
-bd sync
 
 # Repeat for each task...
 
 # 5. Close epic when all done
 bd close productiviy-system-2m4
-bd sync
+# Commit .beads/ with your code changes
 ```
 
 **This is the pattern.** Use it for all big features.
