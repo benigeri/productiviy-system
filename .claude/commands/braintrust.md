@@ -5,7 +5,7 @@ Manage Braintrust prompts via CLI. Create, update, diff, and generate TypeScript
 ## Instructions
 
 Read the skill file for commands and patterns:
-${{file:.claude/skills/braintrust/SKILL.md}}
+${{file:~/.claude/skills/braintrust/SKILL.md}}
 
 ## Your Task
 
@@ -30,17 +30,17 @@ If no specific request provided, ask what Braintrust operation they need:
 
 ```bash
 # List prompts
-python3 .claude/skills/braintrust/braintrust.py list
+python3 ~/.claude/skills/braintrust/braintrust.py list
 
 # Get prompt details
-python3 .claude/skills/braintrust/braintrust.py get --slug "prompt-slug"
+python3 ~/.claude/skills/braintrust/braintrust.py get --slug "prompt-slug"
 
 # Diff before update (CRITICAL)
-python3 .claude/skills/braintrust/braintrust.py diff --slug "prompt-slug" --system "new content"
+python3 ~/.claude/skills/braintrust/braintrust.py diff --slug "prompt-slug" --system "new content"
 
 # Update prompt
-python3 .claude/skills/braintrust/braintrust.py update --slug "prompt-slug" --system "new content"
+python3 ~/.claude/skills/braintrust/braintrust.py update --slug "prompt-slug" --system "new content"
 
 # Generate TypeScript code
-python3 .claude/skills/braintrust/braintrust.py generate --slug "prompt-slug"
+python3 ~/.claude/skills/braintrust/braintrust.py generate --slug "prompt-slug"
 ```
