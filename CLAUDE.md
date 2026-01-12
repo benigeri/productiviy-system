@@ -255,6 +255,44 @@ bd sync --status                  # Should be synced
 
 ---
 
+## Beads Sync Protocol
+
+This repo uses **JSONL-only mode** (`no-db: true` in `.beads/config.yaml`). This means:
+- No local SQLite database
+- All operations read/write directly to `.beads/issues.jsonl`
+- "Failed to sync" warnings on git operations are **harmless** - ignore them
+
+### Before Merging PRs
+Always sync beads before merging to prevent conflicts:
+```bash
+bd sync  # Commits beads changes to beads-sync branch
+```
+
+### After Pulling Main
+```bash
+git checkout main && git pull
+# Ignore "Failed to sync" warnings - this is normal in JSONL-only mode
+```
+
+### If You See "Import requires SQLite storage backend"
+This is harmless in JSONL-only mode. Verify with:
+```bash
+grep "no-db" .beads/config.yaml  # Should show "no-db: true"
+bd list --status=open            # Should work fine
+```
+
+### If You See Merge Artifacts
+```bash
+rm .beads/beads.base.* .beads/beads.left.* .beads/beads.right.*
+```
+
+### Multi-Session Best Practices
+1. **One Session Per Feature Branch** - Don't have multiple sessions editing the same branch
+2. **Sync Before Switching Context** - Run `git status`, `bd sync`, then commit
+3. **Check State When Resuming** - Run `git status`, `bd doctor | tail -10`, `bd list --status=in_progress`
+
+---
+
 ## Pre-commit Checks
 
 Before every commit, ensure:
