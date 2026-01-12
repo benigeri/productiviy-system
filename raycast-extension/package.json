@@ -1,11 +1,10 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "linear-quick-issue",
-  "title": "Linear Quick Issue",
-  "description": "Create Linear issues quickly with AI-powered text cleanup",
+  "name": "productivity-tools",
+  "title": "Productivity Tools",
+  "description": "Quick actions for Linear issues and Gmail drafts",
   "icon": "extension-icon.png",
   "author": "benigeri",
-  "owner": "archive",
   "categories": [
     "Productivity"
   ],
@@ -15,6 +14,12 @@
       "name": "create-issue",
       "title": "Create Linear Issue",
       "description": "Create a new Linear issue from text input",
+      "mode": "view"
+    },
+    {
+      "name": "compose-email",
+      "title": "Compose Email Draft",
+      "description": "Generate and save Gmail draft from instructions",
       "mode": "view"
     }
   ],
@@ -26,6 +31,14 @@
       "title": "Supabase Function URL",
       "description": "The URL of your create-issue Supabase function",
       "default": "https://aadqqdsclktlyeuweqrv.supabase.co/functions/v1/create-issue"
+    },
+    {
+      "name": "emailApiBaseUrl",
+      "type": "textfield",
+      "required": true,
+      "title": "Email API Base URL",
+      "description": "Base URL for the email workflow API",
+      "default": "https://email-workflow-phi.vercel.app"
     }
   ],
   "dependencies": {
