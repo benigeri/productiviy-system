@@ -9,7 +9,9 @@
 
 type ExtensionPreferences = {
   /** Supabase Function URL - The URL of your create-issue Supabase function */
-  "supabaseUrl": string
+  "supabaseUrl": string,
+  /** Email API Base URL - Base URL for the email workflow API */
+  "emailApiBaseUrl": string
 }
 
 /** Preferences accessible in all the extension's commands */

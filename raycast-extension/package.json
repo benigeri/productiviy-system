@@ -31,6 +31,14 @@
       "title": "Supabase Function URL",
       "description": "The URL of your create-issue Supabase function",
       "default": "https://aadqqdsclktlyeuweqrv.supabase.co/functions/v1/create-issue"
+    },
+    {
+      "name": "emailApiBaseUrl",
+      "type": "textfield",
+      "required": true,
+      "title": "Email API Base URL",
+      "description": "Base URL for the email workflow API",
+      "default": "https://email-workflow-phi.vercel.app"
     }
   ],
   "dependencies": {
