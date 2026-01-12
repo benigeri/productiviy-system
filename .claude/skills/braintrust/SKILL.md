@@ -1,60 +1,70 @@
-# Braintrust Prompt Management Skill
+---
+name: braintrust
+description: Manage Braintrust prompts via CLI. Create, update, diff, and generate TypeScript code for prompts. Use when working with Braintrust prompts, LLM prompt management, or when the user mentions Braintrust, prompt iteration, or prompt versioning.
+---
 
-Manage Braintrust prompts via CLI. Create, update, diff, and generate usage code.
+<objective>
+Manage Braintrust prompts through a Python CLI. Supports listing, viewing, creating, updating, diffing, and generating TypeScript invocation code. The skill emphasizes safe iteration by always diffing prompts before updating.
+</objective>
 
-## Quick Start
+<quick_start>
+Set environment variables:
 
 ```bash
-# Set environment variables
 export BRAINTRUST_API_KEY="sk-..."
 export BRAINTRUST_PROJECT_NAME="Your_Project"
-
-# List all prompts
-python3 .claude/skills/braintrust/braintrust.py list
-
-# Get prompt details
-python3 .claude/skills/braintrust/braintrust.py get --slug "my-prompt"
-
-# Create a prompt
-python3 .claude/skills/braintrust/braintrust.py create \
-  --slug "my-prompt" \
-  --name "My Prompt" \
-  --system "You are helpful." \
-  --user "Question: {{question}}"
-
-# CRITICAL: Always diff before updating
-python3 .claude/skills/braintrust/braintrust.py diff \
-  --slug "my-prompt" \
-  --system "Updated system message"
-
-# Update prompt
-python3 .claude/skills/braintrust/braintrust.py update \
-  --slug "my-prompt" \
-  --system "Updated system message"
-
-# Generate TypeScript code
-python3 .claude/skills/braintrust/braintrust.py generate --slug "my-prompt"
 ```
 
-## Commands
+List prompts:
 
-### `list`
-List all prompts in a project.
+```bash
+python3 .claude/skills/braintrust/braintrust.py list
+```
+
+Get prompt details:
+
+```bash
+python3 .claude/skills/braintrust/braintrust.py get --slug "my-prompt"
+```
+
+**Always diff before updating:**
+
+```bash
+python3 .claude/skills/braintrust/braintrust.py diff --slug "my-prompt" --system "New content"
+python3 .claude/skills/braintrust/braintrust.py update --slug "my-prompt" --system "New content"
+```
+
+Generate TypeScript code:
+
+```bash
+python3 .claude/skills/braintrust/braintrust.py generate --slug "my-prompt"
+```
+</quick_start>
+
+<success_criteria>
+- Prompts listed from Braintrust project
+- Prompt details displayed with system/user messages
+- Diff shows unified diff output before updates
+- Update applies changes to Braintrust
+- Generated TypeScript code follows wrapTraced/initLogger pattern
+- Traces appear in Braintrust dashboard after testing
+</success_criteria>
+
+<commands>
+**list** - List all prompts in a project
 
 ```bash
 python3 .claude/skills/braintrust/braintrust.py list
 python3 .claude/skills/braintrust/braintrust.py list --project "My Project"
 ```
 
-### `get`
-View prompt details including system and user messages.
+**get** - View prompt details including system and user messages
 
 ```bash
 python3 .claude/skills/braintrust/braintrust.py get --slug "email-draft"
 ```
 
-### `create`
-Create a new prompt.
+**create** - Create a new prompt
 
 ```bash
 python3 .claude/skills/braintrust/braintrust.py create \
@@ -66,7 +76,7 @@ python3 .claude/skills/braintrust/braintrust.py create \
   --model "claude-sonnet-4-5-20250929"
 ```
 
-**Parameters:**
+Parameters:
 - `--slug` (required): URL-safe identifier
 - `--name`: Human-readable name (defaults to slug)
 - `--description`: What the prompt does
@@ -75,8 +85,7 @@ python3 .claude/skills/braintrust/braintrust.py create \
 - `--model`: Model name (default: claude-sonnet-4-5-20250929)
 - `--project`: Project name (or use BRAINTRUST_PROJECT_NAME)
 
-### `diff`
-**CRITICAL: Always diff before updating.** Shows what will change.
+**diff** - **CRITICAL: Always diff before updating.** Shows what will change.
 
 ```bash
 python3 .claude/skills/braintrust/braintrust.py diff \
@@ -85,6 +94,7 @@ python3 .claude/skills/braintrust/braintrust.py diff \
 ```
 
 Output shows unified diff:
+
 ```diff
 --- current
 +++ proposed
@@ -93,8 +103,7 @@ Output shows unified diff:
 +New system message here.
 ```
 
-### `update`
-Update an existing prompt.
+**update** - Update an existing prompt
 
 ```bash
 python3 .claude/skills/braintrust/braintrust.py update \
@@ -103,37 +112,146 @@ python3 .claude/skills/braintrust/braintrust.py update \
   --user "Updated user template: {{input}}"
 ```
 
-**Workflow:**
-1. `diff` - Review changes
-2. `update` - Apply changes
-3. Test - Verify behavior
-
-### `generate`
-Generate TypeScript code for invoking the prompt.
+**generate** - Generate TypeScript code for invoking the prompt
 
 ```bash
 python3 .claude/skills/braintrust/braintrust.py generate --slug "my-prompt"
 ```
 
-Output:
+Output follows the wrapTraced/initLogger pattern with proper serverless configuration.
+</commands>
+
+<testing>
+Standard workflow for testing prompts after changes:
+
+**1. Run test script**
+
+Create a test file or use the generated code:
+
+```bash
+python3 .claude/skills/braintrust/braintrust.py generate --slug "my-prompt" > /tmp/test-prompt.ts
+```
+
+**2. Execute with test input**
+
 ```typescript
+// test-prompt.ts
 import { invoke, wrapTraced, initLogger } from 'braintrust';
 
 const logger = initLogger({
   projectName: process.env.BRAINTRUST_PROJECT_NAME!,
   apiKey: process.env.BRAINTRUST_API_KEY,
-  asyncFlush: false, // CRITICAL for serverless
+  asyncFlush: false,
 });
 
-export const myPrompt = wrapTraced(async function myPrompt(
-  input: { question: string }
-) {
-  // ... full implementation
+const testPrompt = wrapTraced(async function testPrompt(input: { question: string }) {
+  return await invoke({
+    projectName: process.env.BRAINTRUST_PROJECT_NAME,
+    slug: 'my-prompt',
+    input: { question: input.question },
+  });
 });
+
+// Run test
+(async () => {
+  const result = await testPrompt({ question: "Test input here" });
+  console.log("Result:", result);
+})();
 ```
 
-## Environment Variables
+Run with:
 
+```bash
+npx tsx /tmp/test-prompt.ts
+```
+
+**3. Verify in Braintrust dashboard**
+
+Check traces at: `https://www.braintrust.dev/app/{org}/p/{project}/logs`
+
+Look for:
+- New trace with your test timestamp
+- Input/output logged correctly
+- Duration reasonable (typically 1-5 seconds)
+- No errors in trace
+
+**4. Validate output format**
+
+If expecting JSON:
+
+```typescript
+import { z } from 'zod';
+
+const OutputSchema = z.object({
+  field1: z.string(),
+  field2: z.array(z.string()),
+});
+
+const result = await testPrompt({ question: "Test" });
+const validated = OutputSchema.safeParse(result);
+if (!validated.success) {
+  console.error("Validation failed:", validated.error.issues);
+}
+```
+
+**Testing checklist:**
+- [ ] Test with minimal valid input
+- [ ] Test with maximum complexity input
+- [ ] Test with edge cases (empty strings, special characters)
+- [ ] Verify JSON structure (if structured output)
+- [ ] Check response time (should be < 5s for most prompts)
+- [ ] Verify traces appear in Braintrust dashboard
+</testing>
+
+<workflow>
+**Creating a New Prompt**
+
+1. Create prompt:
+
+```bash
+python3 .claude/skills/braintrust/braintrust.py create \
+  --slug "my-new-prompt" \
+  --system "..." \
+  --user "..."
+```
+
+2. Generate code:
+
+```bash
+python3 .claude/skills/braintrust/braintrust.py generate \
+  --slug "my-new-prompt" > invoke.ts
+```
+
+3. Test the prompt (see testing section)
+
+**Updating a Prompt**
+
+1. Get current state:
+
+```bash
+python3 .claude/skills/braintrust/braintrust.py get --slug "my-prompt"
+```
+
+2. Diff changes:
+
+```bash
+python3 .claude/skills/braintrust/braintrust.py diff \
+  --slug "my-prompt" \
+  --system "New system message"
+```
+
+3. Apply update:
+
+```bash
+python3 .claude/skills/braintrust/braintrust.py update \
+  --slug "my-prompt" \
+  --system "New system message"
+```
+
+4. Test and verify (see testing section)
+</workflow>
+
+<environment_variables>
 ```bash
 # Required
 BRAINTRUST_API_KEY=sk-your-api-key
@@ -143,9 +261,9 @@ BRAINTRUST_PROJECT_NAME=Your_Project_Name
 ```
 
 Add to `.env` or export in shell.
+</environment_variables>
 
-## Template Variables
-
+<template_variables>
 Use Handlebars syntax in user messages:
 
 ```
@@ -163,93 +281,69 @@ From: {{this.from}}
 Body: {{this.body}}
 {{/each}}
 ```
+</template_variables>
 
-## Standard Workflow
-
-### Creating a New Prompt
-
-1. **Create prompt:**
-   ```bash
-   python3 .claude/skills/braintrust/braintrust.py create \
-     --slug "my-new-prompt" \
-     --system "..." \
-     --user "..."
-   ```
-
-2. **Generate code:**
-   ```bash
-   python3 .claude/skills/braintrust/braintrust.py generate \
-     --slug "my-new-prompt" > invoke.ts
-   ```
-
-3. **Test the prompt:**
-   - Use generated code
-   - Check Braintrust dashboard for traces
-   - Verify output format
-
-### Updating a Prompt
-
-1. **Get current state:**
-   ```bash
-   python3 .claude/skills/braintrust/braintrust.py get --slug "my-prompt"
-   ```
-
-2. **Diff changes:**
-   ```bash
-   python3 .claude/skills/braintrust/braintrust.py diff \
-     --slug "my-prompt" \
-     --system "New system message"
-   ```
-
-3. **Apply update:**
-   ```bash
-   python3 .claude/skills/braintrust/braintrust.py update \
-     --slug "my-prompt" \
-     --system "New system message"
-   ```
-
-4. **Test and verify:**
-   - Run test cases
-   - Check Braintrust dashboard
-   - Compare outputs with previous version
-
-## Debugging
-
-### Check Braintrust Dashboard
+<debugging>
+**Check Braintrust Dashboard**
 
 View traces at: `https://www.braintrust.dev/app/{org}/p/{project}/logs`
 
-### Common Issues
+**Common Issues**
 
-**"Project not found"**
+"Project not found"
 - Check BRAINTRUST_PROJECT_NAME is correct
 - Run `list` to see available projects/prompts
 
-**"Prompt not found"**
+"Prompt not found"
 - Verify slug spelling
 - Check you're in the right project
 
-**No traces appearing**
+No traces appearing
 - Ensure `initLogger()` is called before invoke
 - Use `asyncFlush: false` in serverless environments
 - Check API key is valid
 
-### API Key Validation
+**API Key Validation**
 
 ```bash
 curl -H "Authorization: Bearer $BRAINTRUST_API_KEY" \
   https://api.braintrust.dev/v1/project
 ```
+</debugging>
 
-## Best Practices
+<anti_patterns>
+**Never update without diffing first**
 
-1. **Always diff before update** - Prevents accidental changes
-2. **Use meaningful slugs** - `email-draft-v2` not `prompt-1`
-3. **Document template variables** - List expected inputs
-4. **Test in isolation** - Use standalone scripts before integration
-5. **Track versions** - Use slug naming (`-v2`, `-v3`) or Braintrust versioning
+```bash
+# BAD - updating blind
+python3 braintrust.py update --slug "my-prompt" --system "New content"
 
-## See Also
+# GOOD - diff first
+python3 braintrust.py diff --slug "my-prompt" --system "New content"
+python3 braintrust.py update --slug "my-prompt" --system "New content"
+```
 
+**Never skip testing after updates**
+
+Always verify:
+1. Output format is correct
+2. Traces appear in dashboard
+3. Response time is reasonable
+
+**Never use vague slugs**
+
+```bash
+# BAD
+--slug "prompt-1"
+--slug "test"
+
+# GOOD
+--slug "email-draft-v2"
+--slug "user-summary-generator"
+```
+</anti_patterns>
+
+<reference_guides>
 - [Braintrust Best Practices](../../../docs/braintrust-best-practices.md) - Comprehensive patterns guide
 - [Braintrust Docs](https://www.braintrust.dev/docs) - Official documentation
+</reference_guides>
