@@ -7,17 +7,24 @@
 
 /* eslint-disable @typescript-eslint/ban-types */
 
-type ExtensionPreferences = {}
+type ExtensionPreferences = {
+  /** Supabase Function URL - The URL of your create-issue Supabase function */
+  "supabaseUrl": string
+}
 
 /** Preferences accessible in all the extension's commands */
 declare type Preferences = ExtensionPreferences
 
 declare namespace Preferences {
+  /** Preferences accessible in the `create-issue` command */
+  export type CreateIssue = ExtensionPreferences & {}
   /** Preferences accessible in the `compose-email` command */
   export type ComposeEmail = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
+  /** Arguments passed to the `create-issue` command */
+  export type CreateIssue = {}
   /** Arguments passed to the `compose-email` command */
   export type ComposeEmail = {}
 }

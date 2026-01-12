@@ -1,8 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "email-compose",
-  "title": "Email Compose",
-  "description": "Generate and save Gmail drafts from natural language instructions",
+  "name": "productivity-tools",
+  "title": "Productivity Tools",
+  "description": "Quick actions for Linear issues and Gmail drafts",
   "icon": "extension-icon.png",
   "author": "benigeri",
   "categories": [
@@ -11,10 +11,26 @@
   "license": "MIT",
   "commands": [
     {
+      "name": "create-issue",
+      "title": "Create Linear Issue",
+      "description": "Create a new Linear issue from text input",
+      "mode": "view"
+    },
+    {
       "name": "compose-email",
       "title": "Compose Email Draft",
       "description": "Generate and save Gmail draft from instructions",
       "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "supabaseUrl",
+      "type": "textfield",
+      "required": true,
+      "title": "Supabase Function URL",
+      "description": "The URL of your create-issue Supabase function",
+      "default": "https://aadqqdsclktlyeuweqrv.supabase.co/functions/v1/create-issue"
     }
   ],
   "dependencies": {
