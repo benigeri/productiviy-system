@@ -33,6 +33,72 @@ This document defines how AI agents should work on this codebase.
 
 ---
 
+## Branch Naming Convention
+
+Use consistent branch names that link to Beads for easy tracking:
+
+```
+feature/{bead-id}-{kebab-case-description}
+fix/{bead-id}-{kebab-case-description}
+chore/{bead-id}-{kebab-case-description}
+
+Examples:
+  feature/ps-40-session-workflow
+  fix/ps-35-braintrust-config
+  chore/ps-42-cleanup-dead-code
+```
+
+**Why this matters:**
+- Auto-links branches to Beads via `/health` command
+- Identifies stale beads when PRs are merged
+- Makes it easy to find related work
+
+**For worktrees:** Use feature name only (e.g., `feature/session-workflow`) since multiple beads may share the same worktree.
+
+---
+
+## Session Management
+
+Use `/start`, `/end`, and `/health` commands to manage sessions properly:
+
+### Starting a Session
+```bash
+/start                    # Shows state, offers workflow options
+/start --worktree        # Creates isolated worktree for parallel work
+```
+
+### During a Session
+```bash
+/health                   # Audit git and beads state anytime
+```
+
+### Ending a Session
+```bash
+/end                      # Ensures nothing is lost before closing
+```
+
+### SESSION_CONTEXT.md (Worktrees)
+
+When using worktrees, a `SESSION_CONTEXT.md` file is created to preserve context:
+
+```markdown
+# Session Context
+
+**Feature:** session-workflow
+**Bead(s):** ps-40, ps-41
+**Created:** 2026-01-13
+
+## Requirements
+<feature description>
+
+## Notes
+<additional context>
+```
+
+This file is auto-detected by `/start` to restore context in new sessions.
+
+---
+
 ## Critical Thinking Guidelines
 
 **Problem Solving:**

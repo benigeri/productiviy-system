@@ -340,10 +340,60 @@ bd list --due-before "tomorrow"
 
 ---
 
+## Session Commands
+
+Use these commands to manage Claude Code sessions properly:
+
+### `/start` - Session Kickoff
+```bash
+/start                    # Show state, choose workflow
+/start --worktree        # Create isolated worktree
+```
+
+Shows:
+- Current branch and dirty state
+- Unpushed commits (warning if > 0)
+- In-progress beads
+- SESSION_CONTEXT.md if present
+
+### `/health` - Repository Audit
+```bash
+/health                   # Run anytime
+```
+
+Checks:
+- Uncommitted changes
+- Unpushed commits
+- In-progress beads
+- Cross-references beads with merged PRs (finds stale beads)
+- Remote branch count
+
+### `/end` - Session Close
+```bash
+/end                      # Ensure nothing is lost
+```
+
+Handles:
+- Uncommitted changes (commit, stash, or leave)
+- Unpushed commits (BLOCKING - must push or acknowledge risk)
+- In-progress beads (close, keep, or park with note)
+- Worktree cleanup instructions
+
+**"Park with note"** is useful for pausing work with context:
+```bash
+# Updates bead description with:
+# ---
+# Parked: 2026-01-13
+# <your progress note>
+```
+
+---
+
 ## The Daily Workflow
 
 **Morning:**
 ```bash
+/start                        # Or just run manually:
 bd ready                      # See unblocked work
 bd list --priority P0,P1      # Focus on high priority
 ```
