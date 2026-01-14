@@ -33,6 +33,36 @@ This document defines how AI agents should work on this codebase.
 
 ---
 
+## Branch Naming Convention
+
+Use consistent branch names that link to Beads for easy tracking:
+
+```
+feature/{bead-id}-{kebab-case-description}
+fix/{bead-id}-{kebab-case-description}
+chore/{bead-id}-{kebab-case-description}
+
+Examples:
+  feature/ps-40-session-workflow
+  fix/ps-35-braintrust-config
+  chore/ps-42-cleanup-dead-code
+```
+
+**Why this matters:**
+- Auto-links branches to Beads via `/health` command
+- Identifies stale beads when PRs are merged
+- Makes it easy to find related work
+
+**For worktrees:** Use feature name only (e.g., `feature/session-workflow`) since multiple beads may share the same worktree.
+
+---
+
+## Session Management
+
+Use `/start`, `/end`, and `/health` commands for session management. These are user-level commands in `~/.claude/commands/`.
+
+---
+
 ## Critical Thinking Guidelines
 
 **Problem Solving:**

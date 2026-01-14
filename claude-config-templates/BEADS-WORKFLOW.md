@@ -340,10 +340,17 @@ bd list --due-before "tomorrow"
 
 ---
 
+## Session Commands
+
+Use `/start`, `/end`, and `/health` for session management. These are user-level commands in `~/.claude/commands/`.
+
+---
+
 ## The Daily Workflow
 
 **Morning:**
 ```bash
+/start                        # Initialize session, show state
 bd ready                      # See unblocked work
 bd list --priority P0,P1      # Focus on high priority
 ```

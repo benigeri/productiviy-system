@@ -16,3 +16,6 @@ AGENTS.md
 .worktrees
 .vercel
 .braintrust-prompts/
+
+# Session-specific context (ephemeral, not project docs)
+SESSION_CONTEXT.md
