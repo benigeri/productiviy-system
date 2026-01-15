@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './route';
 
 // Mock fetch globally
-global.fetch = vi.fn();
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
 
 describe('POST /api/threads - Label Updates', () => {
   beforeEach(() => {
@@ -23,7 +24,7 @@ describe('POST /api/threads - Label Updates', () => {
     const messageId = 'msg-456';
 
     // Mock thread fetch - returns message_ids
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: {
@@ -34,9 +35,8 @@ describe('POST /api/threads - Label Updates', () => {
       }),
     });
 
-    // Mock message fetch - BUG: code uses ?select=labels which returns {}
-    // This should use ?select=folders and return string[] not {id}[]
-    (fetch as any).mockResolvedValueOnce({
+    // Mock message fetch - returns folders as string[]
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: {
@@ -46,7 +46,7 @@ describe('POST /api/threads - Label Updates', () => {
     });
 
     // Mock message update
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: {} }),
     });
@@ -62,12 +62,12 @@ describe('POST /api/threads - Label Updates', () => {
 
     expect(json.success).toBe(true);
 
-    // Verify message fetch used ?select=folders (not ?select=labels)
-    const msgFetchCall = (fetch as any).mock.calls[1];
+    // Verify message fetch used ?select=folders
+    const msgFetchCall = mockFetch.mock.calls[1];
     expect(msgFetchCall[0]).toContain('?select=folders');
 
-    // Verify message update sent correct body with 'folders' key (not 'labels')
-    const updateCall = (fetch as any).mock.calls[2];
+    // Verify message update sent correct body with 'folders' key
+    const updateCall = mockFetch.mock.calls[2];
     const updateBody = JSON.parse(updateCall[1].body);
 
     expect(updateBody).toHaveProperty('folders');
@@ -76,12 +76,12 @@ describe('POST /api/threads - Label Updates', () => {
     expect(updateBody.folders).toContain('INBOX');
   });
 
-  it('handles folders as string[] not {id: string}[]', async () => {
+  it('handles folders as string[] format from Nylas API', async () => {
     const threadId = 'thread-123';
     const messageId = 'msg-456';
 
     // Mock thread fetch
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: {
@@ -92,18 +92,17 @@ describe('POST /api/threads - Label Updates', () => {
     });
 
     // Mock message fetch - folders is string[] in Nylas API
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: {
-          // BUG: Code expects labels: {id: string}[] but API returns folders: string[]
           folders: ['INBOX', 'SENT', 'Label_139'],
         },
       }),
     });
 
     // Mock message update
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: {} }),
     });
@@ -120,7 +119,7 @@ describe('POST /api/threads - Label Updates', () => {
     expect(json.success).toBe(true);
 
     // Verify update was called with correct folders
-    const updateCall = (fetch as any).mock.calls[2];
+    const updateCall = mockFetch.mock.calls[2];
     const updateBody = JSON.parse(updateCall[1].body);
 
     // Should have removed Label_139 and added Label_215
@@ -130,8 +129,8 @@ describe('POST /api/threads - Label Updates', () => {
     expect(updateBody.folders).not.toContain('Label_139');
   });
 
-  it('uses thread folders when message has fewer folders', async () => {
-    // This is the real-world scenario:
+  it('updates multiple messages in a thread independently', async () => {
+    // Real-world scenario:
     // - Thread has Label_139 (applied to first message only)
     // - Latest message doesn't have Label_139
     // - We need to remove Label_139 from the thread
@@ -141,19 +140,19 @@ describe('POST /api/threads - Label Updates', () => {
     const msg2 = 'msg-latest'; // Does NOT have Label_139
 
     // Mock thread fetch - thread shows all labels
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: {
           id: threadId,
           message_ids: [msg1, msg2],
-          folders: ['INBOX', 'Label_139', 'SENT'], // Thread-level folders
+          folders: ['INBOX', 'Label_139', 'SENT'],
         },
       }),
     });
 
     // Mock first message fetch - HAS Label_139
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: {
@@ -162,24 +161,24 @@ describe('POST /api/threads - Label Updates', () => {
       }),
     });
 
-    // Mock first message update
-    (fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ data: {} }),
-    });
-
     // Mock second message fetch - does NOT have Label_139
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: {
-          folders: ['INBOX', 'SENT'], // No Label_139!
+          folders: ['INBOX', 'SENT'],
         },
       }),
     });
 
+    // Mock first message update
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+
     // Mock second message update
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: {} }),
     });
@@ -195,20 +194,23 @@ describe('POST /api/threads - Label Updates', () => {
 
     expect(json.success).toBe(true);
 
-    // Verify first message had Label_139 removed
-    const update1 = (fetch as any).mock.calls[2];
+    // With batched parallel, fetches happen first, then updates
+    // Calls: [thread fetch, msg1 fetch, msg2 fetch, msg1 update, msg2 update]
+    expect(mockFetch.mock.calls.length).toBe(5);
+
+    // Verify updates happened
+    const update1 = mockFetch.mock.calls[3];
     const update1Body = JSON.parse(update1[1].body);
     expect(update1Body.folders).not.toContain('Label_139');
     expect(update1Body.folders).toContain('Label_215');
 
-    // Verify second message got Label_215 added (even though it didn't have Label_139)
-    const update2 = (fetch as any).mock.calls[4];
+    const update2 = mockFetch.mock.calls[4];
     const update2Body = JSON.parse(update2[1].body);
     expect(update2Body.folders).toContain('Label_215');
   });
 
   it('returns error when thread fetch fails', async () => {
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: false,
       text: async () => 'Thread not found',
     });
@@ -230,7 +232,7 @@ describe('POST /api/threads - Label Updates', () => {
     const threadId = 'thread-123';
 
     // Mock thread fetch with 2 messages
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: {
@@ -241,13 +243,13 @@ describe('POST /api/threads - Label Updates', () => {
     });
 
     // Mock first message fetch - FAILS
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: false,
       text: async () => 'Message not found',
     });
 
     // Mock second message fetch - succeeds
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: {
@@ -257,7 +259,7 @@ describe('POST /api/threads - Label Updates', () => {
     });
 
     // Mock second message update
-    (fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: {} }),
     });
@@ -274,11 +276,11 @@ describe('POST /api/threads - Label Updates', () => {
     // Should still succeed overall
     expect(json.success).toBe(true);
 
-    // Verify second message was still updated
-    expect((fetch as any).mock.calls.length).toBe(4);
+    // Verify: thread fetch + 2 message fetches + 1 update = 4 calls
+    expect(mockFetch.mock.calls.length).toBe(4);
   });
 
-  it('validates request body schema', async () => {
+  it('returns 400 for invalid request body', async () => {
     const request = createRequest({
       // Missing required fields
       threadId: 'thread-123',
@@ -286,6 +288,68 @@ describe('POST /api/threads - Label Updates', () => {
     });
 
     const response = await POST(request);
-    expect(response.status).toBe(500); // Zod throws
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error).toBe('Invalid request');
+    expect(json.details).toBeDefined();
+  });
+
+  it('returns 500 when environment variables are missing', async () => {
+    // Remove env vars
+    delete process.env.NYLAS_API_KEY;
+    delete process.env.NYLAS_GRANT_ID;
+
+    const request = createRequest({
+      threadId: 'thread-123',
+      addLabels: ['Label_215'],
+      removeLabels: ['Label_139'],
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(json.error).toBe('Service configuration error');
+  });
+
+  it('skips update when folders have not changed', async () => {
+    const threadId = 'thread-123';
+    const messageId = 'msg-456';
+
+    // Mock thread fetch
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: {
+          id: threadId,
+          message_ids: [messageId],
+        },
+      }),
+    });
+
+    // Mock message fetch - already has Label_215, doesn't have Label_139
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: {
+          folders: ['INBOX', 'Label_215'], // Already in desired state
+        },
+      }),
+    });
+
+    const request = createRequest({
+      threadId,
+      addLabels: ['Label_215'],
+      removeLabels: ['Label_139'],
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(json.success).toBe(true);
+
+    // Should only have 2 calls: thread fetch + message fetch, NO update
+    expect(mockFetch.mock.calls.length).toBe(2);
   });
 });
