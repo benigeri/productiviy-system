@@ -128,7 +128,41 @@ describe('POST /api/compose/save', () => {
     const draftCall = (fetch as any).mock.calls[1];
     const draftBody = JSON.parse(draftCall[1].body);
 
-    expect(draftBody.body).toBe('<p>Line 1</p><p>Line 2</p><p>Line 3</p>');
+    // marked generates paragraph tags with newlines between them
+    expect(draftBody.body).toContain('<p>Line 1</p>');
+    expect(draftBody.body).toContain('<p>Line 2</p>');
+    expect(draftBody.body).toContain('<p>Line 3</p>');
+  });
+
+  it('converts markdown formatting to HTML', async () => {
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { email: 'paul@example.com' } }),
+    });
+
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { id: 'draft-123' } }),
+    });
+
+    const request = new Request('http://localhost:3000/api/compose/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject: 'Test',
+        draftBody: 'Hello **world**\n\n- item 1\n- item 2',
+        to: ['john@example.com'],
+        cc: [],
+      }),
+    });
+
+    await POST(request);
+
+    const draftCall = (fetch as any).mock.calls[1];
+    const draftBody = JSON.parse(draftCall[1].body);
+
+    expect(draftBody.body).toContain('<strong>world</strong>');
+    expect(draftBody.body).toContain('<li>');
   });
 
   it('validates recipient email format', async () => {
