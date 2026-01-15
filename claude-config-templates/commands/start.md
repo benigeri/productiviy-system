@@ -143,6 +143,9 @@ Use AskUserQuestion with these options:
    # This ensures worktree has latest .beads/ from local commits
    git checkout main && git pull
    git worktree add "$WORKTREE_DIR" -b feature/<feature-name> main
+
+   # Copy .env files to worktree
+   cp "$REPO_ROOT"/.env* "$WORKTREE_DIR/" 2>/dev/null && echo ".env files copied" || true
    ```
 5. Create bead: `bd create "<description>" --type feature --priority 1`
 6. Mark in progress: `bd update <bead-id> --status in_progress`
