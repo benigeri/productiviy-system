@@ -81,19 +81,34 @@ Branch: <branch-name>
 
 ### Step 4: Handle In-Progress Beads
 
-If there are in_progress beads:
+Check for in-progress beads:
 
-**Show:**
-```
-In-progress beads:
-<list of beads with their titles>
+```bash
+bd list --status=in_progress
 ```
 
-**Ask:** "What do you want to do with bead <bead-id>?"
+If there are in-progress beads, **show a prominent warning:**
 
-**Options:**
-1. **Mark complete** - Close with `bd close <id> --reason "<summary>"`
-2. **Keep in progress** - Leave for next session
+```
+⚠️  OPEN BEADS DETECTED
+
+You have beads that are still in progress:
+  - ps-XX: <bead title>
+  - ps-YY: <bead title>
+```
+
+**For each bead, ask explicitly:**
+
+"Close bead ps-XX? [Y/n]"
+
+- If **Y**: `bd close <id> --reason "<summary of work>"`
+- If **N**: Note it in the session summary
+
+**Guidance for the agent:**
+- Default assumption: If work was pushed, the bead should probably be closed
+- Ask explicitly for each bead - don't skip this step
+- If user says keep open, that's fine - just make sure it was intentional
+- Work pushed = work done = bead should be closed
 
 ### Step 5: Handle Worktree (if applicable)
 
@@ -165,7 +180,8 @@ Safe to close this session.
 ## Notes
 
 - If `.beads/` doesn't exist, skip beads steps gracefully
-- Don't block session end for beads - user can always choose "keep in progress"
+- Show prominent ⚠️ warning for open beads - make it hard to miss
+- Ask explicitly about each bead - don't let them slip through
 - DO block/warn strongly for unpushed commits - this is where work gets lost
 - For worktree removal, just provide the command - don't execute it (session needs to close first)
 - Keep interaction minimal - one prompt for changes, one for commits, one for beads, done
