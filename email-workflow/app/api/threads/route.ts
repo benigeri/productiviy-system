@@ -1,5 +1,20 @@
+import 'server-only';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+
+// Nylas API response types
+interface NylasThreadResponse {
+  data: {
+    id: string;
+    message_ids: string[];
+  };
+}
+
+interface NylasMessageResponse {
+  data: {
+    folders?: string[];
+  };
+}
 
 const UpdateLabelsSchema = z.object({
   threadId: z.string(),
@@ -7,18 +22,54 @@ const UpdateLabelsSchema = z.object({
   removeLabels: z.array(z.string()),
 });
 
+const CONCURRENCY_LIMIT = 5;
+
+async function batchedParallel<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>,
+  batchSize: number
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.allSettled(batch.map(fn));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
 export async function POST(request: Request) {
   try {
+    // Validate environment variables
+    const nylasApiKey = process.env.NYLAS_API_KEY;
+    const nylasGrantId = process.env.NYLAS_GRANT_ID;
+
+    if (!nylasApiKey || !nylasGrantId) {
+      console.error('Missing required Nylas environment variables');
+      return NextResponse.json(
+        { error: 'Service configuration error' },
+        { status: 500 }
+      );
+    }
+
+    // Validate request body
     const body = await request.json();
-    const { threadId, addLabels, removeLabels } =
-      UpdateLabelsSchema.parse(body);
+    const result = UpdateLabelsSchema.safeParse(body);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Invalid request', details: result.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const { threadId, addLabels, removeLabels } = result.data;
+    const headers = { Authorization: `Bearer ${nylasApiKey}` };
 
     // Get thread to fetch message IDs
     const threadRes = await fetch(
-      `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/threads/${threadId}`,
-      {
-        headers: { Authorization: `Bearer ${process.env.NYLAS_API_KEY}` },
-      }
+      `https://api.us.nylas.com/v3/grants/${nylasGrantId}/threads/${threadId}`,
+      { headers }
     );
 
     if (!threadRes.ok) {
@@ -27,54 +78,68 @@ export async function POST(request: Request) {
       throw new Error('Failed to fetch thread');
     }
 
-    const thread = await threadRes.json();
+    const thread: NylasThreadResponse = await threadRes.json();
     const messageIds = thread.data.message_ids;
 
-    // Update labels on all messages
-    for (const msgId of messageIds) {
-      // Get current labels
-      const msgRes = await fetch(
-        `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/messages/${msgId}?select=labels`,
-        {
-          headers: { Authorization: `Bearer ${process.env.NYLAS_API_KEY}` },
-        }
-      );
-
-      if (!msgRes.ok) {
-        console.error(`Failed to fetch message ${msgId}`);
-        continue; // Skip this message but continue with others
-      }
-
-      const msg = await msgRes.json();
-      const currentLabels =
-        msg.data.labels?.map((l: { id: string }) => l.id) || [];
-
-      // Calculate new labels
-      const newLabels = currentLabels
-        .filter((l: string) => !removeLabels.includes(l))
-        .concat(addLabels.filter((l) => !currentLabels.includes(l)));
-
-      // Update message
-      const updateRes = await fetch(
-        `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/messages/${msgId}`,
-        {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${process.env.NYLAS_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ labels: newLabels }),
-        }
-      );
-
-      if (!updateRes.ok) {
-        console.error(
-          `Failed to update labels for message ${msgId}:`,
-          await updateRes.text()
+    // Fetch all messages in parallel batches
+    // Note: Nylas API uses 'folders' not 'labels', and folders is string[] not {id}[]
+    const messageResults = await batchedParallel(
+      messageIds,
+      async (msgId: string) => {
+        const res = await fetch(
+          `https://api.us.nylas.com/v3/grants/${nylasGrantId}/messages/${msgId}?select=folders`,
+          { headers }
         );
-        // Continue with other messages even if one fails
+        if (!res.ok) {
+          console.error(`Failed to fetch message ${msgId}`);
+          return null;
+        }
+        const msg: NylasMessageResponse = await res.json();
+        return { msgId, folders: msg.data.folders || [] };
+      },
+      CONCURRENCY_LIMIT
+    );
+
+    // Calculate updates (skip unchanged)
+    const updates: { msgId: string; newFolders: string[] }[] = [];
+
+    for (const result of messageResults) {
+      if (result.status !== 'fulfilled' || !result.value) continue;
+
+      const { msgId, folders: currentFolders } = result.value;
+      const newFolders = currentFolders
+        .filter((f) => !removeLabels.includes(f))
+        .concat(addLabels.filter((l) => !currentFolders.includes(l)));
+
+      // Skip if no change
+      const changed =
+        newFolders.length !== currentFolders.length ||
+        !newFolders.every((f) => currentFolders.includes(f));
+
+      if (changed) {
+        updates.push({ msgId, newFolders });
       }
     }
+
+    // Execute updates in parallel batches
+    await batchedParallel(
+      updates,
+      async ({ msgId, newFolders }) => {
+        const res = await fetch(
+          `https://api.us.nylas.com/v3/grants/${nylasGrantId}/messages/${msgId}`,
+          {
+            method: 'PUT',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folders: newFolders }),
+          }
+        );
+        if (!res.ok) {
+          console.error(`Failed to update folders for message ${msgId}`);
+        }
+        return res;
+      },
+      CONCURRENCY_LIMIT
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {
