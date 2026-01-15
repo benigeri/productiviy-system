@@ -1,6 +1,13 @@
+---
+description: Close work session safely - commit changes and verify nothing is lost
+allowed-tools: Bash, Read, AskUserQuestion
+---
+
 # /end - Session Close
 
 Run this before ending your session to ensure nothing is lost.
+
+**Note:** This project uses JSONL-only beads mode. Beads auto-save to `.beads/issues.jsonl` - just commit with your other changes (no `bd sync` needed).
 
 ## Instructions
 

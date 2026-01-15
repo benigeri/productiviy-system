@@ -1,3 +1,8 @@
+---
+description: Audit git and beads state - find drift, stale branches, incomplete work
+allowed-tools: Bash, Read
+---
+
 # /health - Repository Health Check
 
 Run anytime to audit git and beads state. Identifies drift, stale branches, and incomplete work.
