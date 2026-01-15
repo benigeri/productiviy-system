@@ -30,11 +30,12 @@ export async function POST(request: Request) {
     const thread = await threadRes.json();
     const messageIds = thread.data.message_ids;
 
-    // Update labels on all messages
+    // Update folders on all messages
+    // Note: Nylas API uses 'folders' not 'labels', and folders is string[] not {id}[]
     for (const msgId of messageIds) {
-      // Get current labels
+      // Get current folders
       const msgRes = await fetch(
-        `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/messages/${msgId}?select=labels`,
+        `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/messages/${msgId}?select=folders`,
         {
           headers: { Authorization: `Bearer ${process.env.NYLAS_API_KEY}` },
         }
@@ -46,15 +47,15 @@ export async function POST(request: Request) {
       }
 
       const msg = await msgRes.json();
-      const currentLabels =
-        msg.data.labels?.map((l: { id: string }) => l.id) || [];
+      // Nylas API returns folders as string[] directly
+      const currentFolders: string[] = msg.data.folders || [];
 
-      // Calculate new labels
-      const newLabels = currentLabels
-        .filter((l: string) => !removeLabels.includes(l))
-        .concat(addLabels.filter((l) => !currentLabels.includes(l)));
+      // Calculate new folders
+      const newFolders = currentFolders
+        .filter((f: string) => !removeLabels.includes(f))
+        .concat(addLabels.filter((l) => !currentFolders.includes(l)));
 
-      // Update message
+      // Update message with new folders
       const updateRes = await fetch(
         `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/messages/${msgId}`,
         {
@@ -63,13 +64,13 @@ export async function POST(request: Request) {
             Authorization: `Bearer ${process.env.NYLAS_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ labels: newLabels }),
+          body: JSON.stringify({ folders: newFolders }),
         }
       );
 
       if (!updateRes.ok) {
         console.error(
-          `Failed to update labels for message ${msgId}:`,
+          `Failed to update folders for message ${msgId}:`,
           await updateRes.text()
         );
         // Continue with other messages even if one fails
