@@ -1,6 +1,22 @@
+---
+description: Begin work session with context and workflow selection
+allowed-tools: Bash, Read, Write, AskUserQuestion, TodoWrite
+argument-hint: [resume|new|worktree|quick]
+---
+
 # /start - Session Kickoff
 
 Begin every work session with this command to establish context and choose your workflow.
+
+## Quick Start (Argument Shortcuts)
+
+If `$ARGUMENTS` is provided, skip the interactive prompt:
+- `resume` → Jump directly to "Resume existing work" path
+- `new` → Jump directly to "Start new feature" path
+- `worktree` → Jump directly to "Start new feature (worktree)" path
+- `quick` → Jump directly to "Quick fix" path
+
+If no argument or unrecognized argument, proceed with interactive flow.
 
 ## Instructions
 
@@ -48,15 +64,36 @@ if [ -f "SESSION_CONTEXT.md" ]; then
 fi
 ```
 
-Display:
-```
-Continuing from previous session setup...
-<contents of SESSION_CONTEXT.md>
+**Validate bead exists before continuing:**
+
+```bash
+# Extract bead ID(s) from SESSION_CONTEXT.md
+BEAD_ID=$(grep "Bead(s):" SESSION_CONTEXT.md | sed 's/.*: //' | tr -d ' ')
+
+# Validate bead exists
+if [ -n "$BEAD_ID" ] && [ -d ".beads" ]; then
+  if ! bd show "$BEAD_ID" &>/dev/null; then
+    # Bead not found - will need to handle
+    echo "BEAD_NOT_FOUND"
+  fi
+fi
 ```
 
-Then ask: "Continue with this context?" (Yes/No)
+**If bead exists:** Display contents and ask "Continue with this context?" (Yes/No)
 - If Yes: Skip to Step 5 with context loaded
 - If No: Proceed to Step 3
+
+**If bead NOT found:** Display warning and offer options:
+```
+[!] Bead <bead-id> from SESSION_CONTEXT.md not found in .beads/
+
+This can happen when a worktree was created from an older branch.
+```
+
+Use AskUserQuestion with options:
+1. **Create bead now** - Create the missing bead with info from SESSION_CONTEXT.md
+2. **Continue without tracking** - Proceed but skip bead commands
+3. **Start fresh** - Ignore SESSION_CONTEXT.md, go to Step 3
 
 ### Step 3: Ask What You're Doing
 
@@ -87,20 +124,29 @@ Use AskUserQuestion with these options:
 #### If "Start new feature (worktree)":
 1. Ask for feature name (kebab-case, e.g., `session-workflow`)
 2. Ask for feature description
-3. Create worktree and branch:
+3. **Commit any pending beads changes first:**
+   ```bash
+   # Ensure .beads/ changes are committed so worktree gets them
+   if [ -d ".beads" ] && [ -n "$(git status --porcelain .beads/)" ]; then
+     git add .beads/
+     git commit -m "Sync beads before worktree creation"
+   fi
+   ```
+4. **Create worktree from LOCAL main (not origin/main):**
    ```bash
    # Get repo root and parent directory
    REPO_ROOT=$(git rev-parse --show-toplevel)
    REPO_NAME=$(basename "$REPO_ROOT")
    WORKTREE_DIR="$(dirname "$REPO_ROOT")/worktrees/<feature-name>"
 
-   # Create worktree with new branch
-   git fetch origin main
-   git worktree add "$WORKTREE_DIR" -b feature/<feature-name> origin/main
+   # Update local main, then create worktree from it
+   # This ensures worktree has latest .beads/ from local commits
+   git checkout main && git pull
+   git worktree add "$WORKTREE_DIR" -b feature/<feature-name> main
    ```
-4. Create bead: `bd create "<description>" --type feature --priority 1`
-5. Mark in progress: `bd update <bead-id> --status in_progress`
-6. Write SESSION_CONTEXT.md in worktree:
+5. Create bead: `bd create "<description>" --type feature --priority 1`
+6. Mark in progress: `bd update <bead-id> --status in_progress`
+7. Write SESSION_CONTEXT.md in worktree:
    ```bash
    cat > "$WORKTREE_DIR/SESSION_CONTEXT.md" << 'EOF'
    # Session Context
@@ -116,7 +162,7 @@ Use AskUserQuestion with these options:
    <any additional context>
    EOF
    ```
-7. Output instructions:
+8. Output instructions:
    ```
    Worktree created: <worktree-path>
    Bead: <bead-id>
