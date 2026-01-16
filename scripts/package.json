@@ -1,0 +1,18 @@
+{
+  "name": "productivity-scripts",
+  "version": "1.0.0",
+  "description": "Scripts for managing Braintrust prompts",
+  "type": "module",
+  "scripts": {
+    "create-capture-prompt": "tsx create-capture-prompt.ts",
+    "test-capture-prompt": "tsx test-capture-prompt.ts"
+  },
+  "dependencies": {
+    "braintrust": "^2.0.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "dotenv": "^16.5.0"
+  }
+}

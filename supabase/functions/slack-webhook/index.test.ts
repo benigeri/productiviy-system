@@ -6,8 +6,11 @@ function createMockDeps(
 ): SlackWebhookDeps {
   return {
     signingSecret: "test_signing_secret",
-    cleanupContent: (text: string) => Promise.resolve(text.trim()),
-    createTriageIssue: () =>
+    processCapture: (text: string) => Promise.resolve({
+      cleanedContent: text.trim(),
+      isFeedback: false,
+    }),
+    createIssue: () =>
       Promise.resolve({
         id: "issue-123",
         identifier: "BEN-42",
@@ -66,8 +69,11 @@ Deno.test("handleSlackWebhook - processes text message and creates issue", async
   let capturedTitle = "";
 
   const deps = createMockDeps({
-    cleanupContent: () => Promise.resolve("Create homepage task"),
-    createTriageIssue: (title) => {
+    processCapture: () => Promise.resolve({
+      cleanedContent: "Create homepage task",
+      isFeedback: false,
+    }),
+    createIssue: (title) => {
       capturedTitle = title;
       return Promise.resolve({
         id: "issue-123",
@@ -100,8 +106,11 @@ Deno.test("handleSlackWebhook - splits multiline into title and description", as
   let captured: { title: string; description?: string } | undefined;
 
   const deps = createMockDeps({
-    cleanupContent: (text) => Promise.resolve(text),
-    createTriageIssue: (title, description) => {
+    processCapture: (text) => Promise.resolve({
+      cleanedContent: text,
+      isFeedback: false,
+    }),
+    createIssue: (title, description) => {
       captured = { title, description };
       return Promise.resolve({
         id: "issue-123",
@@ -139,8 +148,11 @@ Deno.test("handleSlackWebhook - single line message has no description without p
   let captured: { title: string; description?: string } | undefined;
 
   const deps = createMockDeps({
-    cleanupContent: (text) => Promise.resolve(text),
-    createTriageIssue: (title, description) => {
+    processCapture: (text) => Promise.resolve({
+      cleanedContent: text,
+      isFeedback: false,
+    }),
+    createIssue: (title, description) => {
       captured = { title, description };
       return Promise.resolve({
         id: "issue-123",
@@ -171,8 +183,11 @@ Deno.test("handleSlackWebhook - includes permalink in description", async () => 
   let captured: { title: string; description?: string } | undefined;
 
   const deps = createMockDeps({
-    cleanupContent: (text) => Promise.resolve(text),
-    createTriageIssue: (title, description) => {
+    processCapture: (text) => Promise.resolve({
+      cleanedContent: text,
+      isFeedback: false,
+    }),
+    createIssue: (title, description) => {
       captured = { title, description };
       return Promise.resolve({
         id: "issue-123",
@@ -338,7 +353,7 @@ Deno.test("handleSlackWebhook - returns 400 for empty message", async () => {
 
 Deno.test("handleSlackWebhook - returns 500 on Linear API failure", async () => {
   const deps = createMockDeps({
-    createTriageIssue: () => {
+    createIssue: () => {
       return Promise.reject(
         new Error("Linear API error: 500 Internal Server Error"),
       );

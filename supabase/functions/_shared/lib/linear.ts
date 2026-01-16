@@ -16,12 +16,27 @@ const CREATE_ISSUE_MUTATION = `
 // Default team ID - can be overridden via environment variable
 const DEFAULT_TEAM_ID = "418bd6ee-1f6d-47cc-87f2-88b7371b743a";
 
+// Feedback routing constants
+export const FEEDBACK_PROJECT_ID = "4884f918-c57e-480e-8413-51bff5f933f8";
+export const BACKLOG_STATE_ID = "e02b40e5-d86b-4c35-a81d-74cd3ad0a150";
+
+/**
+ * Options for creating an issue with routing.
+ */
+export interface IssueCreateOptions {
+  /** Assign to a specific project */
+  projectId?: string;
+  /** Set the workflow state (e.g., Backlog instead of Triage) */
+  stateId?: string;
+}
+
 export async function createTriageIssue(
   title: string,
   apiKey: string,
   fetchFn: typeof fetch = fetch,
   description?: string,
-  teamId?: string
+  teamId?: string,
+  options?: IssueCreateOptions
 ): Promise<LinearIssue> {
   const effectiveTeamId = teamId ?? DEFAULT_TEAM_ID;
 
@@ -38,6 +53,8 @@ export async function createTriageIssue(
           title,
           teamId: effectiveTeamId,
           ...(description && { description }),
+          ...(options?.projectId && { projectId: options.projectId }),
+          ...(options?.stateId && { stateId: options.stateId }),
         },
       },
     }),

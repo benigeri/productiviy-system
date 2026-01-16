@@ -1,6 +1,13 @@
-import { cleanupContent as cleanupContentImpl } from "../_shared/lib/claude.ts";
-import { createTriageIssue as createTriageIssueImpl } from "../_shared/lib/linear.ts";
-import { type CaptureDeps, captureToLinear } from "../_shared/lib/capture.ts";
+import { processCapture as processCaptureImpl } from "../_shared/lib/braintrust.ts";
+import {
+  createTriageIssue as createTriageIssueImpl,
+  type IssueCreateOptions,
+} from "../_shared/lib/linear.ts";
+import {
+  captureToLinear,
+  type CaptureDeps,
+  type CaptureResult,
+} from "../_shared/lib/capture.ts";
 import type { LinearIssue } from "../_shared/lib/types.ts";
 import {
   createSlackUserGroupResolver,
@@ -19,10 +26,11 @@ import {
  */
 export interface SlackWebhookDeps {
   signingSecret?: string;
-  cleanupContent: (text: string) => Promise<string>;
-  createTriageIssue: (
+  processCapture: (text: string) => Promise<CaptureResult>;
+  createIssue: (
     title: string,
     description?: string,
+    options?: IssueCreateOptions,
   ) => Promise<LinearIssue>;
   verifySignature: (
     signature: string,
@@ -205,13 +213,13 @@ export async function handleSlackWebhook(
         ? `${parsedContent}\n\n[View in Slack](${permalink})`
         : parsedContent;
 
-      // Create CaptureDeps from SlackWebhookDeps
+      // Create CaptureDeps from SlackWebhookDeps (interfaces are compatible)
       const captureDeps: CaptureDeps = {
-        cleanupContent: deps.cleanupContent,
-        createTriageIssue: deps.createTriageIssue,
+        processCapture: deps.processCapture,
+        createIssue: deps.createIssue,
       };
 
-      // Use shared capture pipeline: cleanup → parse → create issue
+      // Use shared capture pipeline: process → parse → route → create issue
       const issue = await captureToLinear(contentWithLink, captureDeps);
 
       return jsonResponse({ ok: true, issue });
@@ -269,13 +277,13 @@ export async function handleSlackWebhook(
           ? `${contentWithAuthor}\n\n[View in Slack](${permalink})`
           : contentWithAuthor;
 
-        // Create CaptureDeps from SlackWebhookDeps
+        // Create CaptureDeps from SlackWebhookDeps (interfaces are compatible)
         const captureDeps: CaptureDeps = {
-          cleanupContent: deps.cleanupContent,
-          createTriageIssue: deps.createTriageIssue,
+          processCapture: deps.processCapture,
+          createIssue: deps.createIssue,
         };
 
-        // Use shared capture pipeline: cleanup → parse → create issue
+        // Use shared capture pipeline: process → parse → route → create issue
         await captureToLinear(contentWithLink, captureDeps);
         console.log("Shortcut processed successfully");
       } catch (error) {
@@ -299,15 +307,18 @@ if (import.meta.main) {
     // Read API keys once at startup
     const signingSecret = Deno.env.get("SLACK_SIGNING_SECRET");
     const botToken = Deno.env.get("SLACK_BOT_TOKEN") ?? "";
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+    const braintrustKey = Deno.env.get("BRAINTRUST_API_KEY") ?? "";
+    const braintrustProject = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "Productivity_System";
+    const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ?? "capture-cleanup";
     const linearKey = Deno.env.get("LINEAR_API_KEY") ?? "";
 
     // Create deps with API keys pre-bound
     const deps: SlackWebhookDeps = {
       signingSecret,
-      cleanupContent: (text) => cleanupContentImpl(text, anthropicKey),
-      createTriageIssue: (title, description) =>
-        createTriageIssueImpl(title, linearKey, undefined, description),
+      processCapture: (text) =>
+        processCaptureImpl(text, braintrustKey, braintrustProject, braintrustSlug),
+      createIssue: (title, description, options) =>
+        createTriageIssueImpl(title, linearKey, undefined, description, undefined, options),
       verifySignature: (_signature, _timestamp, _body, _secret) =>
         // In production, verification is done before this (see below)
         // This is a no-op since we already verified above

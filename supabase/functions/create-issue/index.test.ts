@@ -2,12 +2,12 @@ import { assertEquals } from "@std/assert";
 import { handleCreateIssue } from "./index.ts";
 
 function setTestEnv() {
-  Deno.env.set("ANTHROPIC_API_KEY", "test_anthropic_key");
+  Deno.env.set("BRAINTRUST_API_KEY", "test_braintrust_key");
   Deno.env.set("LINEAR_API_KEY", "test_linear_key");
 }
 
 function clearTestEnv() {
-  Deno.env.delete("ANTHROPIC_API_KEY");
+  Deno.env.delete("BRAINTRUST_API_KEY");
   Deno.env.delete("LINEAR_API_KEY");
 }
 

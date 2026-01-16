@@ -1,6 +1,13 @@
-import { cleanupContent as cleanupContentImpl } from "../_shared/lib/claude.ts";
-import { createTriageIssue as createTriageIssueImpl } from "../_shared/lib/linear.ts";
-import { captureToLinear, type CaptureDeps } from "../_shared/lib/capture.ts";
+import { processCapture as processCaptureImpl } from "../_shared/lib/braintrust.ts";
+import {
+  createTriageIssue as createTriageIssueImpl,
+  type IssueCreateOptions,
+} from "../_shared/lib/linear.ts";
+import {
+  captureToLinear,
+  type CaptureDeps,
+  type CaptureResult,
+} from "../_shared/lib/capture.ts";
 import type { CreateIssueResponse, LinearIssue } from "../_shared/lib/types.ts";
 
 /**
@@ -8,8 +15,12 @@ import type { CreateIssueResponse, LinearIssue } from "../_shared/lib/types.ts";
  * Functions should have API keys pre-bound at construction time.
  */
 export interface CreateIssueDeps {
-  cleanupContent: (text: string) => Promise<string>;
-  createTriageIssue: (title: string, description?: string) => Promise<LinearIssue>;
+  processCapture: (text: string) => Promise<CaptureResult>;
+  createIssue: (
+    title: string,
+    description?: string,
+    options?: IssueCreateOptions,
+  ) => Promise<LinearIssue>;
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -47,17 +58,20 @@ export async function handleCreateIssue(
   // If deps not provided, create from environment (production mode)
   let effectiveDeps = deps;
   if (!effectiveDeps) {
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const braintrustKey = Deno.env.get("BRAINTRUST_API_KEY");
+    const braintrustProject = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "Productivity_System";
+    const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ?? "capture-cleanup";
     const linearKey = Deno.env.get("LINEAR_API_KEY");
 
-    if (!anthropicKey || !linearKey) {
+    if (!braintrustKey || !linearKey) {
       return jsonResponse({ ok: false, error: "Server configuration error" }, 500);
     }
 
     effectiveDeps = {
-      cleanupContent: (text) => cleanupContentImpl(text, anthropicKey),
-      createTriageIssue: (title, description) =>
-        createTriageIssueImpl(title, linearKey, undefined, description),
+      processCapture: (text) =>
+        processCaptureImpl(text, braintrustKey, braintrustProject, braintrustSlug),
+      createIssue: (title, description, options) =>
+        createTriageIssueImpl(title, linearKey, undefined, description, undefined, options),
     };
   }
 
@@ -75,11 +89,11 @@ export async function handleCreateIssue(
 
     // Create CaptureDeps from CreateIssueDeps (interfaces are compatible)
     const captureDeps: CaptureDeps = {
-      cleanupContent: effectiveDeps.cleanupContent,
-      createTriageIssue: effectiveDeps.createTriageIssue,
+      processCapture: effectiveDeps.processCapture,
+      createIssue: effectiveDeps.createIssue,
     };
 
-    // Use shared capture pipeline: cleanup → parse → create issue
+    // Use shared capture pipeline: process → parse → route → create issue
     const issue = await captureToLinear(trimmedText, captureDeps);
 
     const response: CreateIssueResponse = {

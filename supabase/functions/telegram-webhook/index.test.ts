@@ -7,8 +7,11 @@ function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
     webhookSecret: "test_secret",
     getFileUrl: () => Promise.resolve("https://telegram.org/file/voice.oga"),
     transcribeAudio: () => Promise.resolve("transcribed voice message"),
-    cleanupContent: (text: string) => Promise.resolve(text.trim()),
-    createTriageIssue: () => Promise.resolve({
+    processCapture: (text: string) => Promise.resolve({
+      cleanedContent: text.trim(),
+      isFeedback: false,
+    }),
+    createIssue: () => Promise.resolve({
       id: "issue-123",
       identifier: "BEN-42",
       url: "https://linear.app/team/issue/BEN-42",
@@ -54,8 +57,11 @@ function createVoiceUpdate(): WebhookUpdate {
 
 Deno.test("handleWebhook - processes text message end-to-end", async () => {
   const deps = createMockDeps({
-    cleanupContent: () => Promise.resolve("Create homepage task"),
-    createTriageIssue: (title) => {
+    processCapture: () => Promise.resolve({
+      cleanedContent: "Create homepage task",
+      isFeedback: false,
+    }),
+    createIssue: (title) => {
       assertEquals(title, "Create homepage task");
       return Promise.resolve({
         id: "issue-123",
@@ -83,7 +89,7 @@ Deno.test("handleWebhook - reacts with thumbs up after creating issue", async ()
   let reaction: { chatId: number; messageId: number; emoji: string } | undefined;
 
   const deps = createMockDeps({
-    createTriageIssue: () => Promise.resolve({
+    createIssue: () => Promise.resolve({
       id: "issue-123",
       identifier: "BEN-99",
       url: "https://linear.app/team/issue/BEN-99",
@@ -111,8 +117,11 @@ Deno.test("handleWebhook - splits multiline into title and description", async (
   let captured: { title: string; description?: string } | undefined;
 
   const deps = createMockDeps({
-    cleanupContent: (text) => Promise.resolve(text),
-    createTriageIssue: (title, description) => {
+    processCapture: (text) => Promise.resolve({
+      cleanedContent: text,
+      isFeedback: false,
+    }),
+    createIssue: (title, description) => {
       captured = { title, description };
       return Promise.resolve({
         id: "issue-123",
@@ -142,8 +151,11 @@ Deno.test("handleWebhook - single line message has no description", async () => 
   let captured: { title: string; description?: string } | undefined;
 
   const deps = createMockDeps({
-    cleanupContent: (text) => Promise.resolve(text),
-    createTriageIssue: (title, description) => {
+    processCapture: (text) => Promise.resolve({
+      cleanedContent: text,
+      isFeedback: false,
+    }),
+    createIssue: (title, description) => {
       captured = { title, description };
       return Promise.resolve({
         id: "issue-123",
@@ -183,13 +195,16 @@ Deno.test("handleWebhook - processes voice message end-to-end", async () => {
       assertEquals(url, "https://telegram.org/file/voice.oga");
       return Promise.resolve("um create a new task");
     },
-    cleanupContent: (text) => {
-      callOrder.push("cleanupContent");
+    processCapture: (text) => {
+      callOrder.push("processCapture");
       assertEquals(text, "um create a new task");
-      return Promise.resolve("Create a new task");
+      return Promise.resolve({
+        cleanedContent: "Create a new task",
+        isFeedback: false,
+      });
     },
-    createTriageIssue: (title) => {
-      callOrder.push("createTriageIssue");
+    createIssue: (title) => {
+      callOrder.push("createIssue");
       assertEquals(title, "Create a new task");
       return Promise.resolve({
         id: "issue-456",
@@ -215,7 +230,7 @@ Deno.test("handleWebhook - processes voice message end-to-end", async () => {
   const body = await response.json();
   assertEquals(body.ok, true);
   assertEquals(body.issue.identifier, "BEN-43");
-  assertEquals(callOrder, ["getFileUrl", "transcribeAudio", "cleanupContent", "createTriageIssue", "reactToMessage"]);
+  assertEquals(callOrder, ["getFileUrl", "transcribeAudio", "processCapture", "createIssue", "reactToMessage"]);
 });
 
 // ============================================================================
@@ -284,7 +299,7 @@ Deno.test("handleWebhook - returns 400 for unsupported message type", async () =
 
 Deno.test("handleWebhook - returns 500 on Linear API failure", async () => {
   const deps = createMockDeps({
-    createTriageIssue: () => {
+    createIssue: () => {
       return Promise.reject(new Error("Linear API error: 500 Internal Server Error"));
     },
   });

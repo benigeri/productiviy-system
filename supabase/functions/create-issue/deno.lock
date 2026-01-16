@@ -2,7 +2,8 @@
   "version": "5",
   "specifiers": {
     "jsr:@std/assert@1.0.0": "1.0.0",
-    "jsr:@std/internal@^1.0.1": "1.0.12"
+    "jsr:@std/internal@^1.0.1": "1.0.12",
+    "npm:@supabase/functions-js@2.4.3": "2.4.3"
   },
   "jsr": {
     "@std/assert@1.0.0": {
@@ -13,6 +14,33 @@
     },
     "@std/internal@1.0.12": {
       "integrity": "972a634fd5bc34b242024402972cd5143eac68d8dffaca5eaa4dba30ce17b027"
+    }
+  },
+  "npm": {
+    "@supabase/functions-js@2.4.3": {
+      "integrity": "sha512-sOLXy+mWRyu4LLv1onYydq+10mNRQ4rzqQxNhbrKLTLTcdcmS9hbWif0bGz/NavmiQfPs4ZcmQJp4WqOXlR4AQ==",
+      "dependencies": [
+        "@supabase/node-fetch"
+      ]
+    },
+    "@supabase/node-fetch@2.6.15": {
+      "integrity": "sha512-1ibVeYUacxWYi9i0cf5efil6adJ9WRyZBLivgjs+AUpewx1F3xPi7gLgaASI2SmIQxPoCEjAsLAzKPgMJVgOUQ==",
+      "dependencies": [
+        "whatwg-url"
+      ]
+    },
+    "tr46@0.0.3": {
+      "integrity": "sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw=="
+    },
+    "webidl-conversions@3.0.1": {
+      "integrity": "sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ=="
+    },
+    "whatwg-url@5.0.0": {
+      "integrity": "sha512-saE57nupxk6v3HY35+jzBwYa0rKSy0XR8JSxZPwgLr7ys0IBzhGviA1/TUGJLmSVqs8pb9AnvICXEuOHLprYTw==",
+      "dependencies": [
+        "tr46",
+        "webidl-conversions"
+      ]
     }
   },
   "workspace": {

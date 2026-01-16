@@ -1,5 +1,9 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { createTriageIssue } from "./linear.ts";
+import {
+  createTriageIssue,
+  FEEDBACK_PROJECT_ID,
+  BACKLOG_STATE_ID,
+} from "./linear.ts";
 
 // ============================================================================
 // createTriageIssue tests
@@ -165,4 +169,163 @@ Deno.test("createTriageIssue - throws on argument validation error (e.g., invali
     Error,
     "Linear GraphQL error: Argument Validation Error"
   );
+});
+
+// ============================================================================
+// IssueCreateOptions tests (projectId, stateId)
+// ============================================================================
+
+Deno.test("createTriageIssue - includes projectId when provided in options", async () => {
+  interface CapturedBody {
+    variables: { input: { projectId?: string; stateId?: string } };
+  }
+  let capturedBody: CapturedBody | null = null;
+
+  const mockFetch = (_input: RequestInfo | URL, init?: RequestInit) => {
+    capturedBody = JSON.parse(init?.body as string) as CapturedBody;
+    return Promise.resolve({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          data: {
+            issueCreate: {
+              success: true,
+              issue: {
+                id: "issue-789",
+                identifier: "BEN-44",
+                url: "https://linear.app/team/issue/BEN-44",
+              },
+            },
+          },
+        }),
+    } as Response);
+  };
+
+  await createTriageIssue(
+    "Feedback item",
+    "test_api_key",
+    mockFetch,
+    "User feedback content",
+    undefined, // use default teamId
+    { projectId: FEEDBACK_PROJECT_ID }
+  );
+
+  assertEquals(capturedBody!.variables.input.projectId, FEEDBACK_PROJECT_ID);
+  assertEquals(capturedBody!.variables.input.stateId, undefined);
+});
+
+Deno.test("createTriageIssue - includes stateId when provided in options", async () => {
+  interface CapturedBody {
+    variables: { input: { projectId?: string; stateId?: string } };
+  }
+  let capturedBody: CapturedBody | null = null;
+
+  const mockFetch = (_input: RequestInfo | URL, init?: RequestInit) => {
+    capturedBody = JSON.parse(init?.body as string) as CapturedBody;
+    return Promise.resolve({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          data: {
+            issueCreate: {
+              success: true,
+              issue: {
+                id: "issue-790",
+                identifier: "BEN-45",
+                url: "https://linear.app/team/issue/BEN-45",
+              },
+            },
+          },
+        }),
+    } as Response);
+  };
+
+  await createTriageIssue(
+    "Backlog item",
+    "test_api_key",
+    mockFetch,
+    undefined,
+    undefined,
+    { stateId: BACKLOG_STATE_ID }
+  );
+
+  assertEquals(capturedBody!.variables.input.stateId, BACKLOG_STATE_ID);
+  assertEquals(capturedBody!.variables.input.projectId, undefined);
+});
+
+Deno.test("createTriageIssue - includes both projectId and stateId for feedback routing", async () => {
+  interface CapturedBody {
+    variables: { input: { projectId?: string; stateId?: string } };
+  }
+  let capturedBody: CapturedBody | null = null;
+
+  const mockFetch = (_input: RequestInfo | URL, init?: RequestInit) => {
+    capturedBody = JSON.parse(init?.body as string) as CapturedBody;
+    return Promise.resolve({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          data: {
+            issueCreate: {
+              success: true,
+              issue: {
+                id: "issue-791",
+                identifier: "BEN-46",
+                url: "https://linear.app/team/issue/BEN-46",
+              },
+            },
+          },
+        }),
+    } as Response);
+  };
+
+  await createTriageIssue(
+    "User feedback",
+    "test_api_key",
+    mockFetch,
+    "Great product!",
+    undefined,
+    { projectId: FEEDBACK_PROJECT_ID, stateId: BACKLOG_STATE_ID }
+  );
+
+  assertEquals(capturedBody!.variables.input.projectId, FEEDBACK_PROJECT_ID);
+  assertEquals(capturedBody!.variables.input.stateId, BACKLOG_STATE_ID);
+});
+
+Deno.test("createTriageIssue - omits projectId and stateId when options is undefined", async () => {
+  interface CapturedBody {
+    variables: { input: { projectId?: string; stateId?: string } };
+  }
+  let capturedBody: CapturedBody | null = null;
+
+  const mockFetch = (_input: RequestInfo | URL, init?: RequestInit) => {
+    capturedBody = JSON.parse(init?.body as string) as CapturedBody;
+    return Promise.resolve({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          data: {
+            issueCreate: {
+              success: true,
+              issue: {
+                id: "issue-792",
+                identifier: "BEN-47",
+                url: "https://linear.app/team/issue/BEN-47",
+              },
+            },
+          },
+        }),
+    } as Response);
+  };
+
+  await createTriageIssue(
+    "Regular issue",
+    "test_api_key",
+    mockFetch,
+    "Description"
+  );
+
+  // Verify projectId and stateId are not in the request
+  assertEquals("projectId" in capturedBody!.variables.input, false);
+  assertEquals("stateId" in capturedBody!.variables.input, false);
 });
