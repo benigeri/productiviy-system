@@ -25,28 +25,21 @@ Set is_feedback to true if the text STARTS with a feedback prefix. Be flexible w
 - Case insensitive: "FB", "Fb", "fb" all count
 
 The key pattern is: text starts with optional slashes, then "fb", then optional dash/space.
-Examples that ARE feedback:
-- "// fb - John - Great!" → is_feedback: true
-- "fb - Sarah - Love it" → is_feedback: true
-- "FB- quick note" → is_feedback: true
-- "/fb - test" → is_feedback: true
 
-Examples that are NOT feedback:
-- "Fix the fb button" → is_feedback: false (fb not at start)
-- "The feedback was good" → is_feedback: false (word is "feedback" not "fb")
+**For feedback items:**
+KEEP the "fb - " prefix in the output, reformatted as: "fb - Name: their feedback"
+Example: "fb - John Doe - Great product!" → cleaned_content: "fb - John Doe: Great product!"
+Example: "FB- sarah loves it" → cleaned_content: "fb - Sarah: loves it"
 
-For feedback items, extract the content AFTER the prefix (keep the person name and their feedback).
-Example: "fb - John Doe - Great product!" → cleaned_content: "John Doe - Great product!"
+**For regular items (not feedback):**
+Just clean up the text normally.
 
 **Output Format:**
-Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON:
 {
-  "cleaned_content": "Title here\\n\\nDescription here (if any)",
+  "cleaned_content": "Title here",
   "is_feedback": false
-}
-
-The cleaned_content should have the title on the first line, then optionally a blank line and description.
-Do not include any text outside the JSON object.`;
+}`;
 
 interface ChatCompletionResponse {
   choices: Array<{
@@ -93,7 +86,7 @@ export async function processCapture(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-3-5-haiku-20241022",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: `Process this text and return the JSON result:\n\n${trimmed}` },

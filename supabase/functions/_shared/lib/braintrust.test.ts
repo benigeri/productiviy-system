@@ -28,7 +28,7 @@ Deno.test("processCapture - processes regular text", async () => {
       assertEquals(headers["Content-Type"], "application/json");
 
       const body = JSON.parse(init?.body as string);
-      assertEquals(body.model, "claude-sonnet-4-5-20250929");
+      assertEquals(body.model, "claude-3-5-haiku-20241022");
       assertEquals(body.messages.length, 2);
       assertEquals(body.messages[0].role, "system");
       assertEquals(body.messages[1].role, "user");
