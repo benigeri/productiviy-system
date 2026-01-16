@@ -1,22 +1,31 @@
-import { cleanupContent as cleanupContentImpl } from "../_shared/lib/claude.ts";
-import { createTriageIssue as createTriageIssueImpl } from "../_shared/lib/linear.ts";
-import { captureToLinear, type CaptureDeps } from "../_shared/lib/capture.ts";
+import { processCapture as processCaptureImpl } from "../_shared/lib/braintrust.ts";
+import {
+  createTriageIssue as createTriageIssueImpl,
+  type IssueCreateOptions,
+} from "../_shared/lib/linear.ts";
+import {
+  captureToLinear,
+  type CaptureDeps,
+  type CaptureResult,
+} from "../_shared/lib/capture.ts";
 import type { CreateIssueResponse, LinearIssue } from "../_shared/lib/types.ts";
+import {
+  jsonResponseWithCors,
+  errorResponseWithCors,
+  type ErrorCode,
+} from "../_shared/lib/http.ts";
 
 /**
  * Dependencies for the create-issue handler.
  * Functions should have API keys pre-bound at construction time.
  */
 export interface CreateIssueDeps {
-  cleanupContent: (text: string) => Promise<string>;
-  createTriageIssue: (title: string, description?: string) => Promise<LinearIssue>;
-}
-
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+  processCapture: (text: string) => Promise<CaptureResult>;
+  createIssue: (
+    title: string,
+    description?: string,
+    options?: IssueCreateOptions,
+  ) => Promise<LinearIssue>;
 }
 
 function corsHeaders(): HeadersInit {
@@ -41,23 +50,26 @@ export async function handleCreateIssue(
 
   // Only accept POST requests
   if (request.method !== "POST") {
-    return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
+    return errorResponseWithCors("Method not allowed", "INVALID_METHOD", 405);
   }
 
   // If deps not provided, create from environment (production mode)
   let effectiveDeps = deps;
   if (!effectiveDeps) {
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const braintrustKey = Deno.env.get("BRAINTRUST_API_KEY");
+    const braintrustProject = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "2026_01 Email Flow";
+    const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ?? "capture-cleanup";
     const linearKey = Deno.env.get("LINEAR_API_KEY");
 
-    if (!anthropicKey || !linearKey) {
-      return jsonResponse({ ok: false, error: "Server configuration error" }, 500);
+    if (!braintrustKey || !linearKey) {
+      return errorResponseWithCors("Server configuration error", "CONFIG_ERROR", 500);
     }
 
     effectiveDeps = {
-      cleanupContent: (text) => cleanupContentImpl(text, anthropicKey),
-      createTriageIssue: (title, description) =>
-        createTriageIssueImpl(title, linearKey, undefined, description),
+      processCapture: (text) =>
+        processCaptureImpl(text, braintrustKey, braintrustProject, braintrustSlug),
+      createIssue: (title, description, options) =>
+        createTriageIssueImpl(title, linearKey, undefined, description, undefined, options),
     };
   }
 
@@ -65,21 +77,21 @@ export async function handleCreateIssue(
     const body: CreateIssueRequest = await request.json();
 
     if (!body.text || typeof body.text !== "string") {
-      return jsonResponse({ ok: false, error: "Missing or invalid 'text' field" }, 400);
+      return errorResponseWithCors("Missing or invalid 'text' field", "MISSING_TEXT", 400);
     }
 
     const trimmedText = body.text.trim();
     if (trimmedText === "") {
-      return jsonResponse({ ok: false, error: "Text cannot be empty" }, 400);
+      return errorResponseWithCors("Text cannot be empty", "EMPTY_TEXT", 400);
     }
 
     // Create CaptureDeps from CreateIssueDeps (interfaces are compatible)
     const captureDeps: CaptureDeps = {
-      cleanupContent: effectiveDeps.cleanupContent,
-      createTriageIssue: effectiveDeps.createTriageIssue,
+      processCapture: effectiveDeps.processCapture,
+      createIssue: effectiveDeps.createIssue,
     };
 
-    // Use shared capture pipeline: cleanup → parse → create issue
+    // Use shared capture pipeline: process → parse → route → create issue
     const issue = await captureToLinear(trimmedText, captureDeps);
 
     const response: CreateIssueResponse = {
@@ -87,34 +99,22 @@ export async function handleCreateIssue(
       issue,
     };
 
-    return new Response(JSON.stringify(response), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders(),
-      },
-    });
+    return jsonResponseWithCors(response, 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
 
     // Handle empty content error from capture pipeline
     if (message === "Cleanup resulted in empty content") {
-      return new Response(JSON.stringify({ ok: false, error: message }), {
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders(),
-        },
-      });
+      return errorResponseWithCors(message, "EMPTY_AFTER_CLEANUP", 400);
     }
 
-    return new Response(JSON.stringify({ ok: false, error: message }), {
-      status: 500,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders(),
-      },
-    });
+    // Categorize errors by source
+    let code: ErrorCode = "UNKNOWN_ERROR";
+    if (message.includes("Braintrust")) code = "BRAINTRUST_ERROR";
+    else if (message.includes("Linear")) code = "LINEAR_ERROR";
+    else if (message.includes("timed out")) code = "TIMEOUT";
+
+    return errorResponseWithCors(message, code, 500);
   }
 }
 

@@ -18,6 +18,7 @@ import {
   createNylasClient,
   verifyNylasSignature,
 } from "../_shared/lib/nylas.ts";
+import { jsonResponse, errorResponse } from "../_shared/lib/http.ts";
 
 /**
  * Dependencies for the webhook handler.
@@ -31,13 +32,6 @@ export interface WebhookDeps {
     messageId: string,
     folders: string[],
   ) => Promise<NylasMessage>;
-}
-
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
 }
 
 /**
@@ -192,7 +186,7 @@ export async function handleWebhook(
   // Verify signature
   const isValid = await deps.verifySignature(signature, body);
   if (!isValid) {
-    return jsonResponse({ error: "Invalid signature" }, 401);
+    return errorResponse("Invalid signature", "UNAUTHORIZED", 401);
   }
 
   try {
@@ -214,7 +208,7 @@ export async function handleWebhook(
     return jsonResponse({ ok: true, skipped: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return jsonResponse({ error: message }, 500);
+    return errorResponse(message, "UNKNOWN_ERROR", 500);
   }
 }
 

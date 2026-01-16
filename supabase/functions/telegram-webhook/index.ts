@@ -8,10 +8,18 @@ import {
   type WebhookUpdate,
 } from "./lib/telegram.ts";
 import { transcribeAudio as transcribeAudioImpl } from "./lib/deepgram.ts";
-import { cleanupContent as cleanupContentImpl } from "../_shared/lib/claude.ts";
-import { createTriageIssue as createTriageIssueImpl } from "../_shared/lib/linear.ts";
-import { captureToLinear, type CaptureDeps } from "../_shared/lib/capture.ts";
+import { processCapture as processCaptureImpl } from "../_shared/lib/braintrust.ts";
+import {
+  createTriageIssue as createTriageIssueImpl,
+  type IssueCreateOptions,
+} from "../_shared/lib/linear.ts";
+import {
+  captureToLinear,
+  type CaptureDeps,
+  type CaptureResult,
+} from "../_shared/lib/capture.ts";
 import type { LinearIssue } from "../_shared/lib/types.ts";
+import { jsonResponse, errorResponse, type ErrorCode } from "../_shared/lib/http.ts";
 
 /**
  * Dependencies for the Telegram webhook handler.
@@ -21,16 +29,13 @@ export interface WebhookDeps {
   webhookSecret?: string;
   getFileUrl: (fileId: string) => Promise<string>;
   transcribeAudio: (audioUrl: string) => Promise<string>;
-  cleanupContent: (text: string) => Promise<string>;
-  createTriageIssue: (title: string, description?: string) => Promise<LinearIssue>;
+  processCapture: (text: string) => Promise<CaptureResult>;
+  createIssue: (
+    title: string,
+    description?: string,
+    options?: IssueCreateOptions,
+  ) => Promise<LinearIssue>;
   reactToMessage: (chatId: number, messageId: number, emoji: string) => Promise<void>;
-}
-
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
 }
 
 export async function handleWebhook(
@@ -39,7 +44,7 @@ export async function handleWebhook(
 ): Promise<Response> {
   // Validate webhook secret
   if (!validateWebhookSecret(request.headers, deps.webhookSecret)) {
-    return jsonResponse({ error: "Unauthorized" }, 401);
+    return errorResponse("Unauthorized", "UNAUTHORIZED", 401);
   }
 
   try {
@@ -59,16 +64,16 @@ export async function handleWebhook(
 
     // Check for empty input before capture pipeline
     if (rawText.trim() === "") {
-      return jsonResponse({ error: "Empty message content" }, 400);
+      return errorResponse("Empty message content", "EMPTY_TEXT", 400);
     }
 
     // Create CaptureDeps from WebhookDeps (interfaces are compatible)
     const captureDeps: CaptureDeps = {
-      cleanupContent: deps.cleanupContent,
-      createTriageIssue: deps.createTriageIssue,
+      processCapture: deps.processCapture,
+      createIssue: deps.createIssue,
     };
 
-    // Use shared capture pipeline: cleanup → parse → create issue
+    // Use shared capture pipeline: process → parse → route → create issue
     const issue = await captureToLinear(rawText, captureDeps);
 
     // React with thumbs up to confirm
@@ -79,15 +84,21 @@ export async function handleWebhook(
     const message = error instanceof Error ? error.message : "Unknown error";
 
     if (message === "Unsupported message type" || message === "No message in update") {
-      return jsonResponse({ error: message }, 400);
+      return errorResponse(message, "INVALID_PAYLOAD", 400);
     }
 
     // Handle empty content error from capture pipeline
     if (message === "Cleanup resulted in empty content") {
-      return jsonResponse({ error: "Empty message content" }, 400);
+      return errorResponse("Empty message content", "EMPTY_AFTER_CLEANUP", 400);
     }
 
-    return jsonResponse({ error: message }, 500);
+    // Categorize errors by source
+    let code: ErrorCode = "UNKNOWN_ERROR";
+    if (message.includes("Braintrust")) code = "BRAINTRUST_ERROR";
+    else if (message.includes("Linear")) code = "LINEAR_ERROR";
+    else if (message.includes("timed out")) code = "TIMEOUT";
+
+    return errorResponse(message, code, 500);
   }
 }
 
@@ -97,7 +108,9 @@ if (import.meta.main) {
     // Read API keys once at startup
     const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
     const deepgramKey = Deno.env.get("DEEPGRAM_API_KEY") ?? "";
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+    const braintrustKey = Deno.env.get("BRAINTRUST_API_KEY") ?? "";
+    const braintrustProject = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "2026_01 Email Flow";
+    const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ?? "capture-cleanup";
     const linearKey = Deno.env.get("LINEAR_API_KEY") ?? "";
 
     // Create deps with API keys pre-bound
@@ -105,9 +118,10 @@ if (import.meta.main) {
       webhookSecret: Deno.env.get("TELEGRAM_WEBHOOK_SECRET"),
       getFileUrl: (fileId) => getFileUrlImpl(fileId, botToken),
       transcribeAudio: (url) => transcribeAudioImpl(url, deepgramKey),
-      cleanupContent: (text) => cleanupContentImpl(text, anthropicKey),
-      createTriageIssue: (title, description) =>
-        createTriageIssueImpl(title, linearKey, undefined, description),
+      processCapture: (text) =>
+        processCaptureImpl(text, braintrustKey, braintrustProject, braintrustSlug),
+      createIssue: (title, description, options) =>
+        createTriageIssueImpl(title, linearKey, undefined, description, undefined, options),
       reactToMessage: (chatId, messageId, emoji) =>
         reactToMessageImpl(chatId, messageId, emoji, botToken),
     };
