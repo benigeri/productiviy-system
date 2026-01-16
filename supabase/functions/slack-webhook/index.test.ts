@@ -416,10 +416,11 @@ Deno.test("handleSlackWebhook - handles message shortcut with URL-encoded payloa
 
   const response = await handleSlackWebhook(request, deps);
 
-  // Should return empty 200 immediately (processing happens in background)
+  // Should return 200 with created issue (processing is synchronous to prevent data loss)
   assertEquals(response.status, 200);
-  const body = await response.text();
-  assertEquals(body, "");
+  const body = await response.json();
+  assertEquals(body.ok, true);
+  assertEquals(body.issue.identifier, "BEN-42");
 });
 
 Deno.test("handleSlackWebhook - returns 200 for empty shortcut message", async () => {

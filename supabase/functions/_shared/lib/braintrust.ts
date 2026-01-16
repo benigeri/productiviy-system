@@ -4,6 +4,7 @@
  */
 
 import type { CaptureResult } from "./capture.ts";
+import { fetchWithTimeout, DEFAULT_API_TIMEOUT } from "./http.ts";
 
 const SYSTEM_PROMPT = `You are a text cleanup assistant that processes voice transcriptions into clean Linear issues.
 
@@ -79,7 +80,7 @@ export async function processCapture(
 
   // Use Braintrust proxy for OpenAI-compatible API
   // This provides observability via Braintrust dashboard
-  const response = await fetchFn("https://braintrustproxy.com/v1/chat/completions", {
+  const requestOptions: RequestInit = {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
@@ -93,7 +94,12 @@ export async function processCapture(
       ],
       max_tokens: 1024,
     }),
-  });
+  };
+
+  // Use fetchWithTimeout in production, allow custom fetch for tests
+  const response = fetchFn === fetch
+    ? await fetchWithTimeout("https://braintrustproxy.com/v1/chat/completions", requestOptions, DEFAULT_API_TIMEOUT)
+    : await fetchFn("https://braintrustproxy.com/v1/chat/completions", requestOptions);
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Unknown error");

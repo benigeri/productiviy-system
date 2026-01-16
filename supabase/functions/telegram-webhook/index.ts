@@ -19,6 +19,7 @@ import {
   type CaptureResult,
 } from "../_shared/lib/capture.ts";
 import type { LinearIssue } from "../_shared/lib/types.ts";
+import { jsonResponse, errorResponse, type ErrorCode } from "../_shared/lib/http.ts";
 
 /**
  * Dependencies for the Telegram webhook handler.
@@ -37,20 +38,13 @@ export interface WebhookDeps {
   reactToMessage: (chatId: number, messageId: number, emoji: string) => Promise<void>;
 }
 
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
 export async function handleWebhook(
   request: Request,
   deps: WebhookDeps
 ): Promise<Response> {
   // Validate webhook secret
   if (!validateWebhookSecret(request.headers, deps.webhookSecret)) {
-    return jsonResponse({ error: "Unauthorized" }, 401);
+    return errorResponse("Unauthorized", "UNAUTHORIZED", 401);
   }
 
   try {
@@ -70,7 +64,7 @@ export async function handleWebhook(
 
     // Check for empty input before capture pipeline
     if (rawText.trim() === "") {
-      return jsonResponse({ error: "Empty message content" }, 400);
+      return errorResponse("Empty message content", "EMPTY_TEXT", 400);
     }
 
     // Create CaptureDeps from WebhookDeps (interfaces are compatible)
@@ -90,15 +84,21 @@ export async function handleWebhook(
     const message = error instanceof Error ? error.message : "Unknown error";
 
     if (message === "Unsupported message type" || message === "No message in update") {
-      return jsonResponse({ error: message }, 400);
+      return errorResponse(message, "INVALID_PAYLOAD", 400);
     }
 
     // Handle empty content error from capture pipeline
     if (message === "Cleanup resulted in empty content") {
-      return jsonResponse({ error: "Empty message content" }, 400);
+      return errorResponse("Empty message content", "EMPTY_AFTER_CLEANUP", 400);
     }
 
-    return jsonResponse({ error: message }, 500);
+    // Categorize errors by source
+    let code: ErrorCode = "UNKNOWN_ERROR";
+    if (message.includes("Braintrust")) code = "BRAINTRUST_ERROR";
+    else if (message.includes("Linear")) code = "LINEAR_ERROR";
+    else if (message.includes("timed out")) code = "TIMEOUT";
+
+    return errorResponse(message, code, 500);
   }
 }
 

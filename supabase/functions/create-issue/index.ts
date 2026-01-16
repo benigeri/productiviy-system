@@ -9,6 +9,11 @@ import {
   type CaptureResult,
 } from "../_shared/lib/capture.ts";
 import type { CreateIssueResponse, LinearIssue } from "../_shared/lib/types.ts";
+import {
+  jsonResponseWithCors,
+  errorResponseWithCors,
+  type ErrorCode,
+} from "../_shared/lib/http.ts";
 
 /**
  * Dependencies for the create-issue handler.
@@ -21,13 +26,6 @@ export interface CreateIssueDeps {
     description?: string,
     options?: IssueCreateOptions,
   ) => Promise<LinearIssue>;
-}
-
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
 }
 
 function corsHeaders(): HeadersInit {
@@ -52,7 +50,7 @@ export async function handleCreateIssue(
 
   // Only accept POST requests
   if (request.method !== "POST") {
-    return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
+    return errorResponseWithCors("Method not allowed", "INVALID_METHOD", 405);
   }
 
   // If deps not provided, create from environment (production mode)
@@ -64,7 +62,7 @@ export async function handleCreateIssue(
     const linearKey = Deno.env.get("LINEAR_API_KEY");
 
     if (!braintrustKey || !linearKey) {
-      return jsonResponse({ ok: false, error: "Server configuration error" }, 500);
+      return errorResponseWithCors("Server configuration error", "CONFIG_ERROR", 500);
     }
 
     effectiveDeps = {
@@ -79,12 +77,12 @@ export async function handleCreateIssue(
     const body: CreateIssueRequest = await request.json();
 
     if (!body.text || typeof body.text !== "string") {
-      return jsonResponse({ ok: false, error: "Missing or invalid 'text' field" }, 400);
+      return errorResponseWithCors("Missing or invalid 'text' field", "MISSING_TEXT", 400);
     }
 
     const trimmedText = body.text.trim();
     if (trimmedText === "") {
-      return jsonResponse({ ok: false, error: "Text cannot be empty" }, 400);
+      return errorResponseWithCors("Text cannot be empty", "EMPTY_TEXT", 400);
     }
 
     // Create CaptureDeps from CreateIssueDeps (interfaces are compatible)
@@ -101,34 +99,22 @@ export async function handleCreateIssue(
       issue,
     };
 
-    return new Response(JSON.stringify(response), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders(),
-      },
-    });
+    return jsonResponseWithCors(response, 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
 
     // Handle empty content error from capture pipeline
     if (message === "Cleanup resulted in empty content") {
-      return new Response(JSON.stringify({ ok: false, error: message }), {
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders(),
-        },
-      });
+      return errorResponseWithCors(message, "EMPTY_AFTER_CLEANUP", 400);
     }
 
-    return new Response(JSON.stringify({ ok: false, error: message }), {
-      status: 500,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders(),
-      },
-    });
+    // Categorize errors by source
+    let code: ErrorCode = "UNKNOWN_ERROR";
+    if (message.includes("Braintrust")) code = "BRAINTRUST_ERROR";
+    else if (message.includes("Linear")) code = "LINEAR_ERROR";
+    else if (message.includes("timed out")) code = "TIMEOUT";
+
+    return errorResponseWithCors(message, code, 500);
   }
 }
 
