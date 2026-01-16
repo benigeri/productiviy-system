@@ -18,9 +18,25 @@ const SYSTEM_PROMPT = `You are a text cleanup assistant that processes voice tra
 - Format bullet points as proper markdown (use "- " at line start)
 
 **Feedback Detection:**
-- If the text starts with "// fb -" or "// fb-" (feedback prefix), set is_feedback to true
-- For feedback items, extract the content AFTER the prefix (keep the person's name and their feedback)
-- Example: "// fb - John Doe - Great product!" → cleaned_content should be "John Doe - Great product!"
+Set is_feedback to true if the text STARTS with a feedback prefix. Be flexible with detection:
+- Exact: "// fb -", "// fb-", "//fb -", "//fb-"
+- Without slashes: "fb -", "fb-", "FB -", "FB-"
+- Common typos: "fb-", "fb -", "/fb -", "/ fb -", "//fb", "fb"
+- Case insensitive: "FB", "Fb", "fb" all count
+
+The key pattern is: text starts with optional slashes, then "fb", then optional dash/space.
+Examples that ARE feedback:
+- "// fb - John - Great!" → is_feedback: true
+- "fb - Sarah - Love it" → is_feedback: true
+- "FB- quick note" → is_feedback: true
+- "/fb - test" → is_feedback: true
+
+Examples that are NOT feedback:
+- "Fix the fb button" → is_feedback: false (fb not at start)
+- "The feedback was good" → is_feedback: false (word is "feedback" not "fb")
+
+For feedback items, extract the content AFTER the prefix (keep the person name and their feedback).
+Example: "fb - John Doe - Great product!" → cleaned_content: "John Doe - Great product!"
 
 **Output Format:**
 Return ONLY valid JSON in this exact format:

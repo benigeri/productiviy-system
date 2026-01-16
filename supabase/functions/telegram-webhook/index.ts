@@ -109,7 +109,7 @@ if (import.meta.main) {
     const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
     const deepgramKey = Deno.env.get("DEEPGRAM_API_KEY") ?? "";
     const braintrustKey = Deno.env.get("BRAINTRUST_API_KEY") ?? "";
-    const braintrustProject = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "Productivity_System";
+    const braintrustProject = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "2026_01 Email Flow";
     const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ?? "capture-cleanup";
     const linearKey = Deno.env.get("LINEAR_API_KEY") ?? "";
 
