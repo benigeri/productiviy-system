@@ -12,7 +12,6 @@ import {
 } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
-import { Label } from '../../components/ui/label';
 import { Badge } from '../../components/ui/badge';
 
 interface ConversationMessage {
@@ -38,6 +37,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
 
   async function generateDraft() {
     if (loading || saving) return;
+    if (!instructions.trim()) return;
     setLoading(true);
     setError('');
 
@@ -162,8 +162,20 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
     }
   }
 
-  // React's JSX automatically escapes content for XSS protection
-  // No additional sanitization needed for display
+  // Handle Cmd+Enter to generate/regenerate
+  function handleInstructionsKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      generateDraft();
+    }
+  }
+
+  function handleFeedbackKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      regenerateDraft();
+    }
+  }
 
   const isBlankState = !draft;
 
@@ -201,18 +213,22 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
                 What would you like to write?
               </CardTitle>
               <CardDescription>
-                Include recipients and context. For example: "Email
-                john@example.com about the Q1 results meeting"
+                Include recipients and context. For example: &quot;Email
+                john@example.com about the Q1 results meeting&quot;
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Textarea
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
+                onKeyDown={handleInstructionsKeyDown}
                 placeholder="Email john@example.com and cc jane@example.com about scheduling the quarterly review..."
                 className="min-h-32 resize-none"
                 disabled={loading}
               />
+              <p className="text-xs text-muted-foreground mt-2">
+                Press <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">⌘</kbd> + <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to generate
+              </p>
             </CardContent>
             <CardFooter className="flex justify-end border-t pt-4">
               <Button
@@ -236,63 +252,33 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
         ) : (
           /* ========== DRAFT STATE ========== */
           <div className="space-y-4">
-            {/* Email Header Info */}
+            {/* Draft Card - Subject, Recipients, Body */}
             <Card>
-              <CardContent className="pt-4 space-y-3">
-                {/* Subject */}
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Subject
-                  </Label>
-                  <p className="font-medium">{subject}</p>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">{subject}</CardTitle>
+                  <Badge variant="secondary">Draft</Badge>
                 </div>
-
-                {/* Recipients */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground uppercase tracking-wide w-8">
-                      To
-                    </Label>
-                    <div className="flex flex-wrap gap-1">
-                      {recipients.to.length > 0 ? (
-                        recipients.to.map((email, i) => (
-                          <Badge key={i} variant="secondary">
-                            {email}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-sm text-muted-foreground">
-                          No recipients
-                        </span>
-                      )}
-                    </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm mt-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground">To:</span>
+                    {recipients.to.length > 0 ? (
+                      <span>{recipients.to.join(', ')}</span>
+                    ) : (
+                      <span className="text-muted-foreground italic">
+                        No recipients
+                      </span>
+                    )}
                   </div>
                   {recipients.cc.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs text-muted-foreground uppercase tracking-wide w-8">
-                        Cc
-                      </Label>
-                      <div className="flex flex-wrap gap-1">
-                        {recipients.cc.map((email, i) => (
-                          <Badge key={i} variant="outline">
-                            {email}
-                          </Badge>
-                        ))}
-                      </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground">Cc:</span>
+                      <span>{recipients.cc.join(', ')}</span>
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Draft Body */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Draft
-                </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-0">
                 <div className="whitespace-pre-wrap text-sm leading-relaxed">
                   {draft}
                 </div>
@@ -314,10 +300,14 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
                 <Textarea
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
+                  onKeyDown={handleFeedbackKeyDown}
                   placeholder="Make it more concise, add a deadline, change the tone..."
                   className="min-h-20 resize-none"
                   disabled={loading}
                 />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Press <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">⌘</kbd> + <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to regenerate
+                </p>
               </CardContent>
               <CardFooter className="border-t pt-4">
                 <Button
