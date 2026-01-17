@@ -1,35 +1,43 @@
+'use client';
+
+import { useState } from 'react';
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { ComposeModal } from "@/app/inbox/ComposeModal";
 
 export function NavBar() {
-  return (
-    <nav className="border-b border-border/60 bg-card/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
-      <div className="container mx-auto px-4">
-        <div className="flex h-12 items-center justify-between">
-          {/* Brand */}
-          <Link
-            href="/"
-            className="text-lg font-semibold text-foreground hover:text-primary transition-colors duration-200"
-          >
-            Email Workflow
-          </Link>
+  const [composeOpen, setComposeOpen] = useState(false);
 
-          {/* Navigation */}
-          <div className="flex items-center gap-6">
+  return (
+    <>
+      <nav className="border-b border-border/60 bg-card/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+        <div className="container mx-auto px-4">
+          <div className="flex h-12 items-center justify-between">
+            {/* Brand */}
             <Link
-              href="/inbox"
-              className="text-muted-foreground hover:text-foreground font-medium transition-colors duration-200 relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-primary after:transition-all after:duration-200 hover:after:w-full"
+              href="/"
+              className="text-lg font-semibold text-foreground hover:text-primary transition-colors duration-200"
             >
-              Inbox
+              Email Workflow
             </Link>
-            <Link href="/inbox">
-              <Button variant="default" size="sm">
+
+            {/* Navigation */}
+            <div className="flex items-center gap-6">
+              <Link
+                href="/inbox"
+                className="text-muted-foreground hover:text-foreground font-medium transition-colors duration-200 relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-primary after:transition-all after:duration-200 hover:after:w-full"
+              >
+                Inbox
+              </Link>
+              <Button variant="default" size="sm" onClick={() => setComposeOpen(true)}>
                 Compose
               </Button>
-            </Link>
+            </div>
           </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+
+      <ComposeModal isOpen={composeOpen} onClose={() => setComposeOpen(false)} />
+    </>
   );
 }

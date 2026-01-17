@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useConversation } from '../../hooks/useConversation';
 import { Card, CardHeader, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -397,60 +397,8 @@ export function ThreadDetail({
     }
   }
 
-  const prevThreadId = useMemo(() => getPrevThreadId(), [allThreads, thread.id]);
-  const nextThreadId = useMemo(() => getNextThreadId(), [allThreads, thread.id]);
-  const currentIndex = allThreads?.findIndex(t => t.id === thread.id) ?? -1;
-
   return (
     <div className="h-dvh flex flex-col">
-      {/* Compact Thread Navigation */}
-      <div className="border-b border-border bg-card px-4 py-2 flex items-center justify-between">
-        <Button variant="ghost" size="sm" asChild>
-          <a href="/inbox" className="gap-1">
-            <ChevronLeft className="h-4 w-4" />
-            Back
-          </a>
-        </Button>
-
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">
-            {currentIndex + 1} of {allThreads?.length || 0}
-          </span>
-          <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              disabled={!prevThreadId}
-              asChild={!!prevThreadId}
-            >
-              {prevThreadId ? (
-                <a href={`/inbox?thread=${prevThreadId}`}>
-                  <ChevronLeft className="h-4 w-4" />
-                </a>
-              ) : (
-                <span><ChevronLeft className="h-4 w-4" /></span>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              disabled={!nextThreadId}
-              asChild={!!nextThreadId}
-            >
-              {nextThreadId ? (
-                <a href={`/inbox?thread=${nextThreadId}`}>
-                  <ChevronRight className="h-4 w-4" />
-                </a>
-              ) : (
-                <span><ChevronRight className="h-4 w-4" /></span>
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
-
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 max-w-3xl mx-auto space-y-4">
@@ -487,41 +435,30 @@ export function ThreadDetail({
 
           {/* Conversation History (collapsed by default) */}
           {isLoaded && conversationMessages.length > 0 && (
-            <Card className="border-info/30 bg-info/5">
-              <CardContent className="p-3">
-                <Button
-                  onClick={() => setHistoryCollapsed(!historyCollapsed)}
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-between h-auto p-2"
-                >
-                  <span className="text-sm font-medium">
-                    Draft History ({conversationMessages.length})
-                  </span>
-                  <span>{historyCollapsed ? '▶' : '▼'}</span>
-                </Button>
+            <div className="border-t border-border pt-4">
+              <button
+                onClick={() => setHistoryCollapsed(!historyCollapsed)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <span className="text-xs">{historyCollapsed ? '▶' : '▼'}</span>
+                <span>Draft iterations ({conversationMessages.length})</span>
+              </button>
 
-                {!historyCollapsed && (
-                  <div className="space-y-2 mt-3">
-                    {conversationMessages.map((msg, i) => (
-                      <div
-                        key={i}
-                        className={`p-2 rounded text-sm ${
-                          msg.role === 'user'
-                            ? 'bg-card border'
-                            : 'bg-info/10 border border-info/20'
-                        }`}
-                      >
-                        <p className="text-xs font-medium text-muted-foreground mb-1">
-                          {msg.role === 'user' ? 'You' : 'Assistant'}
-                        </p>
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+              {!historyCollapsed && (
+                <div className="mt-3 space-y-2 pl-4 border-l-2 border-muted">
+                  {conversationMessages.map((msg, i) => (
+                    <div key={i} className="text-sm">
+                      <span className="text-xs text-muted-foreground">
+                        {msg.role === 'user' ? 'Feedback:' : 'Draft:'}
+                      </span>
+                      <p className={`mt-0.5 ${msg.role === 'user' ? 'text-muted-foreground italic' : ''}`}>
+                        {msg.content.length > 200 ? msg.content.slice(0, 200) + '...' : msg.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Storage warning */}
