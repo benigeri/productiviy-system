@@ -19,3 +19,15 @@ AGENTS.md
 
 # Session-specific context (ephemeral, not project docs)
 SESSION_CONTEXT.md
+
+# Editor settings
+.vscode/
+
+# MCP plugin cache
+.playwright-mcp/
+
+# Beads backups
+.beads-backup*
+
+# File-based todos (local tracking)
+todos/
