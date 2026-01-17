@@ -3,6 +3,9 @@ import { ThreadList } from './ThreadList';
 import { ThreadDetail } from './ThreadDetail';
 import { getLabelToRespondPaul } from '@/lib/gmail-labels';
 
+// Force dynamic rendering - this page fetches live email data
+export const dynamic = 'force-dynamic';
+
 interface Thread {
   id: string;
   subject: string;
