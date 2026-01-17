@@ -378,6 +378,21 @@ export function ThreadDetail({
     }
   }
 
+  // Handle Cmd+Enter to generate/regenerate
+  function handleInstructionsKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      generateDraft();
+    }
+  }
+
+  function handleFeedbackKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      regenerateDraft();
+    }
+  }
+
   async function handleApprove() {
     if (!draft) return;
 
@@ -560,13 +575,19 @@ export function ThreadDetail({
 
           {!draft ? (
             <div className="space-y-3">
-              <Textarea
-                placeholder="What should I say in the reply?"
-                value={instructions}
-                onChange={e => setInstructions(e.target.value)}
-                className="resize-none text-sm"
-                rows={2}
-              />
+              <div>
+                <Textarea
+                  placeholder="What should I say in the reply?"
+                  value={instructions}
+                  onChange={e => setInstructions(e.target.value)}
+                  onKeyDown={handleInstructionsKeyDown}
+                  className="resize-none text-sm"
+                  rows={2}
+                />
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Press <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">⌘</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to generate
+                </p>
+              </div>
               <div className="flex gap-2">
                 <Button
                   onClick={generateDraft}
@@ -588,14 +609,20 @@ export function ThreadDetail({
             </div>
           ) : (
             <div className="space-y-3">
-              <Textarea
-                placeholder="Need changes? Tell me what to improve..."
-                value={feedback}
-                onChange={e => setFeedback(e.target.value)}
-                className="resize-none text-sm"
-                rows={2}
-                disabled={loading}
-              />
+              <div>
+                <Textarea
+                  placeholder="Need changes? Tell me what to improve..."
+                  value={feedback}
+                  onChange={e => setFeedback(e.target.value)}
+                  onKeyDown={handleFeedbackKeyDown}
+                  className="resize-none text-sm"
+                  rows={2}
+                  disabled={loading}
+                />
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Press <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">⌘</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to regenerate
+                </p>
+              </div>
               <div className="flex gap-2">
                 <Button
                   onClick={regenerateDraft}
