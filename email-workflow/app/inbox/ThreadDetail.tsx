@@ -1,51 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
-import { useConversation } from '../../hooks/useConversation';
-import { Card, CardHeader, CardContent } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
-import { Textarea } from '../../components/ui/textarea';
-
-interface Thread {
-  id: string;
-  subject: string;
-  message_ids: string[];
-}
-
-interface Message {
-  id: string;
-  from: Array<{ name: string; email: string }>;
-  to: Array<{ name: string; email: string }>;
-  cc?: Array<{ name: string; email: string }>;
-  date: number;
-  conversation: string;
-}
-
-// Relative time formatting
-function formatRelativeTime(timestamp: number): string {
-  const now = Date.now();
-  const date = timestamp * 1000;
-  const diff = now - date;
-
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-
-  return new Date(date).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit'
-  });
-}
+import { useConversation } from '@/hooks/useConversation';
+import { useKeyboardSubmit } from '@/hooks/useKeyboardSubmit';
+import { formatRelativeTime } from '@/lib/date-utils';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import type { Thread, Message } from '@/types/email';
 
 // Clean email content - remove raw HTML tags and convert links
 // This should be called on the ENTIRE message content before splitting by newlines
@@ -354,19 +319,12 @@ export function ThreadDetail({
     }
   }
 
-  function getNextThreadId(): string | null {
+  const getNextThreadId = useCallback((): string | null => {
     if (!allThreads || allThreads.length === 0) return null;
     const currentIndex = allThreads.findIndex(t => t.id === thread.id);
     if (currentIndex === -1 || currentIndex === allThreads.length - 1) return null;
     return allThreads[currentIndex + 1].id;
-  }
-
-  function getPrevThreadId(): string | null {
-    if (!allThreads || allThreads.length === 0) return null;
-    const currentIndex = allThreads.findIndex(t => t.id === thread.id);
-    if (currentIndex === -1 || currentIndex === 0) return null;
-    return allThreads[currentIndex - 1].id;
-  }
+  }, [allThreads, thread.id]);
 
   function handleSkip() {
     clearConversation();
@@ -378,20 +336,9 @@ export function ThreadDetail({
     }
   }
 
-  // Handle Cmd+Enter to generate/regenerate
-  function handleInstructionsKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      generateDraft();
-    }
-  }
-
-  function handleFeedbackKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      regenerateDraft();
-    }
-  }
+  // Keyboard handlers for Cmd+Enter
+  const handleInstructionsKeyDown = useKeyboardSubmit(generateDraft);
+  const handleFeedbackKeyDown = useKeyboardSubmit(regenerateDraft);
 
   async function handleApprove() {
     if (!draft) return;
@@ -425,9 +372,13 @@ export function ThreadDetail({
       }
 
       if (typeof window !== 'undefined') {
-        const session = JSON.parse(localStorage.getItem('session') || '{}');
-        session.draftedCount = (session.draftedCount || 0) + 1;
-        localStorage.setItem('session', JSON.stringify(session));
+        try {
+          const session = JSON.parse(localStorage.getItem('session') || '{}');
+          session.draftedCount = (session.draftedCount || 0) + 1;
+          localStorage.setItem('session', JSON.stringify(session));
+        } catch {
+          // localStorage may be unavailable or quota exceeded
+        }
       }
 
       clearConversation();
@@ -484,6 +435,7 @@ export function ThreadDetail({
           {isLoaded && conversationMessages.length > 0 && (
             <div className="border-t border-border pt-4">
               <button
+                type="button"
                 onClick={() => setHistoryCollapsed(!historyCollapsed)}
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >

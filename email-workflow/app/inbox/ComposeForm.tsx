@@ -9,10 +9,11 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Textarea } from '../../components/ui/textarea';
-import { Badge } from '../../components/ui/badge';
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { useKeyboardSubmit } from '@/hooks/useKeyboardSubmit';
 
 interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -162,20 +163,9 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
     }
   }
 
-  // Handle Cmd+Enter to generate/regenerate
-  function handleInstructionsKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      generateDraft();
-    }
-  }
-
-  function handleFeedbackKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      regenerateDraft();
-    }
-  }
+  // Keyboard handlers for Cmd+Enter
+  const handleInstructionsKeyDown = useKeyboardSubmit(generateDraft);
+  const handleFeedbackKeyDown = useKeyboardSubmit(regenerateDraft);
 
   const isBlankState = !draft;
 
@@ -183,7 +173,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex-none px-6 pt-6 pb-4 border-b border-border">
-        <h2 className="text-xl font-semibold tracking-tight">
+        <h2 id="compose-modal-title" className="text-xl font-semibold tracking-tight">
           Compose New Email
         </h2>
         <p className="text-sm text-muted-foreground mt-1">

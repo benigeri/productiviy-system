@@ -1,40 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { formatRelativeDate } from '@/lib/date-utils';
+import type { ThreadWithPreview } from '@/types/email';
 
-interface Thread {
-  id: string;
-  subject: string;
-  message_ids: string[];
-  latest_draft_or_message: {
-    from: Array<{ name: string; email: string }>;
-    date: number;
-  };
-}
-
-// Relative time formatting
-function formatRelativeTime(timestamp: number): string {
-  const now = Date.now();
-  const date = timestamp * 1000;
-  const diff = now - date;
-
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-
-  return new Date(date).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric'
-  });
-}
-
-export function ThreadList({ threads }: { threads: Thread[] }) {
+export function ThreadList({ threads }: { threads: ThreadWithPreview[] }) {
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <div className="mb-6">
@@ -53,7 +25,7 @@ export function ThreadList({ threads }: { threads: Thread[] }) {
           </Card>
         ) : (
           threads.map((thread, index) => (
-            <a
+            <Link
               key={thread.id}
               href={`/inbox?thread=${thread.id}`}
               className="block group"
@@ -74,13 +46,13 @@ export function ThreadList({ threads }: { threads: Thread[] }) {
                         <Badge variant="secondary" className="text-xs">New</Badge>
                       )}
                       <span className="text-xs text-muted-foreground">
-                        {formatRelativeTime(thread.latest_draft_or_message.date)}
+                        {formatRelativeDate(thread.latest_draft_or_message.date)}
                       </span>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            </a>
+            </Link>
           ))
         )}
       </div>
