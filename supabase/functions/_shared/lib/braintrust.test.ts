@@ -26,6 +26,7 @@ Deno.test("processCapture - processes regular text", async () => {
       const headers = init?.headers as Record<string, string>;
       assertEquals(headers["Authorization"], "Bearer test_api_key");
       assertEquals(headers["Content-Type"], "application/json");
+      assertEquals(headers["x-bt-parent"], "project_id:Test_Project_ID");
 
       const body = JSON.parse(init?.body as string);
       assertEquals(body.model, "claude-3-5-haiku-20241022");
@@ -35,7 +36,8 @@ Deno.test("processCapture - processes regular text", async () => {
 
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve(createChatResponse("Fix the login button", false)),
+        json: () =>
+          Promise.resolve(createChatResponse("Fix the login button", false)),
       } as Response);
     }
     throw new Error(`Unexpected URL: ${url}`);
@@ -44,7 +46,7 @@ Deno.test("processCapture - processes regular text", async () => {
   const result = await processCapture(
     "Fix the login button",
     "test_api_key",
-    "Test_Project",
+    "Test_Project_ID",
     "capture-cleanup",
     mockFetch,
   );
@@ -57,13 +59,14 @@ Deno.test("processCapture - detects feedback items", async () => {
   const mockFetch = () =>
     Promise.resolve({
       ok: true,
-      json: () => Promise.resolve(createChatResponse("John Doe - Great product!", true)),
+      json: () =>
+        Promise.resolve(createChatResponse("John Doe - Great product!", true)),
     } as Response);
 
   const result = await processCapture(
     "// fb - John Doe - Great product!",
     "test_api_key",
-    "Test_Project",
+    "Test_Project_ID",
     "capture-cleanup",
     mockFetch,
   );
@@ -80,7 +83,7 @@ Deno.test("processCapture - handles empty input", async () => {
   const result = await processCapture(
     "   ",
     "test_api_key",
-    "Test_Project",
+    "Test_Project_ID",
     "capture-cleanup",
     mockFetch,
   );
@@ -104,7 +107,7 @@ Deno.test("processCapture - trims input before sending", async () => {
   await processCapture(
     "  Hello world  ",
     "test_api_key",
-    "Test_Project",
+    "Test_Project_ID",
     "capture-cleanup",
     mockFetch,
   );
@@ -128,7 +131,7 @@ Deno.test("processCapture - throws on API error", async () => {
       processCapture(
         "Test input",
         "bad_api_key",
-        "Test_Project",
+        "Test_Project_ID",
         "capture-cleanup",
         mockFetch,
       ),
@@ -159,7 +162,7 @@ Deno.test("processCapture - throws on invalid response structure", async () => {
       processCapture(
         "Test input",
         "test_api_key",
-        "Test_Project",
+        "Test_Project_ID",
         "capture-cleanup",
         mockFetch,
       ),
@@ -188,7 +191,7 @@ Deno.test("processCapture - defaults is_feedback to false when missing", async (
   const result = await processCapture(
     "Test input",
     "test_api_key",
-    "Test_Project",
+    "Test_Project_ID",
     "capture-cleanup",
     mockFetch,
   );
@@ -215,7 +218,7 @@ Deno.test("processCapture - throws on invalid JSON in response", async () => {
       processCapture(
         "Test input",
         "test_api_key",
-        "Test_Project",
+        "Test_Project_ID",
         "capture-cleanup",
         mockFetch,
       ),
@@ -239,7 +242,7 @@ Deno.test("processCapture - throws on empty response choices", async () => {
       processCapture(
         "Test input",
         "test_api_key",
-        "Test_Project",
+        "Test_Project_ID",
         "capture-cleanup",
         mockFetch,
       ),
@@ -256,7 +259,8 @@ Deno.test("processCapture - handles JSON wrapped in markdown code blocks", async
         Promise.resolve({
           choices: [{
             message: {
-              content: "```json\n{\n  \"cleaned_content\": \"Test content\",\n  \"is_feedback\": true\n}\n```",
+              content:
+                '```json\n{\n  "cleaned_content": "Test content",\n  "is_feedback": true\n}\n```',
             },
           }],
         }),
@@ -265,11 +269,38 @@ Deno.test("processCapture - handles JSON wrapped in markdown code blocks", async
   const result = await processCapture(
     "Test input",
     "test_api_key",
-    "Test_Project",
+    "Test_Project_ID",
     "capture-cleanup",
     mockFetch,
   );
 
   assertEquals(result.cleanedContent, "Test content");
+  assertEquals(result.isFeedback, true);
+});
+
+Deno.test("processCapture - handles JSON followed by commentary", async () => {
+  const mockFetch = () =>
+    Promise.resolve({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          choices: [{
+            message: {
+              content:
+                '{\n  "cleaned_content": "fb - Sarah: Loves it!",\n  "is_feedback": true\n}\n\nThe processing involved:\n- Detected feedback prefix\n- Formatted the name',
+            },
+          }],
+        }),
+    } as Response);
+
+  const result = await processCapture(
+    "// fb - Sarah - loves it",
+    "test_api_key",
+    "Test_Project_ID",
+    "capture-cleanup",
+    mockFetch,
+  );
+
+  assertEquals(result.cleanedContent, "fb - Sarah: Loves it!");
   assertEquals(result.isFeedback, true);
 });
