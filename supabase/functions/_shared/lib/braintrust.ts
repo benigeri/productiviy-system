@@ -57,6 +57,51 @@ interface BraintrustResult {
 }
 
 /**
+ * Extract the first complete JSON object from a string.
+ * Uses brace counting while respecting string boundaries.
+ * Handles cases where LLM adds commentary after valid JSON.
+ */
+function extractFirstJsonObject(str: string): string | null {
+  const start = str.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < str.length; i++) {
+    const char = str[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escape = true;
+      continue;
+    }
+
+    if (char === '"' && !escape) {
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString) {
+      if (char === "{") depth++;
+      else if (char === "}") {
+        depth--;
+        if (depth === 0) {
+          return str.slice(start, i + 1);
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Process captured text using Braintrust proxy.
  * Cleans up voice transcriptions and detects feedback items.
  *
@@ -141,24 +186,40 @@ export async function processCapture(
   }
   jsonContent = jsonContent.trim();
 
-  // Extract JSON object if there's trailing text (LLM sometimes adds commentary)
-  const jsonMatch = jsonContent.match(/^\{[\s\S]*?\}(?=\s*($|[^,\]}]))/);
-  if (jsonMatch) {
-    jsonContent = jsonMatch[0];
-  }
-
+  // Parse JSON, handling trailing commentary if present
   let result: BraintrustResult;
   try {
+    // Fast path: try parsing directly (most responses are clean JSON)
     result = JSON.parse(jsonContent);
   } catch {
-    throw new Error(
-      `Invalid Braintrust response: could not parse JSON - ${content}`,
-    );
+    // Slow path: extract first complete JSON object using brace counting
+    const extracted = extractFirstJsonObject(jsonContent);
+    if (extracted) {
+      try {
+        result = JSON.parse(extracted);
+      } catch {
+        throw new Error(
+          `Invalid Braintrust response: could not parse JSON - ${content}`,
+        );
+      }
+    } else {
+      throw new Error(
+        `Invalid Braintrust response: could not parse JSON - ${content}`,
+      );
+    }
   }
 
   // Validate response structure
   if (typeof result.cleaned_content !== "string") {
     throw new Error("Invalid Braintrust response: missing cleaned_content");
+  }
+
+  // Validate is_feedback is boolean if present
+  if (
+    result.is_feedback !== undefined &&
+    typeof result.is_feedback !== "boolean"
+  ) {
+    throw new Error("Invalid Braintrust response: is_feedback must be boolean");
   }
 
   return {

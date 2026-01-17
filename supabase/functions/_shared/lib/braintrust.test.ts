@@ -304,3 +304,58 @@ Deno.test("processCapture - handles JSON followed by commentary", async () => {
   assertEquals(result.cleanedContent, "fb - Sarah: Loves it!");
   assertEquals(result.isFeedback, true);
 });
+
+Deno.test("processCapture - handles content with curly braces", async () => {
+  const mockFetch = () =>
+    Promise.resolve({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          choices: [{
+            message: {
+              content:
+                '{"cleaned_content": "Fix bug in function() { return x; }", "is_feedback": false}\n\nProcessed successfully.',
+            },
+          }],
+        }),
+    } as Response);
+
+  const result = await processCapture(
+    "Fix bug in function() { return x; }",
+    "test_api_key",
+    "Test_Project_ID",
+    "capture-cleanup",
+    mockFetch,
+  );
+
+  assertEquals(result.cleanedContent, "Fix bug in function() { return x; }");
+  assertEquals(result.isFeedback, false);
+});
+
+Deno.test("processCapture - throws on non-boolean is_feedback", async () => {
+  const mockFetch = () =>
+    Promise.resolve({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          choices: [{
+            message: {
+              content: '{"cleaned_content": "Test", "is_feedback": "true"}',
+            },
+          }],
+        }),
+    } as Response);
+
+  await assertRejects(
+    () =>
+      processCapture(
+        "Test input",
+        "test_api_key",
+        "Test_Project_ID",
+        "capture-cleanup",
+        mockFetch,
+      ),
+    Error,
+    "is_feedback must be boolean",
+  );
+});
