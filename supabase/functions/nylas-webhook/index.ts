@@ -191,13 +191,18 @@ async function processReceivedMessage(
     // Remove all existing ai_* labels, keep everything else
     const withoutAI = folderNames.filter((name) => !name.startsWith("ai_"));
 
-    // Add new AI labels
-    const newFolderNames = [...withoutAI, ...result.labels];
+    // Add new AI labels (only if they exist in Gmail)
+    const validAILabels = result.labels.filter((name) => nameToId.has(name));
+    if (validAILabels.length < result.labels.length) {
+      const missing = result.labels.filter((name) => !nameToId.has(name));
+      console.log(`Warning: Missing Gmail labels: ${missing.join(", ")}`);
+    }
+    const newFolderNames = [...withoutAI, ...validAILabels];
 
     // Convert back to IDs
     const newFolderIds = newFolderNames
-      .map((name) => nameToId.get(name) ?? name)
-      .filter(Boolean);
+      .map((name) => nameToId.get(name))
+      .filter((id): id is string => id !== undefined);
 
     // Update only if changed
     const currentIds = message.folders.slice().sort();
