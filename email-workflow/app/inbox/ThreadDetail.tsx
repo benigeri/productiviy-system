@@ -7,6 +7,7 @@ import { useConversation } from '../../hooks/useConversation';
 import { Card, CardHeader, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
+import { Textarea } from '../../components/ui/textarea';
 
 interface Thread {
   id: string;
@@ -398,7 +399,7 @@ export function ThreadDetail({
   }
 
   return (
-    <div className="h-dvh flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 max-w-3xl mx-auto space-y-4">
@@ -528,30 +529,39 @@ export function ThreadDetail({
 
           {!draft ? (
             <div className="space-y-3">
-              <textarea
+              <Textarea
                 placeholder="What should I say in the reply?"
                 value={instructions}
                 onChange={e => setInstructions(e.target.value)}
-                className="w-full p-3 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent resize-none text-sm"
+                className="resize-none text-sm"
                 rows={2}
               />
-              <Button
-                onClick={generateDraft}
-                disabled={loading || !instructions.trim()}
-                className="w-full"
-                size="lg"
-              >
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {loading ? 'Generating...' : 'Generate Draft'}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={generateDraft}
+                  disabled={loading || !instructions.trim()}
+                  className="flex-1"
+                  size="lg"
+                >
+                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {loading ? 'Generating...' : 'Generate Draft'}
+                </Button>
+                <Button
+                  onClick={handleSkip}
+                  variant="ghost"
+                  size="lg"
+                >
+                  Skip
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
-              <textarea
+              <Textarea
                 placeholder="Need changes? Tell me what to improve..."
                 value={feedback}
                 onChange={e => setFeedback(e.target.value)}
-                className="w-full p-3 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent resize-none text-sm"
+                className="resize-none text-sm"
                 rows={2}
                 disabled={loading}
               />

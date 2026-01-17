@@ -21,9 +21,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased h-dvh flex flex-col overflow-hidden">
         <NavBar />
-        {children}
+        <main className="flex-1 overflow-hidden">
+          {children}
+        </main>
       </body>
     </html>
   );

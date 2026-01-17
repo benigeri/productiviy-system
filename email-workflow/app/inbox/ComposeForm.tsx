@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
+import { Textarea } from '../../components/ui/textarea';
+import { Label } from '../../components/ui/label';
 
 interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -211,19 +213,18 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
 
       {/* Initial Instructions Textarea (when no draft) */}
       {!draft && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">
-            Instructions
-          </label>
-          <p className="text-sm text-muted-foreground mb-2">
+        <div className="mb-4 space-y-2">
+          <Label htmlFor="instructions">Instructions</Label>
+          <p className="text-sm text-muted-foreground">
             Provide a brief instruction including recipients. Example: "Email
             john@example.com about Q1 results"
           </p>
-          <textarea
+          <Textarea
+            id="instructions"
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             placeholder="Email john@example.com and cc jane@example.com about Q1 financial results"
-            className="w-full h-32 p-3 border border-input rounded resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+            className="h-32 resize-none"
             disabled={loading}
           />
           <Button
@@ -247,16 +248,16 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
       {draft && (
         <>
           {/* Subject Display */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">Subject</label>
+          <div className="mb-4 space-y-2">
+            <Label>Subject</Label>
             <div className="p-3 bg-muted border border-border rounded">
               {subject}
             </div>
           </div>
 
           {/* Recipients Display (with sanitization) */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">Recipients</label>
+          <div className="mb-4 space-y-2">
+            <Label>Recipients</Label>
             <div className="p-3 bg-muted border border-border rounded space-y-1">
               <div>
                 <strong>To:</strong>{' '}
@@ -281,19 +282,18 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
           </Card>
 
           {/* Feedback Textarea */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">
-              Feedback (optional)
-            </label>
-            <p className="text-sm text-muted-foreground mb-2">
+          <div className="mb-4 space-y-2">
+            <Label htmlFor="feedback">Feedback (optional)</Label>
+            <p className="text-sm text-muted-foreground">
               Provide feedback to iterate on the draft. Example: "Make it more
               concise" or "Add Jane to CC"
             </p>
-            <textarea
+            <Textarea
+              id="feedback"
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               placeholder="Make it shorter"
-              className="w-full h-24 p-3 border border-input rounded resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              className="h-24 resize-none"
               disabled={loading}
             />
             <Button

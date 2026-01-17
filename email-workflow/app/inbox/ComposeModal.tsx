@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import { ComposeForm } from './ComposeForm';
+import { Button } from '@/components/ui/button';
 
 export function ComposeModal({
   isOpen,
@@ -31,13 +32,15 @@ export function ComposeModal({
         className="fixed inset-4 md:inset-20 bg-card rounded-lg overflow-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <button
+        <Button
           onClick={onClose}
-          className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
+          variant="ghost"
+          size="icon"
+          className="absolute top-4 right-4"
           aria-label="Close compose modal"
         >
-          <X className="size-6" />
-        </button>
+          <X className="size-5" />
+        </Button>
 
         <ComposeForm onClose={onClose} />
       </div>
