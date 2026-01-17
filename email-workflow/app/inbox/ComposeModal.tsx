@@ -28,12 +28,12 @@ export function ComposeModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/50" onClick={onClose}>
       <div
-        className="fixed inset-4 md:inset-20 bg-white rounded-lg overflow-auto"
+        className="fixed inset-4 md:inset-20 bg-card rounded-lg overflow-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+          className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
           aria-label="Close compose modal"
         >
           <X className="size-6" />

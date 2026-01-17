@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ComposeFAB } from './ComposeFAB';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 interface Thread {
   id: string;
@@ -13,51 +13,77 @@ interface Thread {
   };
 }
 
+// Relative time formatting
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const date = timestamp * 1000;
+  const diff = now - date;
+
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+
+  return new Date(date).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric'
+  });
+}
+
 export function ThreadList({ threads }: { threads: Thread[] }) {
-  // Get session count from localStorage
-  const [draftedCount, setDraftedCount] = useState(0);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const session = JSON.parse(localStorage.getItem('session') || '{"draftedCount": 0}');
-      setDraftedCount(session.draftedCount || 0);
-    }
-  }, []);
-
   return (
-    <div className="p-4 max-w-4xl mx-auto">
-      <div className="mb-6 flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Inbox</h1>
-        <div className="text-sm text-gray-600">
-          Drafted this session: <span className="font-bold">{draftedCount}</span>
-        </div>
+    <div className="p-4 max-w-3xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">Inbox</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {threads.length} {threads.length === 1 ? 'email' : 'emails'} to respond
+        </p>
       </div>
-      <div className="space-y-2">
+
+      <div className="space-y-3">
         {threads.length === 0 ? (
-          <div className="p-8 bg-white rounded border text-center text-gray-500">
-            No emails to respond to. Great job!
-          </div>
+          <Card>
+            <CardContent className="p-8 text-center">
+              <p className="text-muted-foreground">No emails to respond to. Great job!</p>
+            </CardContent>
+          </Card>
         ) : (
-          threads.map(thread => (
+          threads.map((thread, index) => (
             <a
               key={thread.id}
               href={`/inbox?thread=${thread.id}`}
-              className="block p-4 bg-white rounded-lg border hover:border-blue-300 hover:shadow-md transition"
+              className="block group"
             >
-              <h3 className="font-semibold text-lg mb-1">{thread.subject}</h3>
-              <p className="text-sm text-gray-600">
-                {thread.latest_draft_or_message.from[0]?.name || 'Unknown'}
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                {new Date(thread.latest_draft_or_message.date * 1000).toLocaleString()}
-              </p>
+              <Card className="transition-all hover:shadow-md hover:border-primary/20 group-hover:bg-accent/50">
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-base truncate group-hover:text-primary transition-colors">
+                        {thread.subject}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {thread.latest_draft_or_message.from[0]?.name || 'Unknown'}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {index === 0 && (
+                        <Badge variant="secondary" className="text-xs">New</Badge>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {formatRelativeTime(thread.latest_draft_or_message.date)}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </a>
           ))
         )}
       </div>
-
-      {/* Compose FAB */}
-      <ComposeFAB />
     </div>
   );
 }

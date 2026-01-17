@@ -204,7 +204,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
 
       {/* Error Display */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+        <div className="mb-4 p-3 bg-error/10 border border-error/20 rounded text-error text-sm">
           {error}
         </div>
       )}
@@ -215,7 +215,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
           <label className="block text-sm font-medium mb-2">
             Instructions
           </label>
-          <p className="text-sm text-gray-600 mb-2">
+          <p className="text-sm text-muted-foreground mb-2">
             Provide a brief instruction including recipients. Example: "Email
             john@example.com about Q1 results"
           </p>
@@ -223,7 +223,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             placeholder="Email john@example.com and cc jane@example.com about Q1 financial results"
-            className="w-full h-32 p-3 border border-gray-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full h-32 p-3 border border-input rounded resize-none focus:outline-none focus:ring-2 focus:ring-ring"
             disabled={loading}
           />
           <Button
@@ -249,7 +249,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
           {/* Subject Display */}
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">Subject</label>
-            <div className="p-3 bg-gray-50 border border-gray-200 rounded">
+            <div className="p-3 bg-muted border border-border rounded">
               {subject}
             </div>
           </div>
@@ -257,7 +257,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
           {/* Recipients Display (with sanitization) */}
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">Recipients</label>
-            <div className="p-3 bg-gray-50 border border-gray-200 rounded space-y-1">
+            <div className="p-3 bg-muted border border-border rounded space-y-1">
               <div>
                 <strong>To:</strong>{' '}
                 {recipients.to.length > 0
@@ -274,7 +274,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
 
           {/* Draft Body */}
           <Card className="mb-4">
-            <CardContent className="p-4 bg-blue-50">
+            <CardContent className="p-4 bg-muted">
               <h3 className="font-semibold mb-2">Draft:</h3>
               <div className="whitespace-pre-wrap">{draft}</div>
             </CardContent>
@@ -285,7 +285,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
             <label className="block text-sm font-medium mb-2">
               Feedback (optional)
             </label>
-            <p className="text-sm text-gray-600 mb-2">
+            <p className="text-sm text-muted-foreground mb-2">
               Provide feedback to iterate on the draft. Example: "Make it more
               concise" or "Add Jane to CC"
             </p>
@@ -293,7 +293,7 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               placeholder="Make it shorter"
-              className="w-full h-24 p-3 border border-gray-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full h-24 p-3 border border-input rounded resize-none focus:outline-none focus:ring-2 focus:ring-ring"
               disabled={loading}
             />
             <Button
