@@ -104,7 +104,8 @@ export function createNylasClient(
     },
 
     getFolders(): Promise<NylasFolder[]> {
-      return apiRequest<NylasFolder[]>("/folders");
+      // Use limit=200 to ensure all folders are returned (default is ~50)
+      return apiRequest<NylasFolder[]>("/folders?limit=200");
     },
 
     updateMessageFolders(
