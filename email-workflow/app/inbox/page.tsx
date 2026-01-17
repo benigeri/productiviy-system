@@ -1,6 +1,7 @@
 // Server Component - fetches data directly
 import { ThreadList } from './ThreadList';
 import { ThreadDetail } from './ThreadDetail';
+import { getLabelToRespondPaul } from '@/lib/gmail-labels';
 
 interface Thread {
   id: string;
@@ -22,8 +23,9 @@ interface Message {
 }
 
 async function getThreads(): Promise<Thread[]> {
+  const toRespondLabel = getLabelToRespondPaul();
   const res = await fetch(
-    `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/threads?in=Label_139&limit=20`,
+    `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/threads?in=${toRespondLabel}&limit=20`,
     {
       headers: { Authorization: `Bearer ${process.env.NYLAS_API_KEY}` },
       cache: 'no-store',

@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import {
+  getLabelDrafted,
+  getLabelToRespondPaul,
+} from '@/lib/gmail-labels';
 
 // Type definitions for Nylas API responses
 interface NylasGrantResponse {
@@ -205,8 +209,8 @@ export async function POST(request: Request) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   threadId,
-                  addLabels: ['Label_215'], // drafted label
-                  removeLabels: ['Label_139'], // to-respond-paul label
+                  addLabels: [getLabelDrafted()],
+                  removeLabels: [getLabelToRespondPaul()],
                 }),
               }
             );

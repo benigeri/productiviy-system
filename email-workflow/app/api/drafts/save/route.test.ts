@@ -10,6 +10,9 @@ describe('POST /api/drafts/save', () => {
     vi.clearAllMocks();
     process.env.NYLAS_API_KEY = 'test-key';
     process.env.NYLAS_GRANT_ID = 'test-grant-id';
+    // Gmail label env vars (required by gmail-labels module)
+    process.env.GMAIL_LABEL_DRAFTED = 'Label_215';
+    process.env.GMAIL_LABEL_TO_RESPOND_PAUL = 'Label_139';
   });
 
   it('filters current user email from CC recipients', async () => {

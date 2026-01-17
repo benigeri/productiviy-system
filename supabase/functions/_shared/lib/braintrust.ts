@@ -4,9 +4,10 @@
  */
 
 import type { CaptureResult } from "./capture.ts";
-import { fetchWithTimeout, DEFAULT_API_TIMEOUT } from "./http.ts";
+import { DEFAULT_API_TIMEOUT, fetchWithTimeout } from "./http.ts";
 
-const SYSTEM_PROMPT = `You are a text cleanup assistant that processes voice transcriptions into clean Linear issues.
+const SYSTEM_PROMPT =
+  `You are a text cleanup assistant that processes voice transcriptions into clean Linear issues.
 
 **Cleanup Guidelines:**
 - Remove filler words (um, uh, like, you know, etc.)
@@ -56,12 +57,57 @@ interface BraintrustResult {
 }
 
 /**
+ * Extract the first complete JSON object from a string.
+ * Uses brace counting while respecting string boundaries.
+ * Handles cases where LLM adds commentary after valid JSON.
+ */
+function extractFirstJsonObject(str: string): string | null {
+  const start = str.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < str.length; i++) {
+    const char = str[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escape = true;
+      continue;
+    }
+
+    if (char === '"' && !escape) {
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString) {
+      if (char === "{") depth++;
+      else if (char === "}") {
+        depth--;
+        if (depth === 0) {
+          return str.slice(start, i + 1);
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Process captured text using Braintrust proxy.
  * Cleans up voice transcriptions and detects feedback items.
  *
  * @param rawText - Raw text to process
  * @param apiKey - Braintrust API key
- * @param _projectName - Braintrust project name (unused, kept for API compatibility)
+ * @param projectId - Braintrust project ID (used for tracing via x-bt-parent header)
  * @param _slug - Prompt slug (unused, kept for API compatibility)
  * @param fetchFn - Optional fetch function for testing
  * @returns CaptureResult with cleaned content and feedback flag
@@ -69,7 +115,7 @@ interface BraintrustResult {
 export async function processCapture(
   rawText: string,
   apiKey: string,
-  _projectName: string,
+  projectId: string,
   _slug = "capture-cleanup",
   fetchFn: typeof fetch = fetch,
 ): Promise<CaptureResult> {
@@ -85,12 +131,17 @@ export async function processCapture(
     headers: {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
+      "x-bt-parent": `project_id:${projectId}`,
     },
     body: JSON.stringify({
       model: "claude-3-5-haiku-20241022",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `Process this text and return the JSON result:\n\n${trimmed}` },
+        {
+          role: "user",
+          content:
+            `Process this text and return the JSON result:\n\n${trimmed}`,
+        },
       ],
       max_tokens: 1024,
     }),
@@ -98,12 +149,21 @@ export async function processCapture(
 
   // Use fetchWithTimeout in production, allow custom fetch for tests
   const response = fetchFn === fetch
-    ? await fetchWithTimeout("https://braintrustproxy.com/v1/chat/completions", requestOptions, DEFAULT_API_TIMEOUT)
-    : await fetchFn("https://braintrustproxy.com/v1/chat/completions", requestOptions);
+    ? await fetchWithTimeout(
+      "https://braintrustproxy.com/v1/chat/completions",
+      requestOptions,
+      DEFAULT_API_TIMEOUT,
+    )
+    : await fetchFn(
+      "https://braintrustproxy.com/v1/chat/completions",
+      requestOptions,
+    );
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Unknown error");
-    throw new Error(`Braintrust API error: ${response.status} ${response.statusText} - ${errorText}`);
+    throw new Error(
+      `Braintrust API error: ${response.status} ${response.statusText} - ${errorText}`,
+    );
   }
 
   const chatResponse = await response.json() as ChatCompletionResponse;
@@ -126,16 +186,40 @@ export async function processCapture(
   }
   jsonContent = jsonContent.trim();
 
+  // Parse JSON, handling trailing commentary if present
   let result: BraintrustResult;
   try {
+    // Fast path: try parsing directly (most responses are clean JSON)
     result = JSON.parse(jsonContent);
   } catch {
-    throw new Error(`Invalid Braintrust response: could not parse JSON - ${content}`);
+    // Slow path: extract first complete JSON object using brace counting
+    const extracted = extractFirstJsonObject(jsonContent);
+    if (extracted) {
+      try {
+        result = JSON.parse(extracted);
+      } catch {
+        throw new Error(
+          `Invalid Braintrust response: could not parse JSON - ${content}`,
+        );
+      }
+    } else {
+      throw new Error(
+        `Invalid Braintrust response: could not parse JSON - ${content}`,
+      );
+    }
   }
 
   // Validate response structure
   if (typeof result.cleaned_content !== "string") {
     throw new Error("Invalid Braintrust response: missing cleaned_content");
+  }
+
+  // Validate is_feedback is boolean if present
+  if (
+    result.is_feedback !== undefined &&
+    typeof result.is_feedback !== "boolean"
+  ) {
+    throw new Error("Invalid Braintrust response: is_feedback must be boolean");
   }
 
   return {

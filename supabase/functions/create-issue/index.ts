@@ -57,7 +57,7 @@ export async function handleCreateIssue(
   let effectiveDeps = deps;
   if (!effectiveDeps) {
     const braintrustKey = Deno.env.get("BRAINTRUST_API_KEY");
-    const braintrustProject = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "2026_01 Email Flow";
+    const braintrustProjectId = Deno.env.get("BRAINTRUST_PROJECT_ID") ?? "183dc023-466f-4dd9-8a33-ccfdf798a0e5";
     const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ?? "capture-cleanup";
     const linearKey = Deno.env.get("LINEAR_API_KEY");
 
@@ -67,7 +67,7 @@ export async function handleCreateIssue(
 
     effectiveDeps = {
       processCapture: (text) =>
-        processCaptureImpl(text, braintrustKey, braintrustProject, braintrustSlug),
+        processCaptureImpl(text, braintrustKey, braintrustProjectId, braintrustSlug),
       createIssue: (title, description, options) =>
         createTriageIssueImpl(title, linearKey, undefined, description, undefined, options),
     };
