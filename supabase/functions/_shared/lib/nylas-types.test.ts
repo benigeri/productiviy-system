@@ -12,24 +12,27 @@ import {
 // ============================================================================
 
 Deno.test("WORKFLOW_LABELS - contains expected labels", () => {
-  assertEquals(WORKFLOW_LABELS.TO_RESPOND, "to-respond-paul");
-  assertEquals(WORKFLOW_LABELS.TO_READ, "to-read-paul");
-  assertEquals(WORKFLOW_LABELS.DRAFTED, "drafted");
+  assertEquals(WORKFLOW_LABELS.TRIAGE, "wf_triage");
+  assertEquals(WORKFLOW_LABELS.RESPOND, "wf_respond");
+  assertEquals(WORKFLOW_LABELS.REVIEW, "wf_review");
+  assertEquals(WORKFLOW_LABELS.DRAFTED, "wf_drafted");
 });
 
 Deno.test("WORKFLOW_LABELS - priority order is correct", () => {
-  // Priority: to-respond > to-read > drafted
+  // Priority: wf_triage > wf_respond > wf_review > wf_drafted
   assertEquals(WORKFLOW_LABELS.PRIORITY_ORDER, [
-    "to-respond-paul",
-    "to-read-paul",
-    "drafted",
+    "wf_triage",
+    "wf_respond",
+    "wf_review",
+    "wf_drafted",
   ]);
 });
 
 Deno.test("WORKFLOW_LABELS - all labels are in priority order", () => {
   const allLabels = [
-    WORKFLOW_LABELS.TO_RESPOND,
-    WORKFLOW_LABELS.TO_READ,
+    WORKFLOW_LABELS.TRIAGE,
+    WORKFLOW_LABELS.RESPOND,
+    WORKFLOW_LABELS.REVIEW,
     WORKFLOW_LABELS.DRAFTED,
   ];
 
@@ -60,7 +63,7 @@ Deno.test("NylasMessage - type structure is correct", () => {
     from: [{ name: "Sender", email: "sender@example.com" }],
     to: [{ name: "Recipient", email: "recipient@example.com" }],
     date: 1704067200,
-    folders: ["INBOX", "to-respond-paul"],
+    folders: ["INBOX", "wf_respond"],
     snippet: "Message preview...",
   };
 
@@ -89,11 +92,11 @@ Deno.test("NylasFolder - type structure is correct", () => {
   const folder: NylasFolder = {
     id: "folder-123",
     grant_id: "grant-456",
-    name: "to-respond-paul",
+    name: "wf_respond",
   };
 
   assertEquals(folder.id, "folder-123");
-  assertEquals(folder.name, "to-respond-paul");
+  assertEquals(folder.name, "wf_respond");
 });
 
 Deno.test("NylasWebhookPayload - type structure for message.updated", () => {
@@ -139,11 +142,13 @@ Deno.test("NylasWebhookPayload - type structure for message.created", () => {
 
 Deno.test("WorkflowLabel - type accepts valid labels", () => {
   // These should compile without errors
-  const label1: WorkflowLabel = "to-respond-paul";
-  const label2: WorkflowLabel = "to-read-paul";
-  const label3: WorkflowLabel = "drafted";
+  const label1: WorkflowLabel = "wf_triage";
+  const label2: WorkflowLabel = "wf_respond";
+  const label3: WorkflowLabel = "wf_review";
+  const label4: WorkflowLabel = "wf_drafted";
 
-  assertEquals(label1, WORKFLOW_LABELS.TO_RESPOND);
-  assertEquals(label2, WORKFLOW_LABELS.TO_READ);
-  assertEquals(label3, WORKFLOW_LABELS.DRAFTED);
+  assertEquals(label1, WORKFLOW_LABELS.TRIAGE);
+  assertEquals(label2, WORKFLOW_LABELS.RESPOND);
+  assertEquals(label3, WORKFLOW_LABELS.REVIEW);
+  assertEquals(label4, WORKFLOW_LABELS.DRAFTED);
 });

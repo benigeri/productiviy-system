@@ -146,7 +146,7 @@ async function processMessageCreated(
   const thread = await deps.getThread(message.thread_id);
 
   // Clear workflow labels from ALL messages in thread (including the sent one)
-  // This handles the case where a draft with "drafted" label becomes a sent message
+  // This handles the case where a draft with "wf_drafted" label becomes a sent message
   let updated = false;
   for (const threadMessageId of thread.message_ids) {
     const threadMessage = threadMessageId === messageId

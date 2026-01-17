@@ -11,16 +11,20 @@ import { WORKFLOW_LABELS } from "./nylas-types.ts";
 // isWorkflowLabel tests
 // ============================================================================
 
-Deno.test("isWorkflowLabel - returns true for to-respond-paul", () => {
-  assertEquals(isWorkflowLabel("to-respond-paul"), true);
+Deno.test("isWorkflowLabel - returns true for wf_triage", () => {
+  assertEquals(isWorkflowLabel("wf_triage"), true);
 });
 
-Deno.test("isWorkflowLabel - returns true for to-read-paul", () => {
-  assertEquals(isWorkflowLabel("to-read-paul"), true);
+Deno.test("isWorkflowLabel - returns true for wf_respond", () => {
+  assertEquals(isWorkflowLabel("wf_respond"), true);
 });
 
-Deno.test("isWorkflowLabel - returns true for drafted", () => {
-  assertEquals(isWorkflowLabel("drafted"), true);
+Deno.test("isWorkflowLabel - returns true for wf_review", () => {
+  assertEquals(isWorkflowLabel("wf_review"), true);
+});
+
+Deno.test("isWorkflowLabel - returns true for wf_drafted", () => {
+  assertEquals(isWorkflowLabel("wf_drafted"), true);
 });
 
 Deno.test("isWorkflowLabel - returns false for INBOX", () => {
@@ -36,8 +40,8 @@ Deno.test("isWorkflowLabel - returns false for empty string", () => {
 });
 
 Deno.test("isWorkflowLabel - returns false for partial match", () => {
-  assertEquals(isWorkflowLabel("to-respond"), false);
-  assertEquals(isWorkflowLabel("paul"), false);
+  assertEquals(isWorkflowLabel("wf_"), false);
+  assertEquals(isWorkflowLabel("respond"), false);
 });
 
 // ============================================================================
@@ -45,16 +49,17 @@ Deno.test("isWorkflowLabel - returns false for partial match", () => {
 // ============================================================================
 
 Deno.test("getWorkflowLabels - extracts single workflow label", () => {
-  const folders = ["INBOX", "to-respond-paul", "IMPORTANT"];
-  assertEquals(getWorkflowLabels(folders), ["to-respond-paul"]);
+  const folders = ["INBOX", "wf_respond", "IMPORTANT"];
+  assertEquals(getWorkflowLabels(folders), ["wf_respond"]);
 });
 
 Deno.test("getWorkflowLabels - extracts multiple workflow labels", () => {
-  const folders = ["INBOX", "to-respond-paul", "to-read-paul", "drafted"];
+  const folders = ["INBOX", "wf_triage", "wf_respond", "wf_review", "wf_drafted"];
   assertEquals(getWorkflowLabels(folders), [
-    "to-respond-paul",
-    "to-read-paul",
-    "drafted",
+    "wf_triage",
+    "wf_respond",
+    "wf_review",
+    "wf_drafted",
   ]);
 });
 
@@ -68,8 +73,8 @@ Deno.test("getWorkflowLabels - returns empty array for empty input", () => {
 });
 
 Deno.test("getWorkflowLabels - preserves order from input", () => {
-  const folders = ["drafted", "to-respond-paul"];
-  assertEquals(getWorkflowLabels(folders), ["drafted", "to-respond-paul"]);
+  const folders = ["wf_drafted", "wf_respond"];
+  assertEquals(getWorkflowLabels(folders), ["wf_drafted", "wf_respond"]);
 });
 
 // ============================================================================
@@ -77,15 +82,15 @@ Deno.test("getWorkflowLabels - preserves order from input", () => {
 // ============================================================================
 
 Deno.test("removeWorkflowLabels - removes all workflow labels", () => {
-  const folders = ["INBOX", "to-respond-paul", "IMPORTANT", "drafted"];
+  const folders = ["INBOX", "wf_respond", "IMPORTANT", "wf_drafted"];
   assertEquals(removeWorkflowLabels(folders), ["INBOX", "IMPORTANT"]);
 });
 
 Deno.test("removeWorkflowLabels - keeps specified label", () => {
-  const folders = ["INBOX", "to-respond-paul", "to-read-paul", "drafted"];
-  assertEquals(removeWorkflowLabels(folders, "to-respond-paul"), [
+  const folders = ["INBOX", "wf_triage", "wf_respond", "wf_review", "wf_drafted"];
+  assertEquals(removeWorkflowLabels(folders, "wf_respond"), [
     "INBOX",
-    "to-respond-paul",
+    "wf_respond",
   ]);
 });
 
@@ -99,34 +104,39 @@ Deno.test("removeWorkflowLabels - returns empty array for empty input", () => {
 });
 
 Deno.test("removeWorkflowLabels - idempotent: running twice gives same result", () => {
-  const folders = ["INBOX", "to-respond-paul", "drafted"];
+  const folders = ["INBOX", "wf_respond", "wf_drafted"];
   const result1 = removeWorkflowLabels(folders);
   const result2 = removeWorkflowLabels(result1);
   assertEquals(result1, result2);
 });
 
 Deno.test("removeWorkflowLabels - keepLabel that doesn't exist is no-op", () => {
-  const folders = ["INBOX", "drafted"];
-  assertEquals(removeWorkflowLabels(folders, "to-respond-paul"), ["INBOX"]);
+  const folders = ["INBOX", "wf_drafted"];
+  assertEquals(removeWorkflowLabels(folders, "wf_respond"), ["INBOX"]);
 });
 
 // ============================================================================
 // getHighestPriorityLabel tests
 // ============================================================================
 
-Deno.test("getHighestPriorityLabel - returns to-respond-paul as highest", () => {
-  const labels = ["drafted", "to-respond-paul", "to-read-paul"];
-  assertEquals(getHighestPriorityLabel(labels), "to-respond-paul");
+Deno.test("getHighestPriorityLabel - returns wf_triage as highest", () => {
+  const labels = ["wf_drafted", "wf_triage", "wf_respond", "wf_review"];
+  assertEquals(getHighestPriorityLabel(labels), "wf_triage");
 });
 
-Deno.test("getHighestPriorityLabel - returns to-read-paul over drafted", () => {
-  const labels = ["drafted", "to-read-paul"];
-  assertEquals(getHighestPriorityLabel(labels), "to-read-paul");
+Deno.test("getHighestPriorityLabel - returns wf_respond over wf_review", () => {
+  const labels = ["wf_drafted", "wf_respond", "wf_review"];
+  assertEquals(getHighestPriorityLabel(labels), "wf_respond");
 });
 
-Deno.test("getHighestPriorityLabel - returns drafted when only option", () => {
-  const labels = ["drafted"];
-  assertEquals(getHighestPriorityLabel(labels), "drafted");
+Deno.test("getHighestPriorityLabel - returns wf_review over wf_drafted", () => {
+  const labels = ["wf_drafted", "wf_review"];
+  assertEquals(getHighestPriorityLabel(labels), "wf_review");
+});
+
+Deno.test("getHighestPriorityLabel - returns wf_drafted when only option", () => {
+  const labels = ["wf_drafted"];
+  assertEquals(getHighestPriorityLabel(labels), "wf_drafted");
 });
 
 Deno.test("getHighestPriorityLabel - returns null for empty array", () => {
@@ -134,8 +144,8 @@ Deno.test("getHighestPriorityLabel - returns null for empty array", () => {
 });
 
 Deno.test("getHighestPriorityLabel - ignores non-workflow labels", () => {
-  const labels = ["INBOX", "to-read-paul", "SENT"];
-  assertEquals(getHighestPriorityLabel(labels), "to-read-paul");
+  const labels = ["INBOX", "wf_review", "SENT"];
+  assertEquals(getHighestPriorityLabel(labels), "wf_review");
 });
 
 Deno.test("getHighestPriorityLabel - returns null when no workflow labels", () => {
@@ -144,23 +154,27 @@ Deno.test("getHighestPriorityLabel - returns null when no workflow labels", () =
 });
 
 Deno.test("getHighestPriorityLabel - priority order matches WORKFLOW_LABELS", () => {
-  // Verify priority: to-respond > to-read > drafted
+  // Verify priority: triage > respond > review > drafted
   assertEquals(
     getHighestPriorityLabel([
-      WORKFLOW_LABELS.TO_READ,
-      WORKFLOW_LABELS.TO_RESPOND,
+      WORKFLOW_LABELS.RESPOND,
+      WORKFLOW_LABELS.TRIAGE,
     ]),
-    WORKFLOW_LABELS.TO_RESPOND,
+    WORKFLOW_LABELS.TRIAGE,
   );
   assertEquals(
-    getHighestPriorityLabel([WORKFLOW_LABELS.DRAFTED, WORKFLOW_LABELS.TO_READ]),
-    WORKFLOW_LABELS.TO_READ,
+    getHighestPriorityLabel([WORKFLOW_LABELS.REVIEW, WORKFLOW_LABELS.RESPOND]),
+    WORKFLOW_LABELS.RESPOND,
+  );
+  assertEquals(
+    getHighestPriorityLabel([WORKFLOW_LABELS.DRAFTED, WORKFLOW_LABELS.REVIEW]),
+    WORKFLOW_LABELS.REVIEW,
   );
   assertEquals(
     getHighestPriorityLabel([
       WORKFLOW_LABELS.DRAFTED,
-      WORKFLOW_LABELS.TO_RESPOND,
+      WORKFLOW_LABELS.TRIAGE,
     ]),
-    WORKFLOW_LABELS.TO_RESPOND,
+    WORKFLOW_LABELS.TRIAGE,
   );
 });
