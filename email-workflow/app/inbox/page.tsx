@@ -3,6 +3,9 @@ import { ThreadList } from './ThreadList';
 import { ThreadDetail } from './ThreadDetail';
 import { getLabelToRespondPaul } from '@/lib/gmail-labels';
 
+// Force dynamic rendering - this page fetches live email data
+export const dynamic = 'force-dynamic';
+
 interface Thread {
   id: string;
   subject: string;
@@ -51,8 +54,8 @@ async function getMessages(messageIds: string[]): Promise<Message[]> {
       body: JSON.stringify({
         message_id: messageIds,
         ignore_links: false,     // Keep URLs in content
-        ignore_images: true,     // Remove images for chat view
-        html_as_markdown: false, // Plain text instead of markdown (fixes link rendering)
+        ignore_images: false,    // Keep images (ignore_images: true causes 'span' text issues)
+        html_as_markdown: true,  // Convert HTML to markdown for proper link rendering
       }),
       cache: 'no-store',
     }
@@ -86,7 +89,7 @@ export default async function InboxPage({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-full bg-background">
       {!selectedThreadId ? (
         <ThreadList threads={threads} />
       ) : selectedThread ? (
