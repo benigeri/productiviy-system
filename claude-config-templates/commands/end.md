@@ -31,6 +31,15 @@ fi
 # Check if in a worktree
 IS_WORKTREE=$(git rev-parse --git-dir 2>/dev/null | grep -q "worktrees" && echo "yes" || echo "no")
 WORKTREE_PATH=$(git rev-parse --show-toplevel 2>/dev/null)
+
+# Check for uncommitted beads changes
+BEADS_DIRTY=""
+if [ -d ".beads" ] && [ -n "$(git status --porcelain .beads/)" ]; then
+  BEADS_DIRTY="yes"
+fi
+
+# Get feature name for agent-deck (from worktree path)
+FEATURE_NAME=$(basename "$WORKTREE_PATH" 2>/dev/null)
 ```
 
 ### Step 2: Handle Uncommitted Changes
@@ -54,6 +63,23 @@ If "Commit now" selected:
 - Run: `git add .`
 - Ask user for commit message
 - Run: `git commit -m "<message>"`
+
+### Step 2.5: Warn About Uncommitted Beads
+
+If `BEADS_DIRTY` is "yes" AND user chose "Leave as-is" or "Stash" in Step 2:
+
+**Show warning:**
+```
+[!!] BEADS NOT COMMITTED: Your bead changes will be lost!
+
+Changed files in .beads/:
+<git status --porcelain .beads/>
+
+These track your work progress. Commit them now:
+  git add .beads/ && git commit -m "Update beads"
+```
+
+**Important:** This is a strong warning - beads changes should almost always be committed.
 
 ### Step 3: Handle Unpushed Commits (BLOCKING)
 
@@ -125,17 +151,16 @@ You're in a worktree: <worktree-path>
 1. **Yes, remove** - Provide cleanup commands
 2. **No, keep** - Keep worktree for future sessions
 
-If "Yes, remove" selected:
+If "Yes, remove" selected, provide a single copy-paste command to run from main repo:
 ```
-To clean up this worktree, run these commands after closing this session:
+Cleanup command (run from main repo after closing this session):
 
-# From main repo:
-cd <main-repo-path>
-git worktree remove <worktree-path>
+git worktree remove ../worktrees/<feature-name> --force && git worktree prune && agent-deck session stop <feature-name> && agent-deck rm <feature-name>
+```
 
-# Or if worktree has untracked files:
-rm -rf <worktree-path>
-git worktree prune
+Example with actual values:
+```bash
+git worktree remove ../worktrees/session-workflow --force && git worktree prune && agent-deck session stop session-workflow && agent-deck rm session-workflow
 ```
 
 ### Step 6: Output Session Summary

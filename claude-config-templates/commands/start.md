@@ -165,14 +165,21 @@ Use AskUserQuestion with these options:
    <any additional context>
    EOF
    ```
-8. Output instructions:
+8. **Add to agent-deck and start session:**
+   ```bash
+   agent-deck add "$WORKTREE_DIR" -t "<feature-name>" -c "claude --dangerously-skip-permissions"
+   agent-deck session start "<feature-name>"
+   ```
+
+9. Output instructions:
    ```
    Worktree created: <worktree-path>
    Bead: <bead-id>
    SESSION_CONTEXT.md written
+   Agent-deck session: <feature-name>
 
-   To start working, open a new terminal and run:
-   cd <worktree-path> && claude --dangerously-skip-permissions
+   Session is now running in agent-deck. To attach:
+   agent-deck session attach <feature-name>
    ```
 
 #### If "Quick fix":
