@@ -54,6 +54,14 @@ function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
         date: 1704067200,
         folders,
       }),
+    getCleanMessages: (ids) =>
+      Promise.resolve(ids.map((id) => ({
+        body: "Clean message body",
+        grant_id: "grant-456",
+        message_id: [id],
+      }))),
+    // Classification disabled by default in tests
+    classify: undefined,
     ...overrides,
   };
 }
@@ -607,4 +615,153 @@ Deno.test("handleWebhook - clears workflow labels from sent message itself (draf
   assertEquals(updatedMessages[0].id, "sent-msg-456");
   assertEquals(updatedMessages[0].folders.includes("Label_3309485003314594938"), false);
   assertEquals(updatedMessages[0].folders.includes("SENT"), true);
+});
+
+// ============================================================================
+// Classification tests
+// ============================================================================
+
+const AI_FOLDERS: NylasFolder[] = [
+  ...DEFAULT_FOLDERS,
+  { id: "Label_ai_tool", grant_id: "grant-456", name: "ai_tool" },
+  { id: "Label_ai_sales", grant_id: "grant-456", name: "ai_sales" },
+  { id: "Label_ai_auth", grant_id: "grant-456", name: "ai_auth" },
+];
+
+Deno.test("handleWebhook - classifies received message and applies ai_* labels", async () => {
+  const payload = createWebhookPayload("message.created", "received-msg-789");
+  const request = new Request("https://example.com/nylas-webhook", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nylas-signature": "valid-signature",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  let updatedFolders: string[] = [];
+  const deps = createMockDeps({
+    getMessage: () =>
+      Promise.resolve({
+        id: "received-msg-789",
+        grant_id: "grant-456",
+        thread_id: "thread-789",
+        subject: "Linear notification",
+        from: [{ email: "notifications@linear.app" }],
+        to: [{ email: "paul@archive.com" }],
+        date: 1704067200,
+        folders: ["INBOX"],
+      }),
+    getFolders: () => Promise.resolve(AI_FOLDERS),
+    getCleanMessages: () =>
+      Promise.resolve([{ body: "Linear notification body", grant_id: "grant-456" }]),
+    classify: () =>
+      Promise.resolve({ labels: ["ai_tool"], reason: "Linear notification" }),
+    updateMessageFolders: (_id, folders) => {
+      updatedFolders = folders;
+      return Promise.resolve({
+        id: "received-msg-789",
+        grant_id: "grant-456",
+        thread_id: "thread-789",
+        subject: "Linear notification",
+        from: [{ email: "notifications@linear.app" }],
+        to: [{ email: "paul@archive.com" }],
+        date: 1704067200,
+        folders,
+      });
+    },
+  });
+
+  await handleWebhook(request, deps);
+
+  // Should have applied ai_tool label
+  assertEquals(updatedFolders.includes("Label_ai_tool"), true);
+  assertEquals(updatedFolders.includes("INBOX"), true);
+});
+
+Deno.test("handleWebhook - skips classification for sent messages", async () => {
+  const payload = createWebhookPayload("message.created", "sent-msg-789");
+  const request = new Request("https://example.com/nylas-webhook", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nylas-signature": "valid-signature",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  let classifyCalled = false;
+  const deps = createMockDeps({
+    getMessage: () =>
+      Promise.resolve({
+        id: "sent-msg-789",
+        grant_id: "grant-456",
+        thread_id: "thread-789",
+        subject: "My reply",
+        from: [{ email: "paul@archive.com" }],
+        to: [{ email: "someone@example.com" }],
+        date: 1704067200,
+        folders: ["SENT"],
+      }),
+    getThread: () =>
+      Promise.resolve({
+        id: "thread-789",
+        grant_id: "grant-456",
+        subject: "Test",
+        participants: [],
+        message_ids: ["sent-msg-789"],
+        folders: ["SENT"],
+      }),
+    getFolders: () => Promise.resolve(AI_FOLDERS),
+    classify: () => {
+      classifyCalled = true;
+      return Promise.resolve({ labels: ["ai_tool"], reason: "Should not be called" });
+    },
+  });
+
+  await handleWebhook(request, deps);
+
+  // Classify should NOT have been called for sent message
+  assertEquals(classifyCalled, false);
+});
+
+Deno.test("handleWebhook - classification returns empty labels does not update message", async () => {
+  const payload = createWebhookPayload("message.created", "received-msg-789");
+  const request = new Request("https://example.com/nylas-webhook", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nylas-signature": "valid-signature",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  let updateCalled = false;
+  const deps = createMockDeps({
+    getMessage: () =>
+      Promise.resolve({
+        id: "received-msg-789",
+        grant_id: "grant-456",
+        thread_id: "thread-789",
+        subject: "Important email from teammate",
+        from: [{ email: "sarah@archive.com" }],
+        to: [{ email: "paul@archive.com" }],
+        date: 1704067200,
+        folders: ["INBOX"],
+      }),
+    getFolders: () => Promise.resolve(AI_FOLDERS),
+    getCleanMessages: () =>
+      Promise.resolve([{ body: "Hey, let's discuss Q2", grant_id: "grant-456" }]),
+    classify: () =>
+      Promise.resolve({ labels: [], reason: "Important email from teammate" }),
+    updateMessageFolders: (_id, _folders) => {
+      updateCalled = true;
+      return Promise.resolve({} as NylasMessage);
+    },
+  });
+
+  await handleWebhook(request, deps);
+
+  // Should NOT update message when no labels
+  assertEquals(updateCalled, false);
 });

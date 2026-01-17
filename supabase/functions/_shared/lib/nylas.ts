@@ -3,7 +3,12 @@
  * Uses dependency injection for fetch to enable testing.
  */
 
-import type { NylasFolder, NylasMessage, NylasThread } from "./nylas-types.ts";
+import type {
+  NylasCleanMessage,
+  NylasFolder,
+  NylasMessage,
+  NylasThread,
+} from "./nylas-types.ts";
 
 const NYLAS_BASE_URL = "https://api.us.nylas.com/v3";
 
@@ -15,6 +20,7 @@ export interface NylasClient {
     messageId: string,
     folders: string[],
   ): Promise<NylasMessage>;
+  getCleanMessages(messageIds: string[]): Promise<NylasCleanMessage[]>;
 }
 
 /**
@@ -109,6 +115,28 @@ export function createNylasClient(
         method: "PUT",
         body: JSON.stringify({ folders }),
       });
+    },
+
+    async getCleanMessages(messageIds: string[]): Promise<NylasCleanMessage[]> {
+      // Clean API returns array directly, not wrapped in data
+      const response = await fetchFn(`${baseUrl}/messages/clean`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          message_id: messageIds,
+          ignore_images: false, // Don't ignore images - prevents 'span' text in output
+          html_as_markdown: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Nylas API error: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const json = await response.json();
+      return json.data;
     },
   };
 }
