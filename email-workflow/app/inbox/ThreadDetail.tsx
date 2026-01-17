@@ -57,7 +57,7 @@ export function ThreadDetail({
   // Sync draft state with storedDraft when thread changes (prevents stale drafts)
   useEffect(() => {
     setDraft(storedDraft || '');
-  }, [storedDraft]);
+  }, [storedDraft, thread.id]);
 
   // Clear recipients only when thread changes (not when draft content changes)
   useEffect(() => {
@@ -66,6 +66,7 @@ export function ThreadDetail({
   }, [thread.id]);
 
   async function generateDraft() {
+    if (loading) return;
     setLoading(true);
     setError('');
 
@@ -128,7 +129,7 @@ export function ThreadDetail({
   }
 
   async function regenerateDraft() {
-    if (!feedback.trim()) return;
+    if (!feedback.trim() || loading) return;
 
     setLoading(true);
     setError('');
@@ -573,7 +574,7 @@ export function ThreadDetail({
                 </Button>
                 <Button
                   onClick={handleApprove}
-                  disabled={saving}
+                  disabled={saving || loading}
                   className="flex-1 h-12"
                 >
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
