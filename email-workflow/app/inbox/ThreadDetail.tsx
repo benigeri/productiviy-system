@@ -80,13 +80,26 @@ function cleanEmailContent(text: string): string {
   cleaned = cleaned.replace(/\*+(\w)/g, '$1'); // asterisks before word
   cleaned = cleaned.replace(/(\w)\*+/g, '$1'); // asterisks after word
 
-  // Clean up markdown link syntax that spans multiple lines (broken links)
-  // Match [text that spans
-  // multiple lines](url) - join them
-  cleaned = cleaned.replace(/\[([^\]]*)\n([^\]]*)\]\(/g, '[$1 $2](');
+  // Fix broken markdown links that span multiple lines
+  // First, join lines within square brackets: [text\nthat spans] -> [text that spans]
+  cleaned = cleaned.replace(/\[([^\]]*)\n([^\]]*)\]/g, '[$1 $2]');
 
-  // Also handle broken URLs in markdown links
-  cleaned = cleaned.replace(/\]\(([^)\n]*)\n([^)\n]*)\)/g, ']($1$2)');
+  // Then join lines within parentheses for URLs: ](url\ncontinued) -> ](urlcontinued)
+  cleaned = cleaned.replace(/\]\(([^)\s]*)\n([^)\s]*)\)/g, ']($1$2)');
+
+  // Handle case where URL has line break and more content: ](url\nmore\nlines)
+  let prevCleaned = '';
+  while (prevCleaned !== cleaned) {
+    prevCleaned = cleaned;
+    cleaned = cleaned.replace(/\]\(([^)]*)\n([^)]*)\)/g, ']($1$2)');
+  }
+
+  // Remove quoted reply headers: "On Mon, Jan 13, 2026 at 9:46 AM Name <email> wrote:"
+  // These are attribution lines added by email clients when replying
+  cleaned = cleaned.replace(/^On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^<]*<[^>]+>\s*wrote:\s*$/gim, '');
+
+  // Also handle: "On January 13, 2026 at 9:46 AM Name wrote:"
+  cleaned = cleaned.replace(/^On\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)[^w]*wrote:\s*$/gim, '');
 
   // Clean up multiple consecutive blank lines
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
@@ -173,13 +186,31 @@ function renderEmailContent(content: string): React.ReactNode {
   });
 }
 
-// Filter out quoted text (lines starting with >)
+// Filter out quoted text and reply headers from draft preview
 function filterQuotedText(text: string): string {
-  return text
+  let filtered = text;
+
+  // Remove "On [day], [date] at [time] [name] <email> wrote:" patterns (inline or newline)
+  // This handles: "On Tue, Jan 13, 2026 at 9:46 AM Alex Robinson <alex@viral.careers> wrote:"
+  filtered = filtered.replace(/\s*On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^<]*<[^>]+>\s*wrote:\s*/gi, ' ');
+
+  // Also handle: "On January 13, 2026 at 9:46 AM Name wrote:"
+  filtered = filtered.replace(/\s*On\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)[^w]*wrote:\s*/gi, ' ');
+
+  // Remove inline quoted text: anything from "> " followed by content to end
+  // This catches: "Looking forward to it. > Great to catch up..."
+  filtered = filtered.replace(/\s*>\s*.*/g, '');
+
+  // Filter out lines starting with > (quoted text)
+  filtered = filtered
     .split('\n')
     .filter(line => !line.trim().startsWith('>'))
-    .join('\n')
-    .trim();
+    .join('\n');
+
+  // Clean up multiple spaces
+  filtered = filtered.replace(/  +/g, ' ');
+
+  return filtered.trim();
 }
 
 export function ThreadDetail({
