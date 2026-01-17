@@ -13,10 +13,10 @@ import type {
 const DEFAULT_FOLDERS: NylasFolder[] = [
   { id: "INBOX", grant_id: "grant-456", name: "INBOX" },
   { id: "SENT", grant_id: "grant-456", name: "SENT" },
-  { id: "Label_100", grant_id: "grant-456", name: "wf_triage" },
-  { id: "Label_139", grant_id: "grant-456", name: "wf_respond" },
-  { id: "Label_138", grant_id: "grant-456", name: "wf_review" },
-  { id: "Label_215", grant_id: "grant-456", name: "wf_drafted" },
+  { id: "Label_210", grant_id: "grant-456", name: "triage" },
+  { id: "Label_5390221056707111040", grant_id: "grant-456", name: "wf_respond" },
+  { id: "Label_1177410809872040327", grant_id: "grant-456", name: "wf_review" },
+  { id: "Label_3309485003314594938", grant_id: "grant-456", name: "wf_drafted" },
 ];
 
 function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
@@ -179,7 +179,7 @@ Deno.test("handleWebhook - clears other workflow labels when wf_respond added", 
         to: [{ email: "recipient@example.com" }],
         date: 1704067200,
         // Use folder IDs as Nylas returns them
-        folders: ["INBOX", "Label_139", "Label_138", "Label_215"],
+        folders: ["INBOX", "Label_5390221056707111040", "Label_1177410809872040327", "Label_3309485003314594938"],
       }),
     updateMessageFolders: (_id, folders) => {
       updatedFolders = folders;
@@ -198,11 +198,11 @@ Deno.test("handleWebhook - clears other workflow labels when wf_respond added", 
 
   await handleWebhook(request, deps);
 
-  // Should keep INBOX and Label_139 (wf_respond, highest priority after triage), remove others
+  // Should keep INBOX and wf_respond (highest priority after triage), remove others
   assertEquals(updatedFolders.includes("INBOX"), true);
-  assertEquals(updatedFolders.includes("Label_139"), true); // wf_respond
-  assertEquals(updatedFolders.includes("Label_138"), false); // wf_review removed
-  assertEquals(updatedFolders.includes("Label_215"), false); // wf_drafted removed
+  assertEquals(updatedFolders.includes("Label_5390221056707111040"), true); // wf_respond
+  assertEquals(updatedFolders.includes("Label_1177410809872040327"), false); // wf_review removed
+  assertEquals(updatedFolders.includes("Label_3309485003314594938"), false); // wf_drafted removed
 });
 
 Deno.test("handleWebhook - no update needed when only one workflow label", async () => {
@@ -228,7 +228,7 @@ Deno.test("handleWebhook - no update needed when only one workflow label", async
         to: [{ email: "recipient@example.com" }],
         date: 1704067200,
         // Use folder ID for wf_respond
-        folders: ["INBOX", "Label_139"],
+        folders: ["INBOX", "Label_5390221056707111040"],
       }),
     updateMessageFolders: (_id, folders) => {
       updateCalled = true;
@@ -431,7 +431,7 @@ Deno.test("handleWebhook - clears workflow labels when archived (no INBOX)", asy
         to: [{ email: "recipient@example.com" }],
         date: 1704067200,
         // Archived: has workflow label but no INBOX
-        folders: ["Label_139", "CATEGORY_UPDATES"],
+        folders: ["Label_5390221056707111040", "CATEGORY_UPDATES"],
       }),
     updateMessageFolders: (_id, folders) => {
       updatedFolders = folders;
@@ -451,7 +451,7 @@ Deno.test("handleWebhook - clears workflow labels when archived (no INBOX)", asy
   await handleWebhook(request, deps);
 
   // Workflow label should be removed
-  assertEquals(updatedFolders.includes("Label_139"), false);
+  assertEquals(updatedFolders.includes("Label_5390221056707111040"), false);
   assertEquals(updatedFolders.includes("CATEGORY_UPDATES"), true);
 });
 
@@ -495,7 +495,7 @@ Deno.test("handleWebhook - clears workflow labels from thread when reply sent", 
         from: [{ email: "sender@example.com" }],
         to: [{ email: "me@example.com" }],
         date: 1704067200,
-        folders: ["INBOX", "Label_139"],
+        folders: ["INBOX", "Label_5390221056707111040"],
       });
     },
     getThread: () =>
@@ -530,7 +530,7 @@ Deno.test("handleWebhook - clears workflow labels from thread when reply sent", 
   // Original message should have workflow label cleared
   assertEquals(updatedMessages.length, 1);
   assertEquals(updatedMessages[0].id, "original-msg-123");
-  assertEquals(updatedMessages[0].folders.includes("Label_139"), false);
+  assertEquals(updatedMessages[0].folders.includes("Label_5390221056707111040"), false);
   assertEquals(updatedMessages[0].folders.includes("INBOX"), true);
 });
 
@@ -558,7 +558,7 @@ Deno.test("handleWebhook - clears workflow labels from sent message itself (draf
           from: [{ email: "me@example.com" }],
           to: [{ email: "sender@example.com" }],
           date: 1704067300,
-          folders: ["SENT", "Label_215"], // Has wf_drafted label!
+          folders: ["SENT", "Label_3309485003314594938"], // Has wf_drafted label!
         });
       }
       // Original message - no workflow labels
@@ -605,6 +605,6 @@ Deno.test("handleWebhook - clears workflow labels from sent message itself (draf
   // Sent message should have its wf_drafted label cleared
   assertEquals(updatedMessages.length, 1);
   assertEquals(updatedMessages[0].id, "sent-msg-456");
-  assertEquals(updatedMessages[0].folders.includes("Label_215"), false);
+  assertEquals(updatedMessages[0].folders.includes("Label_3309485003314594938"), false);
   assertEquals(updatedMessages[0].folders.includes("SENT"), true);
 });

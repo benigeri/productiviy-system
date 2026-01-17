@@ -11,8 +11,8 @@ import { WORKFLOW_LABELS } from "./nylas-types.ts";
 // isWorkflowLabel tests
 // ============================================================================
 
-Deno.test("isWorkflowLabel - returns true for wf_triage", () => {
-  assertEquals(isWorkflowLabel("wf_triage"), true);
+Deno.test("isWorkflowLabel - returns true for triage", () => {
+  assertEquals(isWorkflowLabel("triage"), true);
 });
 
 Deno.test("isWorkflowLabel - returns true for wf_respond", () => {
@@ -54,9 +54,9 @@ Deno.test("getWorkflowLabels - extracts single workflow label", () => {
 });
 
 Deno.test("getWorkflowLabels - extracts multiple workflow labels", () => {
-  const folders = ["INBOX", "wf_triage", "wf_respond", "wf_review", "wf_drafted"];
+  const folders = ["INBOX", "triage", "wf_respond", "wf_review", "wf_drafted"];
   assertEquals(getWorkflowLabels(folders), [
-    "wf_triage",
+    "triage",
     "wf_respond",
     "wf_review",
     "wf_drafted",
@@ -87,7 +87,7 @@ Deno.test("removeWorkflowLabels - removes all workflow labels", () => {
 });
 
 Deno.test("removeWorkflowLabels - keeps specified label", () => {
-  const folders = ["INBOX", "wf_triage", "wf_respond", "wf_review", "wf_drafted"];
+  const folders = ["INBOX", "triage", "wf_respond", "wf_review", "wf_drafted"];
   assertEquals(removeWorkflowLabels(folders, "wf_respond"), [
     "INBOX",
     "wf_respond",
@@ -119,9 +119,9 @@ Deno.test("removeWorkflowLabels - keepLabel that doesn't exist is no-op", () => 
 // getHighestPriorityLabel tests
 // ============================================================================
 
-Deno.test("getHighestPriorityLabel - returns wf_triage as highest", () => {
-  const labels = ["wf_drafted", "wf_triage", "wf_respond", "wf_review"];
-  assertEquals(getHighestPriorityLabel(labels), "wf_triage");
+Deno.test("getHighestPriorityLabel - returns triage as highest", () => {
+  const labels = ["wf_drafted", "triage", "wf_respond", "wf_review"];
+  assertEquals(getHighestPriorityLabel(labels), "triage");
 });
 
 Deno.test("getHighestPriorityLabel - returns wf_respond over wf_review", () => {
