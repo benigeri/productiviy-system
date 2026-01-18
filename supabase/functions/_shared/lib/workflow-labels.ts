@@ -1,11 +1,12 @@
 /**
  * Workflow label logic for email triage automation.
+ * Workflow labels are mutually exclusive - only one should be active at a time.
  * All operations are idempotent.
  */
 
 import { WORKFLOW_LABELS, type WorkflowLabel } from "./nylas-types.ts";
 
-const WORKFLOW_LABEL_SET = new Set<string>(WORKFLOW_LABELS.PRIORITY_ORDER);
+const WORKFLOW_LABEL_SET = new Set<string>(WORKFLOW_LABELS.ALL);
 
 /**
  * Check if a folder/label is a workflow label.
@@ -36,29 +37,17 @@ export function removeWorkflowLabels(
 }
 
 /**
- * Get the highest priority workflow label from a list.
- * Priority: wf_respond > wf_review > wf_drafted
+ * Get the most recently added workflow label (last in array).
+ * Gmail/Nylas typically appends new labels to the end.
  * Returns null if no workflow labels found.
  */
-export function getHighestPriorityLabel(
-  labels: string[],
+export function getMostRecentWorkflowLabel(
+  folders: string[],
 ): WorkflowLabel | null {
-  const workflowLabels = getWorkflowLabels(labels);
+  const workflowLabels = getWorkflowLabels(folders);
   if (workflowLabels.length === 0) {
     return null;
   }
-
-  // Find the label with the lowest index in PRIORITY_ORDER (highest priority)
-  let highestPriority: WorkflowLabel | null = null;
-  let highestPriorityIndex = Infinity;
-
-  for (const label of workflowLabels) {
-    const index = WORKFLOW_LABELS.PRIORITY_ORDER.indexOf(label);
-    if (index < highestPriorityIndex) {
-      highestPriorityIndex = index;
-      highestPriority = label;
-    }
-  }
-
-  return highestPriority;
+  // Return the last one (most recently added)
+  return workflowLabels[workflowLabels.length - 1];
 }

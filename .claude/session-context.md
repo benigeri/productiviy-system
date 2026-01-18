@@ -10,19 +10,15 @@ The nylas-webhook has:
 ## Active Investigation
 
 ### Superhuman "Done" → Label Removal
-**Status**: Archive detection works, but getting 400 errors when clearing labels
+**Status**: FIXED ✓
 
-**Findings from logs**:
-1. Superhuman "Done" removes INBOX → triggers `message.updated`
-2. Webhook detects archive (no INBOX) correctly
-3. Tries to clear workflow labels from thread
-4. **400 Bad Request** - need to see the full error now that logging is improved
+**Root cause**: When clearing workflow labels from sent messages, we were including
+SENT in the folder update request. Gmail doesn't allow setting read-only system labels.
 
-**Example from logs**:
-```
-message 19bc8f2b0ce61d68: ["[Superhuman]/AI/Meeting","IMPORTANT","wf_review","CATEGORY_PERSONAL"]
-→ Archive detected → 400 Bad Request
-```
+**Fix**: Filter out read-only system labels (SENT, DRAFT, TRASH, SPAM) from folder
+update requests. Gmail maintains these automatically.
+
+**Deployed**: fdc53ed
 
 ### ps-58: Emails going unlabeled
 - TikTok emails not getting ai_* labels

@@ -81,13 +81,13 @@ export interface NylasWebhookPayload {
   };
 }
 
-// Workflow labels for email triage
+// Workflow labels for email triage (mutually exclusive states)
 export const WORKFLOW_LABELS = {
   RESPOND: "wf_respond",
   REVIEW: "wf_review",
   DRAFTED: "wf_drafted",
-  // Priority order: higher index = lower priority
-  PRIORITY_ORDER: ["wf_respond", "wf_review", "wf_drafted"] as const,
+  // All workflow labels (used for detection, no priority)
+  ALL: ["wf_respond", "wf_review", "wf_drafted"] as const,
 } as const;
 
 // Type for workflow label values

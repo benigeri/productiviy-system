@@ -193,7 +193,7 @@ Deno.test("handleWebhook - accepts valid signature", async () => {
 // Workflow label processing tests
 // ============================================================================
 
-Deno.test("handleWebhook - clears other workflow labels when wf_respond added", async () => {
+Deno.test("handleWebhook - keeps most recent workflow label when multiple present", async () => {
   const payload = createWebhookPayload("message.updated");
   const request = new Request("https://example.com/nylas-webhook", {
     method: "POST",
@@ -216,11 +216,12 @@ Deno.test("handleWebhook - clears other workflow labels when wf_respond added", 
         to: [{ email: "recipient@example.com" }],
         date: 1704067200,
         // Use folder IDs as Nylas returns them
+        // wf_drafted is last = most recently added
         folders: [
           "INBOX",
-          "Label_5390221056707111040",
-          "Label_1177410809872040327",
-          "Label_3309485003314594938",
+          "Label_5390221056707111040", // wf_respond
+          "Label_1177410809872040327", // wf_review
+          "Label_3309485003314594938", // wf_drafted (most recent)
         ],
       }),
     updateMessageFolders: (_id, folders) => {
@@ -240,11 +241,11 @@ Deno.test("handleWebhook - clears other workflow labels when wf_respond added", 
 
   await handleWebhook(request, deps);
 
-  // Should keep INBOX and wf_respond (highest priority after triage), remove others
+  // Should keep INBOX and wf_drafted (most recent = last in array), remove others
   assertEquals(updatedFolders.includes("INBOX"), true);
-  assertEquals(updatedFolders.includes("Label_5390221056707111040"), true); // wf_respond
+  assertEquals(updatedFolders.includes("Label_3309485003314594938"), true); // wf_drafted kept
+  assertEquals(updatedFolders.includes("Label_5390221056707111040"), false); // wf_respond removed
   assertEquals(updatedFolders.includes("Label_1177410809872040327"), false); // wf_review removed
-  assertEquals(updatedFolders.includes("Label_3309485003314594938"), false); // wf_drafted removed
 });
 
 Deno.test("handleWebhook - no update needed when only one workflow label", async () => {

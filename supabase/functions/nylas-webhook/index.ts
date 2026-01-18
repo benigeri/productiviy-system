@@ -13,7 +13,7 @@ import type {
 } from "../_shared/lib/nylas-types.ts";
 import { READONLY_SYSTEM_LABELS } from "../_shared/lib/nylas-types.ts";
 import {
-  getHighestPriorityLabel,
+  getMostRecentWorkflowLabel,
   getWorkflowLabels,
   removeWorkflowLabels,
 } from "../_shared/lib/workflow-labels.ts";
@@ -256,12 +256,15 @@ async function processMessageUpdate(
     );
   }
 
-  // Deduplication: multiple workflow labels → keep highest priority
+  // Workflow labels are mutually exclusive - keep only the most recently added one
   const workflowLabels = getWorkflowLabels(folderNames);
   if (workflowLabels.length > 1) {
-    const highestPriority = getHighestPriorityLabel(workflowLabels);
-    if (highestPriority) {
-      const newFolderNames = removeWorkflowLabels(folderNames, highestPriority);
+    const mostRecent = getMostRecentWorkflowLabel(folderNames);
+    if (mostRecent) {
+      console.log(
+        `[processMessageUpdate] cid=${correlationId} Multiple workflow labels detected: ${workflowLabels.join(", ")} → keeping ${mostRecent}`,
+      );
+      const newFolderNames = removeWorkflowLabels(folderNames, mostRecent);
       // Filter out read-only system labels (SENT, DRAFT, TRASH, SPAM)
       const writableFolderNames = newFolderNames.filter(
         (name) => !READONLY_SYSTEM_LABELS.has(name),
