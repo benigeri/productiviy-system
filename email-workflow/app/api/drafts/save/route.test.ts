@@ -44,21 +44,58 @@ describe('buildGmailQuotedReplyWithHtml', () => {
 
     const result = buildGmailQuotedReplyWithHtml(replyText, originalHtml, sender, date);
 
-    // Should have gmail_extra wrapper
-    expect(result).toContain('class="gmail_extra"');
-
-    // Should have gmail_attr class on attribution
-    expect(result).toContain('class="gmail_attr"');
-
-    // Should contain attribution with sender
-    expect(result).toContain('John Doe');
-    expect(result).toContain('john@example.com');
-
     // Critical: Should contain ORIGINAL HTML unescaped (not &lt;div&gt;)
     expect(result).toContain('<div style="color:blue">');
     expect(result).toContain('<strong>formatted</strong>');
     expect(result).not.toContain('&lt;div');
     expect(result).not.toContain('&lt;strong');
+  });
+
+  it('uses Superhuman-compatible structure (no gmail_extra/gmail_attr)', () => {
+    const result = buildGmailQuotedReplyWithHtml(
+      'Reply',
+      '<p>Original</p>',
+      { name: 'Test', email: 'test@example.com' },
+      1704067200
+    );
+
+    // MUST have gmail_quote class for quote detection
+    expect(result).toContain('class="gmail_quote"');
+
+    // MUST NOT have gmail_extra wrapper - breaks quote collapsing in Superhuman
+    expect(result).not.toContain('gmail_extra');
+
+    // MUST NOT have gmail_attr wrapper - breaks quote collapsing in Superhuman
+    expect(result).not.toContain('gmail_attr');
+  });
+
+  it('wraps sender email in mailto link with span dir=ltr', () => {
+    const result = buildGmailQuotedReplyWithHtml(
+      'Reply',
+      '<p>Original</p>',
+      { name: 'John Doe', email: 'john@example.com' },
+      1704067200
+    );
+
+    // Attribution must have mailto link for proper detection
+    expect(result).toContain('href="mailto:john@example.com"');
+    expect(result).toContain('<span dir="ltr">');
+    expect(result).toContain('John Doe');
+  });
+
+  it('uses shorthand blockquote style values', () => {
+    const result = buildGmailQuotedReplyWithHtml(
+      'Reply',
+      '<p>Original</p>',
+      { email: 'test@example.com' },
+      1704067200
+    );
+
+    // Style must use shorthand values (not 0px, not rgb())
+    expect(result).toContain('margin:0 0 0 .8ex');
+    expect(result).toContain('border-left:1px #ccc solid');
+    expect(result).not.toContain('rgb(');
+    expect(result).not.toContain('0px');
   });
 
   it('uses email as sender name when name is missing', () => {
@@ -69,7 +106,28 @@ describe('buildGmailQuotedReplyWithHtml', () => {
       1704067200
     );
 
-    expect(result).toContain('test@example.com');
+    // Email should appear both in attribution text and mailto link
+    expect(result).toMatch(/test@example\.com.*href="mailto:test@example\.com"/);
+  });
+
+  it('preserves complex nested HTML structures unchanged', () => {
+    const complexHtml = `<html><head></head><body>
+      <div class="gmail_quote">
+        <blockquote style="margin:0">
+          <div style="color:red"><strong>Nested</strong> content</div>
+        </blockquote>
+      </div>
+    </body></html>`;
+
+    const result = buildGmailQuotedReplyWithHtml(
+      'Reply',
+      complexHtml,
+      { email: 'test@example.com' },
+      1704067200
+    );
+
+    // Original HTML must be preserved exactly - no escaping or modification
+    expect(result).toContain(complexHtml);
   });
 });
 

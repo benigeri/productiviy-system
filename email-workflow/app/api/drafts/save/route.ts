@@ -55,9 +55,28 @@ export function extractReplyText(draftBody: string): string {
   return replyLines.join('\n').trim();
 }
 
-// Build Gmail-native quoted reply HTML
-// Uses the ORIGINAL message HTML in the blockquote (not markdown-converted text)
-// This is critical for email clients to properly collapse quotes
+/**
+ * Build Gmail-native quoted reply HTML for proper quote collapsing.
+ *
+ * CRITICAL LEARNINGS (from reverse-engineering Superhuman's email structure):
+ *
+ * 1. Use simple structure - NO gmail_extra or gmail_attr wrappers
+ *    - ❌ <div class="gmail_extra"><div class="gmail_quote"><div class="gmail_attr">
+ *    - ✅ <div class="gmail_quote">attribution<blockquote>
+ *
+ * 2. Original HTML must be preserved EXACTLY as received
+ *    - Don't convert to markdown then back to HTML
+ *    - Don't escape or modify the original message content
+ *    - The blockquote contains the raw original HTML unchanged
+ *
+ * 3. Attribution format matters
+ *    - Email wrapped in: <span dir="ltr"><a href="mailto:...">email</a></span>
+ *    - Plain text attribution directly in gmail_quote div (no wrapper div)
+ *
+ * 4. Blockquote style uses shorthand values
+ *    - margin:0 0 0 .8ex (not 0px)
+ *    - border-left:1px #ccc solid (not rgb(204,204,204))
+ */
 export function buildGmailQuotedReplyWithHtml(
   replyText: string,
   originalMessageHtml: string,
@@ -68,7 +87,7 @@ export function buildGmailQuotedReplyWithHtml(
   // breaks: true preserves single newlines (e.g., "Thanks,\nPaul")
   const replyHtml = marked.parse(replyText, { breaks: true }) as string;
 
-  // Format the attribution line
+  // Format attribution line
   const date = new Date(originalDate * 1000);
   const dateStr = date.toLocaleDateString('en-US', {
     weekday: 'short',
@@ -82,18 +101,9 @@ export function buildGmailQuotedReplyWithHtml(
     hour12: true,
   });
   const senderName = originalSender.name || originalSender.email;
-  const attribution = `On ${dateStr} at ${timeStr}, ${senderName} &lt;${originalSender.email}&gt;`;
 
-  // Build Gmail-native HTML structure with ORIGINAL message HTML
-  // This structure is recognized by email clients (Gmail, Superhuman, etc.) for quote collapsing
-  return `<div dir="ltr">${replyHtml}</div>
-<div class="gmail_extra"><br>
-<div class="gmail_quote"><div dir="ltr" class="gmail_attr">${attribution} wrote:<br></div>
-<blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex">
-${originalMessageHtml}
-</blockquote>
-</div>
-</div>`;
+  // Superhuman-compatible structure - original HTML preserved unchanged in blockquote
+  return `<div dir="ltr">${replyHtml}</div><br/><div class="gmail_quote">On ${dateStr} at ${timeStr}, ${senderName} <span dir="ltr">&lt;<a href="mailto:${originalSender.email}">${originalSender.email}</a>&gt;</span> wrote:<br/><blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-left:1px #ccc solid;padding-left:1ex">${originalMessageHtml}</blockquote></div>`;
 }
 
 // Legacy function for backward compatibility (used by tests)
