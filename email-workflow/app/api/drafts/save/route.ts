@@ -202,8 +202,10 @@ export async function POST(request: Request) {
         const maxRetries = 3;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
+            // Use server-side env var instead of client-controlled Origin header (SSRF prevention)
+            const baseUrl = process.env.APP_URL || 'http://localhost:3000';
             const labelRes = await fetch(
-              `${request.headers.get('origin') || 'http://localhost:3000'}/api/threads`,
+              `${baseUrl}/api/threads`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
