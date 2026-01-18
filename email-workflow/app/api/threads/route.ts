@@ -1,5 +1,5 @@
 import 'server-only';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 // Nylas API response types
@@ -23,6 +23,85 @@ const UpdateLabelsSchema = z.object({
 });
 
 const CONCURRENCY_LIMIT = 5;
+
+// GET handler - fetch messages for a thread
+export async function GET(request: NextRequest) {
+  try {
+    const nylasApiKey = process.env.NYLAS_API_KEY;
+    const nylasGrantId = process.env.NYLAS_GRANT_ID;
+
+    if (!nylasApiKey || !nylasGrantId) {
+      return NextResponse.json(
+        { error: 'Service configuration error' },
+        { status: 500 }
+      );
+    }
+
+    const threadId = request.nextUrl.searchParams.get('threadId');
+    if (!threadId) {
+      return NextResponse.json(
+        { error: 'threadId is required' },
+        { status: 400 }
+      );
+    }
+
+    const headers = { Authorization: `Bearer ${nylasApiKey}` };
+
+    // Get thread to fetch message IDs
+    const threadRes = await fetch(
+      `https://api.us.nylas.com/v3/grants/${nylasGrantId}/threads/${threadId}`,
+      { headers }
+    );
+
+    if (!threadRes.ok) {
+      return NextResponse.json(
+        { error: 'Thread not found' },
+        { status: 404 }
+      );
+    }
+
+    const thread: NylasThreadResponse = await threadRes.json();
+    const messageIds = thread.data.message_ids;
+
+    // Fetch cleaned messages
+    const messagesRes = await fetch(
+      `https://api.us.nylas.com/v3/grants/${nylasGrantId}/messages/clean`,
+      {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message_id: messageIds,
+          ignore_links: false,
+          ignore_images: false,
+          html_as_markdown: true,
+        }),
+      }
+    );
+
+    if (!messagesRes.ok) {
+      return NextResponse.json(
+        { error: 'Failed to fetch messages' },
+        { status: 500 }
+      );
+    }
+
+    const messagesData = await messagesRes.json();
+    const messages = (messagesData.data || []).sort(
+      (a: { date: number }, b: { date: number }) => a.date - b.date
+    );
+
+    return NextResponse.json({ messages });
+  } catch (error) {
+    console.error('Thread fetch error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch thread' },
+      { status: 500 }
+    );
+  }
+}
 
 async function batchedParallel<T, R>(
   items: T[],

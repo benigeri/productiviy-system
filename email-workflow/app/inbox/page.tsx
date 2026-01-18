@@ -1,6 +1,5 @@
 // Server Component - fetches data directly
-import { ThreadList } from './ThreadList';
-import { ThreadDetail } from './ThreadDetail';
+import { Mail } from './Mail';
 import { getLabelToRespondPaul } from '@/lib/gmail-labels';
 
 // Force dynamic rendering - this page fetches live email data
@@ -77,26 +76,23 @@ export default async function InboxPage({
   const params = await searchParams;
   const selectedThreadId = params.thread;
 
-  let messages: Message[] = [];
-  let selectedThread: Thread | undefined;
-
+  // Pre-fetch messages if thread is specified in URL
+  let initialMessages: Message[] = [];
   if (selectedThreadId) {
-    selectedThread = threads.find(t => t.id === selectedThreadId);
+    const selectedThread = threads.find(t => t.id === selectedThreadId);
     if (selectedThread) {
-      messages = await getMessages(selectedThread.message_ids);
-      messages.sort((a, b) => a.date - b.date);
+      initialMessages = await getMessages(selectedThread.message_ids);
+      initialMessages.sort((a, b) => a.date - b.date);
     }
   }
 
   return (
     <div className="h-full bg-background">
-      {!selectedThreadId ? (
-        <ThreadList threads={threads} />
-      ) : selectedThread ? (
-        <ThreadDetail thread={selectedThread} messages={messages} allThreads={threads} />
-      ) : (
-        <div className="p-4">Thread not found</div>
-      )}
+      <Mail
+        threads={threads}
+        initialThreadId={selectedThreadId}
+        initialMessages={initialMessages}
+      />
     </div>
   );
 }
