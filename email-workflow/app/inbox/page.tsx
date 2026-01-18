@@ -54,8 +54,8 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{ thread?: string }>;
 }) {
-  const threads = await getThreads();
-  const params = await searchParams;
+  // Parallelize independent async operations to avoid waterfall
+  const [threads, params] = await Promise.all([getThreads(), searchParams]);
   const selectedThreadId = params.thread;
 
   // Pre-fetch messages if thread is specified in URL

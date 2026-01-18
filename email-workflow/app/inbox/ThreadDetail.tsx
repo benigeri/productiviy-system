@@ -22,65 +22,83 @@ function getInitials(name: string): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
+// Hoisted RegExp patterns to avoid recreation on each call
+const IMG_TAG_REGEX = /<img[\s\S]*?(?:>|\/\s*>)/gi;
+const HTML_LINK_REGEX = /<a\s+href=['"]([^'"]+)['"][\s\S]*?>([^<]*)<\/a>/gi;
+const HTML_TAG_REGEX = /<[^>]+>/g;
+const EMPTY_MD_LINK_REGEX = /\[\]\([^)]+\)/g;
+const INLINE_HASH_REGEX = /\s*#{2,}\s*/g;
+const LINE_START_HASH_REGEX = /^\s*#{1,6}\s*/gm;
+const DASH_SEPARATOR_REGEX = /^-{3,}$/gm;
+const STAR_SEPARATOR_REGEX = /^\*{3,}$/gm;
+const ESCAPED_DASH_REGEX = /\\--/g;
+const BOLD_ITALIC_REGEX = /\*{1,3}([^*\n]+)\*{1,3}/g;
+const ASTERISK_BEFORE_WORD_REGEX = /\*+(\w)/g;
+const ASTERISK_AFTER_WORD_REGEX = /(\w)\*+/g;
+const BRACKET_NEWLINE_REGEX = /\[([^\]]*)\n([^\]]*)\]/g;
+const PAREN_NEWLINE_REGEX = /\]\(([^)\s]*)\n([^)\s]*)\)/g;
+const URL_NEWLINE_REGEX = /\]\(([^)]*)\n([^)]*)\)/g;
+const DAY_WROTE_REGEX = /^On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^<]*<[^>]+>\s*wrote:\s*$/gim;
+const MONTH_WROTE_REGEX = /^On\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)[^w]*wrote:\s*$/gim;
+const MULTIPLE_NEWLINES_REGEX = /\n{3,}/g;
+const MULTIPLE_SPACES_REGEX = /  +/g;
+const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
+const INLINE_DAY_WROTE_REGEX = /\s*On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^<]*<[^>]+>\s*wrote:\s*/gi;
+const INLINE_MONTH_WROTE_REGEX = /\s*On\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)[^w]*wrote:\s*/gi;
+const INLINE_QUOTE_REGEX = /\s*>\s*.*/g;
+const QUOTE_START_REGEX = /^>\s*/;
+
 // Clean email content - remove raw HTML tags and convert links
 // This should be called on the ENTIRE message content before splitting by newlines
 function cleanEmailContent(text: string): string {
   // Remove <img ...> tags entirely (handle multi-line and various formats)
-  // Use [\s\S] to match across newlines
-  let cleaned = text.replace(/<img[\s\S]*?(?:>|\/\s*>)/gi, '');
+  let cleaned = text.replace(IMG_TAG_REGEX, '');
 
   // Convert HTML links <a href='url'>text</a> to markdown [text](url)
-  // Handle both single and double quotes, and multi-line attributes
-  cleaned = cleaned.replace(/<a\s+href=['"]([^'"]+)['"][\s\S]*?>([^<]*)<\/a>/gi, '[$2]($1)');
+  cleaned = cleaned.replace(HTML_LINK_REGEX, '[$2]($1)');
 
   // Remove any remaining HTML tags (but keep their content)
-  cleaned = cleaned.replace(/<[^>]+>/g, '');
+  cleaned = cleaned.replace(HTML_TAG_REGEX, '');
 
   // Remove empty markdown links [](url) - links with no display text
-  cleaned = cleaned.replace(/\[\]\([^)]+\)/g, '');
+  cleaned = cleaned.replace(EMPTY_MD_LINK_REGEX, '');
 
   // Remove ### markers (used as separators in email signatures)
-  cleaned = cleaned.replace(/\s*#{2,}\s*/g, ' '); // inline ### become spaces
-  cleaned = cleaned.replace(/^\s*#{1,6}\s*/gm, ''); // start of line ### removed
+  cleaned = cleaned.replace(INLINE_HASH_REGEX, ' '); // inline ### become spaces
+  cleaned = cleaned.replace(LINE_START_HASH_REGEX, ''); // start of line ### removed
 
   // Clean up --- and *** separators
-  cleaned = cleaned.replace(/^-{3,}$/gm, '');
-  cleaned = cleaned.replace(/^\*{3,}$/gm, '');
-  cleaned = cleaned.replace(/\\--/g, ''); // escaped dashes
+  cleaned = cleaned.replace(DASH_SEPARATOR_REGEX, '');
+  cleaned = cleaned.replace(STAR_SEPARATOR_REGEX, '');
+  cleaned = cleaned.replace(ESCAPED_DASH_REGEX, ''); // escaped dashes
 
   // Clean up markdown bold/italic formatting
-  cleaned = cleaned.replace(/\*{1,3}([^*\n]+)\*{1,3}/g, '$1'); // remove ***text*** or **text** or *text*
+  cleaned = cleaned.replace(BOLD_ITALIC_REGEX, '$1');
 
   // Clean up stray asterisks that are formatting markers (adjacent to word chars)
-  cleaned = cleaned.replace(/\*+(\w)/g, '$1'); // asterisks before word
-  cleaned = cleaned.replace(/(\w)\*+/g, '$1'); // asterisks after word
+  cleaned = cleaned.replace(ASTERISK_BEFORE_WORD_REGEX, '$1');
+  cleaned = cleaned.replace(ASTERISK_AFTER_WORD_REGEX, '$1');
 
   // Fix broken markdown links that span multiple lines
-  // First, join lines within square brackets: [text\nthat spans] -> [text that spans]
-  cleaned = cleaned.replace(/\[([^\]]*)\n([^\]]*)\]/g, '[$1 $2]');
+  cleaned = cleaned.replace(BRACKET_NEWLINE_REGEX, '[$1 $2]');
+  cleaned = cleaned.replace(PAREN_NEWLINE_REGEX, ']($1$2)');
 
-  // Then join lines within parentheses for URLs: ](url\ncontinued) -> ](urlcontinued)
-  cleaned = cleaned.replace(/\]\(([^)\s]*)\n([^)\s]*)\)/g, ']($1$2)');
-
-  // Handle case where URL has line break and more content: ](url\nmore\nlines)
+  // Handle case where URL has line break and more content
   let prevCleaned = '';
   while (prevCleaned !== cleaned) {
     prevCleaned = cleaned;
-    cleaned = cleaned.replace(/\]\(([^)]*)\n([^)]*)\)/g, ']($1$2)');
+    cleaned = cleaned.replace(URL_NEWLINE_REGEX, ']($1$2)');
   }
 
-  // Remove quoted reply headers: "On Mon, Jan 13, 2026 at 9:46 AM Name <email> wrote:"
-  // These are attribution lines added by email clients when replying
-  cleaned = cleaned.replace(/^On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^<]*<[^>]+>\s*wrote:\s*$/gim, '');
-
-  // Also handle: "On January 13, 2026 at 9:46 AM Name wrote:"
-  cleaned = cleaned.replace(/^On\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)[^w]*wrote:\s*$/gim, '');
+  // Remove quoted reply headers
+  cleaned = cleaned.replace(DAY_WROTE_REGEX, '');
+  cleaned = cleaned.replace(MONTH_WROTE_REGEX, '');
 
   // Clean up multiple consecutive blank lines
-  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  cleaned = cleaned.replace(MULTIPLE_NEWLINES_REGEX, '\n\n');
 
   // Clean up multiple spaces
-  cleaned = cleaned.replace(/  +/g, ' ');
+  cleaned = cleaned.replace(MULTIPLE_SPACES_REGEX, ' ');
 
   // Clean up lines that are just whitespace or special chars
   cleaned = cleaned.split('\n')
@@ -93,13 +111,13 @@ function cleanEmailContent(text: string): string {
 
 // Parse markdown links to React elements (assumes text is already cleaned)
 function parseMarkdownLinks(text: string): (string | React.ReactElement)[] {
-  // Match markdown links: [text](url)
-  const markdownLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  // Create a new regex instance for this call (needed since we use lastIndex)
+  const regex = new RegExp(MARKDOWN_LINK_REGEX.source, MARKDOWN_LINK_REGEX.flags);
   const parts: (string | React.ReactElement)[] = [];
   let lastIndex = 0;
   let match;
 
-  while ((match = markdownLinkRegex.exec(text)) !== null) {
+  while ((match = regex.exec(text)) !== null) {
     // Add text before the link
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
@@ -145,7 +163,7 @@ function renderEmailContent(content: string): React.ReactNode {
     if (isQuoted) {
       return (
         <p key={idx} className="text-muted-foreground text-xs italic pl-3 border-l-2 border-muted my-1">
-          {parseMarkdownLinks(line.replace(/^>\s*/, ''))}
+          {parseMarkdownLinks(line.replace(QUOTE_START_REGEX, ''))}
         </p>
       );
     }
@@ -165,16 +183,12 @@ function renderEmailContent(content: string): React.ReactNode {
 function filterQuotedText(text: string): string {
   let filtered = text;
 
-  // Remove "On [day], [date] at [time] [name] <email> wrote:" patterns (inline or newline)
-  // This handles: "On Tue, Jan 13, 2026 at 9:46 AM Alex Robinson <alex@viral.careers> wrote:"
-  filtered = filtered.replace(/\s*On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^<]*<[^>]+>\s*wrote:\s*/gi, ' ');
-
-  // Also handle: "On January 13, 2026 at 9:46 AM Name wrote:"
-  filtered = filtered.replace(/\s*On\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)[^w]*wrote:\s*/gi, ' ');
+  // Remove "On [day], [date] at [time] [name] <email> wrote:" patterns
+  filtered = filtered.replace(INLINE_DAY_WROTE_REGEX, ' ');
+  filtered = filtered.replace(INLINE_MONTH_WROTE_REGEX, ' ');
 
   // Remove inline quoted text: anything from "> " followed by content to end
-  // This catches: "Looking forward to it. > Great to catch up..."
-  filtered = filtered.replace(/\s*>\s*.*/g, '');
+  filtered = filtered.replace(INLINE_QUOTE_REGEX, '');
 
   // Filter out lines starting with > (quoted text)
   filtered = filtered
@@ -183,7 +197,7 @@ function filterQuotedText(text: string): string {
     .join('\n');
 
   // Clean up multiple spaces
-  filtered = filtered.replace(/  +/g, ' ');
+  filtered = filtered.replace(MULTIPLE_SPACES_REGEX, ' ');
 
   return filtered.trim();
 }

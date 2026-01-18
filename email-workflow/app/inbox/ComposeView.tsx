@@ -54,8 +54,9 @@ export function ComposeView({ onClose }: { onClose: () => void }) {
       setDraft(body);
       setSubject(newSubject);
       setRecipients({ to, cc });
-      setConversationHistory([
-        ...conversationHistory,
+      // Use functional setState to avoid race conditions
+      setConversationHistory(prev => [
+        ...prev,
         { role: 'user', content: instructions },
         { role: 'assistant', content: body },
       ]);
@@ -95,8 +96,9 @@ export function ComposeView({ onClose }: { onClose: () => void }) {
       setDraft(body);
       setSubject(newSubject);
       setRecipients({ to, cc });
-      setConversationHistory([
-        ...conversationHistory,
+      // Use functional setState to avoid race conditions
+      setConversationHistory(prev => [
+        ...prev,
         { role: 'user', content: feedback },
         { role: 'assistant', content: body },
       ]);
