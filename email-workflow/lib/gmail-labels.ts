@@ -41,10 +41,25 @@ export function getLabelRespond(): string {
 }
 
 /**
+ * Label for emails that need review (lower priority than respond).
+ */
+export function getLabelReview(): string {
+  const labelId = process.env.GMAIL_LABEL_REVIEW;
+  if (!labelId) {
+    throw new Error(
+      'GMAIL_LABEL_REVIEW environment variable is required. ' +
+        'This should be the Gmail label ID for "wf_review" emails.'
+    );
+  }
+  return labelId;
+}
+
+/**
  * Validate that all required Gmail label environment variables are set.
  * Call this at app startup to fail fast if misconfigured.
  */
 export function validateGmailLabels(): void {
   getLabelDrafted();
   getLabelRespond();
+  getLabelReview();
 }

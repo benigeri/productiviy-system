@@ -11,10 +11,6 @@ import { WORKFLOW_LABELS } from "./nylas-types.ts";
 // isWorkflowLabel tests
 // ============================================================================
 
-Deno.test("isWorkflowLabel - returns true for triage", () => {
-  assertEquals(isWorkflowLabel("triage"), true);
-});
-
 Deno.test("isWorkflowLabel - returns true for wf_respond", () => {
   assertEquals(isWorkflowLabel("wf_respond"), true);
 });
@@ -54,9 +50,8 @@ Deno.test("getWorkflowLabels - extracts single workflow label", () => {
 });
 
 Deno.test("getWorkflowLabels - extracts multiple workflow labels", () => {
-  const folders = ["INBOX", "triage", "wf_respond", "wf_review", "wf_drafted"];
+  const folders = ["INBOX", "wf_respond", "wf_review", "wf_drafted"];
   assertEquals(getWorkflowLabels(folders), [
-    "triage",
     "wf_respond",
     "wf_review",
     "wf_drafted",
@@ -87,7 +82,7 @@ Deno.test("removeWorkflowLabels - removes all workflow labels", () => {
 });
 
 Deno.test("removeWorkflowLabels - keeps specified label", () => {
-  const folders = ["INBOX", "triage", "wf_respond", "wf_review", "wf_drafted"];
+  const folders = ["INBOX", "wf_respond", "wf_review", "wf_drafted"];
   assertEquals(removeWorkflowLabels(folders, "wf_respond"), [
     "INBOX",
     "wf_respond",
@@ -119,9 +114,9 @@ Deno.test("removeWorkflowLabels - keepLabel that doesn't exist is no-op", () => 
 // getHighestPriorityLabel tests
 // ============================================================================
 
-Deno.test("getHighestPriorityLabel - returns triage as highest", () => {
-  const labels = ["wf_drafted", "triage", "wf_respond", "wf_review"];
-  assertEquals(getHighestPriorityLabel(labels), "triage");
+Deno.test("getHighestPriorityLabel - returns wf_respond as highest", () => {
+  const labels = ["wf_drafted", "wf_respond", "wf_review"];
+  assertEquals(getHighestPriorityLabel(labels), "wf_respond");
 });
 
 Deno.test("getHighestPriorityLabel - returns wf_respond over wf_review", () => {
@@ -154,14 +149,7 @@ Deno.test("getHighestPriorityLabel - returns null when no workflow labels", () =
 });
 
 Deno.test("getHighestPriorityLabel - priority order matches WORKFLOW_LABELS", () => {
-  // Verify priority: triage > respond > review > drafted
-  assertEquals(
-    getHighestPriorityLabel([
-      WORKFLOW_LABELS.RESPOND,
-      WORKFLOW_LABELS.TRIAGE,
-    ]),
-    WORKFLOW_LABELS.TRIAGE,
-  );
+  // Verify priority: respond > review > drafted
   assertEquals(
     getHighestPriorityLabel([WORKFLOW_LABELS.REVIEW, WORKFLOW_LABELS.RESPOND]),
     WORKFLOW_LABELS.RESPOND,
@@ -171,10 +159,7 @@ Deno.test("getHighestPriorityLabel - priority order matches WORKFLOW_LABELS", ()
     WORKFLOW_LABELS.REVIEW,
   );
   assertEquals(
-    getHighestPriorityLabel([
-      WORKFLOW_LABELS.DRAFTED,
-      WORKFLOW_LABELS.TRIAGE,
-    ]),
-    WORKFLOW_LABELS.TRIAGE,
+    getHighestPriorityLabel([WORKFLOW_LABELS.DRAFTED, WORKFLOW_LABELS.RESPOND]),
+    WORKFLOW_LABELS.RESPOND,
   );
 });
