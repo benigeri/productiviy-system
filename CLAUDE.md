@@ -619,10 +619,17 @@ Never commit secrets. Use:
 
 Functions auto-deploy on push to main via GitHub Actions (see `.github/workflows/deploy-functions.yml`).
 
-To manually deploy:
+To manually deploy (token is in `.env` file in main repo):
 ```bash
-SUPABASE_ACCESS_TOKEN=$SUPABASE_ACCESS_TOKEN supabase functions deploy telegram-webhook --project-ref aadqqdsclktlyeuweqrv
+# Load token from .env and deploy
+export SUPABASE_ACCESS_TOKEN=$(grep '^SUPABASE_ACCESS_TOKEN=' /Users/benigeri/Projects/productiviy-system/.env | cut -d'=' -f2) && supabase functions deploy <function-name> --project-ref aadqqdsclktlyeuweqrv
+
+# Examples:
+# supabase functions deploy nylas-webhook --project-ref aadqqdsclktlyeuweqrv
+# supabase functions deploy telegram-webhook --project-ref aadqqdsclktlyeuweqrv
 ```
+
+**Note:** The `.env` file can't be sourced directly (has non-key-value lines), so we extract just the token.
 
 ### Debugging
 
