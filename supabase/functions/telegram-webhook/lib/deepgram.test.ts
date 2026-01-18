@@ -16,7 +16,10 @@ Deno.test("transcribeAudio - transcribes audio from URL", async () => {
       assertEquals(headers["Authorization"], "Token test_api_key");
 
       const body = JSON.parse(init?.body as string);
-      assertEquals(body.url, "https://api.telegram.org/file/bot123/voice/file.oga");
+      assertEquals(
+        body.url,
+        "https://api.telegram.org/file/bot123/voice/file.oga",
+      );
 
       return Promise.resolve({
         ok: true,
@@ -40,7 +43,7 @@ Deno.test("transcribeAudio - transcribes audio from URL", async () => {
   const result = await transcribeAudio(
     "https://api.telegram.org/file/bot123/voice/file.oga",
     "test_api_key",
-    mockFetch
+    mockFetch,
   );
 
   assertEquals(result, "Create a task for the homepage redesign");
@@ -65,7 +68,7 @@ Deno.test("transcribeAudio - returns empty string for no speech", async () => {
   const result = await transcribeAudio(
     "https://example.com/audio.oga",
     "test_api_key",
-    mockFetch
+    mockFetch,
   );
 
   assertEquals(result, "");
@@ -84,10 +87,10 @@ Deno.test("transcribeAudio - throws on API error", async () => {
       transcribeAudio(
         "https://example.com/audio.oga",
         "bad_api_key",
-        mockFetch
+        mockFetch,
       ),
     Error,
-    "Deepgram API error: 401 Unauthorized"
+    "Deepgram API error: 401 Unauthorized",
   );
 });
 
@@ -99,10 +102,10 @@ Deno.test("transcribeAudio - throws on network error", async () => {
       transcribeAudio(
         "https://example.com/audio.oga",
         "test_api_key",
-        mockFetch
+        mockFetch,
       ),
     Error,
-    "Network error"
+    "Network error",
   );
 });
 
@@ -118,9 +121,9 @@ Deno.test("transcribeAudio - handles malformed response", async () => {
       transcribeAudio(
         "https://example.com/audio.oga",
         "test_api_key",
-        mockFetch
+        mockFetch,
       ),
     Error,
-    "Invalid Deepgram response structure"
+    "Invalid Deepgram response structure",
   );
 });

@@ -4,9 +4,9 @@ import {
   type IssueCreateOptions,
 } from "../_shared/lib/linear.ts";
 import {
-  captureToLinear,
   type CaptureDeps,
   type CaptureResult,
+  captureToLinear,
 } from "../_shared/lib/capture.ts";
 import type { LinearIssue } from "../_shared/lib/types.ts";
 import {
@@ -19,7 +19,11 @@ import {
   type UserGroupResolver,
   type UserResolver,
 } from "./lib/slack.ts";
-import { jsonResponse, errorResponse, type ErrorCode } from "../_shared/lib/http.ts";
+import {
+  type ErrorCode,
+  errorResponse,
+  jsonResponse,
+} from "../_shared/lib/http.ts";
 
 /**
  * Dependencies for the Slack webhook handler.
@@ -222,7 +226,11 @@ export async function handleSlackWebhook(
 
       // Handle empty content error from capture pipeline
       if (message === "Cleanup resulted in empty content") {
-        return errorResponse("Empty message content", "EMPTY_AFTER_CLEANUP", 400);
+        return errorResponse(
+          "Empty message content",
+          "EMPTY_AFTER_CLEANUP",
+          400,
+        );
       }
 
       // Categorize errors by source
@@ -312,17 +320,31 @@ if (import.meta.main) {
     const signingSecret = Deno.env.get("SLACK_SIGNING_SECRET");
     const botToken = Deno.env.get("SLACK_BOT_TOKEN") ?? "";
     const braintrustKey = Deno.env.get("BRAINTRUST_API_KEY") ?? "";
-    const braintrustProject = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "2026_01 Email Flow";
-    const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ?? "capture-cleanup";
+    const braintrustProject = Deno.env.get("BRAINTRUST_PROJECT_NAME") ??
+      "2026_01 Email Flow";
+    const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ??
+      "capture-cleanup";
     const linearKey = Deno.env.get("LINEAR_API_KEY") ?? "";
 
     // Create deps with API keys pre-bound
     const deps: SlackWebhookDeps = {
       signingSecret,
       processCapture: (text) =>
-        processCaptureImpl(text, braintrustKey, braintrustProject, braintrustSlug),
+        processCaptureImpl(
+          text,
+          braintrustKey,
+          braintrustProject,
+          braintrustSlug,
+        ),
       createIssue: (title, description, options) =>
-        createTriageIssueImpl(title, linearKey, undefined, description, undefined, options),
+        createTriageIssueImpl(
+          title,
+          linearKey,
+          undefined,
+          description,
+          undefined,
+          options,
+        ),
       verifySignature: (_signature, _timestamp, _body, _secret) =>
         // In production, verification is done before this (see below)
         // This is a no-op since we already verified above

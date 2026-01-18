@@ -10,7 +10,9 @@ import type {
 // Mock message factory to reduce duplication
 // ============================================================================
 
-function createMockMessage(overrides: Partial<NylasMessage> = {}): NylasMessage {
+function _createMockMessage(
+  overrides: Partial<NylasMessage> = {},
+): NylasMessage {
   return {
     id: "msg-123",
     grant_id: "grant-456",
@@ -32,9 +34,17 @@ const DEFAULT_FOLDERS: NylasFolder[] = [
   { id: "INBOX", grant_id: "grant-456", name: "INBOX" },
   { id: "SENT", grant_id: "grant-456", name: "SENT" },
   { id: "Label_210", grant_id: "grant-456", name: "triage" },
-  { id: "Label_5390221056707111040", grant_id: "grant-456", name: "wf_respond" },
+  {
+    id: "Label_5390221056707111040",
+    grant_id: "grant-456",
+    name: "wf_respond",
+  },
   { id: "Label_1177410809872040327", grant_id: "grant-456", name: "wf_review" },
-  { id: "Label_3309485003314594938", grant_id: "grant-456", name: "wf_drafted" },
+  {
+    id: "Label_3309485003314594938",
+    grant_id: "grant-456",
+    name: "wf_drafted",
+  },
 ];
 
 function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
@@ -74,7 +84,8 @@ function createMockDeps(overrides: Partial<WebhookDeps> = {}): WebhookDeps {
       }),
     getCleanMessages: (ids) =>
       Promise.resolve(ids.map((id) => ({
-        body: "Clean message body",
+        body: "Clean message body (HTML fallback)",
+        conversation: "Clean message body", // v2 uses conversation field
         grant_id: "grant-456",
         message_id: [id],
       }))),
@@ -205,7 +216,12 @@ Deno.test("handleWebhook - clears other workflow labels when wf_respond added", 
         to: [{ email: "recipient@example.com" }],
         date: 1704067200,
         // Use folder IDs as Nylas returns them
-        folders: ["INBOX", "Label_5390221056707111040", "Label_1177410809872040327", "Label_3309485003314594938"],
+        folders: [
+          "INBOX",
+          "Label_5390221056707111040",
+          "Label_1177410809872040327",
+          "Label_3309485003314594938",
+        ],
       }),
     updateMessageFolders: (_id, folders) => {
       updatedFolders = folders;
@@ -556,7 +572,10 @@ Deno.test("handleWebhook - clears workflow labels from thread when reply sent", 
   // Original message should have workflow label cleared
   assertEquals(updatedMessages.length, 1);
   assertEquals(updatedMessages[0].id, "original-msg-123");
-  assertEquals(updatedMessages[0].folders.includes("Label_5390221056707111040"), false);
+  assertEquals(
+    updatedMessages[0].folders.includes("Label_5390221056707111040"),
+    false,
+  );
   assertEquals(updatedMessages[0].folders.includes("INBOX"), true);
 });
 
@@ -631,7 +650,10 @@ Deno.test("handleWebhook - clears workflow labels from sent message itself (draf
   // Sent message should have its wf_drafted label cleared
   assertEquals(updatedMessages.length, 1);
   assertEquals(updatedMessages[0].id, "sent-msg-456");
-  assertEquals(updatedMessages[0].folders.includes("Label_3309485003314594938"), false);
+  assertEquals(
+    updatedMessages[0].folders.includes("Label_3309485003314594938"),
+    false,
+  );
   assertEquals(updatedMessages[0].folders.includes("SENT"), true);
 });
 
@@ -671,8 +693,21 @@ Deno.test("handleWebhook - classifies received message and applies ai_* labels",
         folders: ["INBOX"],
       }),
     getFolders: () => Promise.resolve(AI_FOLDERS),
+    getThread: () =>
+      Promise.resolve({
+        id: "thread-789",
+        grant_id: "grant-456",
+        subject: "Linear notification",
+        participants: [{ email: "notifications@linear.app" }],
+        message_ids: ["received-msg-789"],
+        folders: ["INBOX"],
+      }),
     getCleanMessages: () =>
-      Promise.resolve([{ body: "Linear notification body", grant_id: "grant-456" }]),
+      Promise.resolve([{
+        body: "Linear notification body (HTML)",
+        conversation: "Linear notification body",
+        grant_id: "grant-456",
+      }]),
     classify: () =>
       Promise.resolve({ labels: ["ai_tool"], reason: "Linear notification" }),
     updateMessageFolders: (_id, folders) => {
@@ -733,7 +768,10 @@ Deno.test("handleWebhook - skips classification for sent messages", async () => 
     getFolders: () => Promise.resolve(AI_FOLDERS),
     classify: () => {
       classifyCalled = true;
-      return Promise.resolve({ labels: ["ai_tool"], reason: "Should not be called" });
+      return Promise.resolve({
+        labels: ["ai_tool"],
+        reason: "Should not be called",
+      });
     },
   });
 
@@ -768,8 +806,21 @@ Deno.test("handleWebhook - classification returns empty labels does not update m
         folders: ["INBOX"],
       }),
     getFolders: () => Promise.resolve(AI_FOLDERS),
+    getThread: () =>
+      Promise.resolve({
+        id: "thread-789",
+        grant_id: "grant-456",
+        subject: "Important email from teammate",
+        participants: [{ email: "sarah@archive.com" }],
+        message_ids: ["received-msg-789"],
+        folders: ["INBOX"],
+      }),
     getCleanMessages: () =>
-      Promise.resolve([{ body: "Hey, let's discuss Q2", grant_id: "grant-456" }]),
+      Promise.resolve([{
+        body: "Hey, let's discuss Q2 (HTML)",
+        conversation: "Hey, let's discuss Q2",
+        grant_id: "grant-456",
+      }]),
     classify: () =>
       Promise.resolve({ labels: [], reason: "Important email from teammate" }),
     updateMessageFolders: (_id, _folders) => {

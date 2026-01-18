@@ -25,7 +25,7 @@ function isDeepgramResponse(data: unknown): data is DeepgramResponse {
 export async function transcribeAudio(
   audioUrl: string,
   apiKey: string,
-  fetchFn: typeof fetch = fetch
+  fetchFn: typeof fetch = fetch,
 ): Promise<string> {
   const response = await fetchFn("https://api.deepgram.com/v1/listen", {
     method: "POST",
@@ -37,7 +37,9 @@ export async function transcribeAudio(
   });
 
   if (!response.ok) {
-    throw new Error(`Deepgram API error: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Deepgram API error: ${response.status} ${response.statusText}`,
+    );
   }
 
   const data = await response.json();

@@ -1,7 +1,7 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import {
-  parseWebhookUpdate,
   getFileUrl,
+  parseWebhookUpdate,
   reactToMessage,
   validateWebhookSecret,
   type WebhookUpdate,
@@ -76,7 +76,12 @@ Deno.test("parseWebhookUpdate - throws on unsupported message type", () => {
       from: { id: 123, is_bot: false, first_name: "Test" },
       chat: { id: 123, type: "private" },
       date: 1704067200,
-      photo: [{ file_id: "xxx", file_unique_id: "yyy", width: 100, height: 100 }],
+      photo: [{
+        file_id: "xxx",
+        file_unique_id: "yyy",
+        width: 100,
+        height: 100,
+      }],
     },
   };
 
@@ -111,12 +116,12 @@ Deno.test("getFileUrl - returns download URL for file", async () => {
   const result = await getFileUrl(
     "test_file_id",
     "test_bot_token",
-    mockFetch
+    mockFetch,
   );
 
   assertEquals(
     result,
-    "https://api.telegram.org/file/bottest_bot_token/voice/file_123.oga"
+    "https://api.telegram.org/file/bottest_bot_token/voice/file_123.oga",
   );
 });
 
@@ -134,7 +139,7 @@ Deno.test("getFileUrl - throws on API error", async () => {
   await assertRejects(
     () => getFileUrl("bad_file_id", "test_bot_token", mockFetch),
     Error,
-    "Telegram API error: Bad Request: file not found"
+    "Telegram API error: Bad Request: file not found",
   );
 });
 
@@ -144,7 +149,7 @@ Deno.test("getFileUrl - throws on network error", async () => {
   await assertRejects(
     () => getFileUrl("test_file_id", "test_bot_token", mockFetch),
     Error,
-    "Network error"
+    "Network error",
   );
 });
 
@@ -228,7 +233,7 @@ Deno.test("reactToMessage - throws on API error", async () => {
   await assertRejects(
     () => reactToMessage(123, 999, "👍", "test_bot_token", mockFetch),
     Error,
-    "Telegram API error: Bad Request: message not found"
+    "Telegram API error: Bad Request: message not found",
   );
 });
 
@@ -238,6 +243,6 @@ Deno.test("reactToMessage - throws on network error", async () => {
   await assertRejects(
     () => reactToMessage(123, 42, "👍", "test_bot_token", mockFetch),
     Error,
-    "Network error"
+    "Network error",
   );
 });

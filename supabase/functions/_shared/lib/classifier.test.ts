@@ -4,10 +4,10 @@
 
 import { assertEquals, assertRejects } from "jsr:@std/assert";
 import {
-  parseClassifierResult,
-  classifyEmail,
   type ClassifierInput,
   type ClassifierResult,
+  classifyEmail,
+  parseClassifierResult,
 } from "./classifier.ts";
 
 // ============================================================================
@@ -90,7 +90,10 @@ Deno.test("parseClassifierResult - handles missing reason field", () => {
 });
 
 Deno.test("parseClassifierResult - handles non-string items in labels array", () => {
-  const input = { labels: ["ai_tool", 123, null, "ai_sales", { foo: "bar" }], reason: "Mixed types" };
+  const input = {
+    labels: ["ai_tool", 123, null, "ai_sales", { foo: "bar" }],
+    reason: "Mixed types",
+  };
   const result = parseClassifierResult(input);
 
   assertEquals(result.labels, ["ai_tool", "ai_sales"]);
@@ -114,6 +117,10 @@ const mockInput: ClassifierInput = {
   to: "user@example.com",
   cc: "",
   date: "2026-01-17",
+  is_reply: "false",
+  thread_length: "1",
+  has_attachments: "false",
+  attachment_types: "",
   body: "Test body content",
 };
 
@@ -148,7 +155,7 @@ Deno.test("classifyEmail - retries on failure and succeeds", async () => {
       projectName: "test-project",
       classifierSlug: "test-classifier",
     },
-    2
+    2,
   );
 
   assertEquals(attempts, 2);
@@ -169,7 +176,7 @@ Deno.test("classifyEmail - returns empty after max retries", async () => {
       projectName: "test-project",
       classifierSlug: "test-classifier",
     },
-    2
+    2,
   );
 
   assertEquals(attempts, 3); // Initial + 2 retries
@@ -199,7 +206,9 @@ Deno.test("classifyEmail - passes correct params to invoke", async () => {
 
 Deno.test("classifyEmail - handles JSON string response", async () => {
   const mockInvoke = () =>
-    Promise.resolve(JSON.stringify({ labels: ["ai_auth"], reason: "2FA code" }));
+    Promise.resolve(
+      JSON.stringify({ labels: ["ai_auth"], reason: "2FA code" }),
+    );
 
   const result = await classifyEmail(mockInput, {
     invoke: mockInvoke,

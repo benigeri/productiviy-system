@@ -77,10 +77,10 @@ export function parseWebhookUpdate(body: WebhookUpdate): ParsedMessage {
 export async function getFileUrl(
   fileId: string,
   botToken: string,
-  fetchFn: typeof fetch = fetch
+  fetchFn: typeof fetch = fetch,
 ): Promise<string> {
   const response = await fetchFn(
-    `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`
+    `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`,
   );
   const data = await response.json();
 
@@ -93,7 +93,7 @@ export async function getFileUrl(
 
 export function validateWebhookSecret(
   headers: Headers,
-  expectedSecret: string | undefined
+  expectedSecret: string | undefined,
 ): boolean {
   if (expectedSecret === undefined) {
     return true;
@@ -108,7 +108,7 @@ export async function reactToMessage(
   messageId: number,
   emoji: string,
   botToken: string,
-  fetchFn: typeof fetch = fetch
+  fetchFn: typeof fetch = fetch,
 ): Promise<void> {
   const response = await fetchFn(
     `https://api.telegram.org/bot${botToken}/setMessageReaction`,
@@ -120,7 +120,7 @@ export async function reactToMessage(
         message_id: messageId,
         reaction: [{ type: "emoji", emoji }],
       }),
-    }
+    },
   );
 
   const data = await response.json();

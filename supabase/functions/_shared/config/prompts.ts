@@ -3,7 +3,8 @@
  * Used by both telegram-webhook and create-issue functions.
  */
 
-export const CLEANUP_PROMPT = `You are a text cleanup assistant. Clean up the following voice transcription by:
+export const CLEANUP_PROMPT =
+  `You are a text cleanup assistant. Clean up the following voice transcription by:
 - Removing filler words (um, uh, like, you know, etc.)
 - Fixing grammar and punctuation
 - Preserving the original meaning and intent

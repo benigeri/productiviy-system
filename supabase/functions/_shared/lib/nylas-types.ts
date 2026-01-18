@@ -9,6 +9,14 @@ export interface NylasEmailParticipant {
   name?: string;
 }
 
+// Nylas attachment structure
+export interface NylasAttachment {
+  id: string;
+  filename?: string;
+  content_type: string;
+  size?: number;
+}
+
 // Nylas message structure from GET /messages/{id}
 export interface NylasMessage {
   id: string;
@@ -23,6 +31,7 @@ export interface NylasMessage {
   folders: string[]; // Folder/label IDs
   snippet?: string; // Plain text preview
   body?: string; // Full HTML body (when fetched with expand=body)
+  attachments?: NylasAttachment[]; // File attachments
 }
 
 // Nylas thread structure from GET /threads/{id}

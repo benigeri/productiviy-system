@@ -1,5 +1,5 @@
 import type { LinearIssue, LinearResponse } from "./types.ts";
-import { fetchWithTimeout, DEFAULT_API_TIMEOUT } from "./http.ts";
+import { DEFAULT_API_TIMEOUT, fetchWithTimeout } from "./http.ts";
 
 const CREATE_ISSUE_MUTATION = `
   mutation IssueCreate($input: IssueCreateInput!) {
@@ -37,7 +37,7 @@ export async function createTriageIssue(
   fetchFn: typeof fetch = fetch,
   description?: string,
   _teamId?: string, // Deprecated: teamId is always DEFAULT_TEAM_ID
-  options?: IssueCreateOptions
+  options?: IssueCreateOptions,
 ): Promise<LinearIssue> {
   const requestOptions: RequestInit = {
     method: "POST",
@@ -61,11 +61,17 @@ export async function createTriageIssue(
 
   // Use fetchWithTimeout in production, allow custom fetch for tests
   const response = fetchFn === fetch
-    ? await fetchWithTimeout("https://api.linear.app/graphql", requestOptions, DEFAULT_API_TIMEOUT)
+    ? await fetchWithTimeout(
+      "https://api.linear.app/graphql",
+      requestOptions,
+      DEFAULT_API_TIMEOUT,
+    )
     : await fetchFn("https://api.linear.app/graphql", requestOptions);
 
   if (!response.ok) {
-    throw new Error(`Linear API error: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Linear API error: ${response.status} ${response.statusText}`,
+    );
   }
 
   const data: LinearResponse = await response.json();

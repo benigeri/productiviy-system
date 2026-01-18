@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { handleCreateIssue, type CreateIssueDeps } from "./index.ts";
+import { type CreateIssueDeps, handleCreateIssue } from "./index.ts";
 
 function setTestEnv() {
   Deno.env.set("BRAINTRUST_API_KEY", "test_braintrust_key");
@@ -14,7 +14,9 @@ function clearTestEnv() {
 /**
  * Create mock dependencies for testing happy paths
  */
-function createMockDeps(overrides: Partial<CreateIssueDeps> = {}): CreateIssueDeps {
+function createMockDeps(
+  overrides: Partial<CreateIssueDeps> = {},
+): CreateIssueDeps {
   return {
     processCapture: () =>
       Promise.resolve({
@@ -167,8 +169,14 @@ Deno.test("handleCreateIssue - routes feedback correctly", async () => {
   assertEquals(response.status, 200);
   assertEquals(body.ok, true);
   // Verify feedback routing options were passed
-  assertEquals(capturedOptions?.projectId, "4884f918-c57e-480e-8413-51bff5f933f8");
-  assertEquals(capturedOptions?.stateId, "e02b40e5-d86b-4c35-a81d-74cd3ad0a150");
+  assertEquals(
+    capturedOptions?.projectId,
+    "4884f918-c57e-480e-8413-51bff5f933f8",
+  );
+  assertEquals(
+    capturedOptions?.stateId,
+    "e02b40e5-d86b-4c35-a81d-74cd3ad0a150",
+  );
 });
 
 Deno.test("handleCreateIssue - handles multiline text (title + description)", async () => {
@@ -178,7 +186,8 @@ Deno.test("handleCreateIssue - handles multiline text (title + description)", as
   const mockDeps = createMockDeps({
     processCapture: () =>
       Promise.resolve({
-        cleanedContent: "Add user authentication\n\nWe need OAuth support for login",
+        cleanedContent:
+          "Add user authentication\n\nWe need OAuth support for login",
         isFeedback: false,
       }),
     createIssue: (title, description) => {
@@ -195,7 +204,9 @@ Deno.test("handleCreateIssue - handles multiline text (title + description)", as
   const request = new Request("http://localhost/create-issue", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: "Add user authentication\n\nWe need OAuth support" }),
+    body: JSON.stringify({
+      text: "Add user authentication\n\nWe need OAuth support",
+    }),
   });
 
   const response = await handleCreateIssue(request, mockDeps);
@@ -214,7 +225,9 @@ Deno.test("handleCreateIssue - handles multiline text (title + description)", as
 Deno.test("handleCreateIssue - handles Braintrust API failure", async () => {
   const mockDeps = createMockDeps({
     processCapture: () =>
-      Promise.reject(new Error("Braintrust API error: 500 Internal Server Error")),
+      Promise.reject(
+        new Error("Braintrust API error: 500 Internal Server Error"),
+      ),
   });
 
   const request = new Request("http://localhost/create-issue", {
