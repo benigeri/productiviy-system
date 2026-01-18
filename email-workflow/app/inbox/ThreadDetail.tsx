@@ -319,6 +319,11 @@ export function ThreadDetail({
           })),
           instructions: feedback,
           latestMessageId: messages[messages.length - 1].id,
+          // Pass previous draft for targeted edits instead of full rewrites
+          previousDraft: draft,
+          previousRecipients: { to: draftTo, cc: draftCc },
+          // Pass full conversation history so LLM remembers all prior instructions
+          conversationHistory: conversationMessages,
         }),
       });
 
@@ -449,6 +454,18 @@ export function ThreadDetail({
                     <p className="text-xs text-muted-foreground mt-1">
                       {msg.from[0]?.email}
                     </p>
+                    {msg.to && msg.to.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        <span className="font-medium">To:</span>{' '}
+                        {msg.to.map((p) => p.name || p.email).join(', ')}
+                      </p>
+                    )}
+                    {msg.cc && msg.cc.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        <span className="font-medium">Cc:</span>{' '}
+                        {msg.cc.map((p) => p.name || p.email).join(', ')}
+                      </p>
+                    )}
                   </div>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {formatRelativeTime(msg.date)}
@@ -569,6 +586,7 @@ export function ThreadDetail({
             <div className="flex justify-end gap-2">
               <Button
                 onClick={handleSkip}
+                disabled={loading}
                 variant="ghost"
               >
                 Skip
@@ -601,7 +619,7 @@ export function ThreadDetail({
             <div className="flex justify-end gap-2">
               <Button
                 onClick={handleSkip}
-                disabled={saving}
+                disabled={saving || loading}
                 variant="ghost"
               >
                 Skip

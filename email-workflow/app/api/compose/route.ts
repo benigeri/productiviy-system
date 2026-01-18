@@ -2,9 +2,14 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { invoke, wrapTraced, initLogger } from 'braintrust';
 import { z } from 'zod';
+import {
+  ConversationHistorySchema,
+  RecipientsSchema,
+  type ConversationMessage,
+} from '@/lib/schemas/email-generation';
 
-// Initialize Braintrust logger for tracing (REQUIRED for logging to work)
-const logger = initLogger({
+// Initialize Braintrust logger for tracing (side effect enables logging)
+initLogger({
   projectName: process.env.BRAINTRUST_PROJECT_NAME!,
   apiKey: process.env.BRAINTRUST_API_KEY,
   asyncFlush: false, // CRITICAL: Prevents log loss in serverless (Vercel)
@@ -13,14 +18,10 @@ const logger = initLogger({
 // Request validation schema
 const ComposeRequestSchema = z.object({
   instructions: z.string().min(1).max(5000),
-  conversationHistory: z
-    .array(
-      z.object({
-        role: z.enum(['user', 'assistant']),
-        content: z.string(),
-      })
-    )
-    .optional(),
+  previousDraft: z.string().optional(),
+  previousSubject: z.string().optional(),
+  previousRecipients: RecipientsSchema.optional(),
+  conversationHistory: ConversationHistorySchema.optional(),
 });
 
 // Response validation schema (security fix - validates AI response)
@@ -36,8 +37,16 @@ type ComposeResponse = z.infer<typeof ComposeResponseSchema>;
 // Wrapped function for Braintrust tracing
 const generateComposeEmail = wrapTraced(async function generateComposeEmail(input: {
   user_instructions: string;
-  previous_draft?: string;
-  conversation_history?: string;
+  previous_draft?: {
+    subject: string;
+    body: string;
+    to: string[];
+    cc: string[];
+  };
+  conversation_history?: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+  }>;
 }): Promise<ComposeResponse> {
   const projectName = process.env.BRAINTRUST_PROJECT_NAME;
   const composeSlug = process.env.BRAINTRUST_COMPOSE_SLUG || 'email-compose-v1';
@@ -114,25 +123,42 @@ export async function POST(request: Request) {
       );
     }
 
-    const { instructions, conversationHistory } = result.data;
+    const {
+      instructions,
+      previousDraft,
+      previousSubject,
+      previousRecipients,
+      conversationHistory,
+    } = result.data;
+
+    const isFollowUp = !!previousDraft;
 
     console.log('Compose request:', {
       instructionsLength: instructions.length,
+      isFollowUp,
       hasHistory: !!conversationHistory?.length,
       historyLength: conversationHistory?.length || 0,
     });
 
-    // Build conversation history string if provided
-    const conversationHistoryString = conversationHistory
-      ? conversationHistory
-          .map((msg) => `${msg.role}: ${msg.content}`)
-          .join('\n\n')
+    // Build previous draft object if this is a follow-up
+    const previousDraftObj = isFollowUp
+      ? {
+          subject: previousSubject || '',
+          body: previousDraft,
+          to: previousRecipients?.to || [],
+          cc: previousRecipients?.cc || [],
+        }
       : undefined;
 
     // Generate email via Braintrust with tracing
     const composeResponse = await generateComposeEmail({
       user_instructions: instructions,
-      conversation_history: conversationHistoryString,
+      previous_draft: previousDraftObj,
+      // Pass conversation history as structured array so LLM sees all prior decisions
+      ...(conversationHistory &&
+        conversationHistory.length > 0 && {
+          conversation_history: conversationHistory,
+        }),
     });
 
     const duration = Date.now() - startTime;

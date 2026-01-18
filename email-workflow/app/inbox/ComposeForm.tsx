@@ -14,18 +14,18 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useKeyboardSubmit } from '@/hooks/useKeyboardSubmit';
-
-interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
+import type {
+  ConversationMessage,
+  Recipients,
+  ComposeApiResponse,
+} from '@/lib/schemas/email-generation';
 
 export function ComposeForm({ onClose }: { onClose: () => void }) {
   const [instructions, setInstructions] = useState('');
   const [feedback, setFeedback] = useState('');
   const [draft, setDraft] = useState('');
   const [subject, setSubject] = useState('');
-  const [recipients, setRecipients] = useState<{ to: string[]; cc: string[] }>({
+  const [recipients, setRecipients] = useState<Recipients>({
     to: [],
     cc: [],
   });
@@ -91,6 +91,9 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           instructions: feedback,
+          previousDraft: draft,
+          previousSubject: subject,
+          previousRecipients: recipients,
           conversationHistory: [
             ...conversationHistory,
             { role: 'user', content: feedback },
@@ -103,10 +106,10 @@ export function ComposeForm({ onClose }: { onClose: () => void }) {
         throw new Error(data.error || 'Failed to regenerate draft');
       }
 
-      const { subject, to = [], cc = [], body } = data;
+      const { subject: newSubject, to = [], cc = [], body } = data;
 
       setDraft(body);
-      setSubject(subject);
+      setSubject(newSubject);
       setRecipients({ to, cc });
       setConversationHistory([
         ...conversationHistory,
