@@ -17,6 +17,7 @@ export interface ThreadWithPreview extends Thread {
   latest_draft_or_message: {
     from: EmailParticipant[];
     date: number;
+    snippet?: string;
   };
 }
 
