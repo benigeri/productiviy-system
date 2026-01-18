@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { handleWebhook, type WebhookDeps } from "./index.ts";
+import { clearDedupCache, handleWebhook, type WebhookDeps } from "./index.ts";
 import type {
   NylasFolder,
   NylasMessage,
@@ -498,6 +498,7 @@ Deno.test("handleWebhook - clears workflow labels when archived (no INBOX)", asy
 });
 
 Deno.test("handleWebhook - clears workflow labels from ALL thread messages when archived", async () => {
+  clearDedupCache(); // Reset dedup tracking between tests
   // This tests the case where workflow labels are on SENT messages, but the RECEIVED message is archived
   const payload = createWebhookPayload("message.updated", "received-msg-123");
   const request = new Request("https://example.com/nylas-webhook", {
@@ -583,6 +584,7 @@ Deno.test("handleWebhook - clears workflow labels from ALL thread messages when 
 // ============================================================================
 
 Deno.test("handleWebhook - clears workflow labels from thread when reply sent", async () => {
+  clearDedupCache(); // Reset dedup tracking between tests
   const payload = createWebhookPayload("message.created", "sent-msg-456");
   const request = new Request("https://example.com/nylas-webhook", {
     method: "POST",
@@ -661,6 +663,7 @@ Deno.test("handleWebhook - clears workflow labels from thread when reply sent", 
 });
 
 Deno.test("handleWebhook - clears workflow labels from sent message itself (draft becomes sent)", async () => {
+  clearDedupCache(); // Reset dedup tracking between tests
   const payload = createWebhookPayload("message.created", "sent-msg-456");
   const request = new Request("https://example.com/nylas-webhook", {
     method: "POST",

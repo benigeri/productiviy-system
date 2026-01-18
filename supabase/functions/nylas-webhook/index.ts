@@ -27,6 +27,38 @@ import {
   classifyEmail,
 } from "../_shared/lib/classifier.ts";
 
+// Performance limits to prevent webhook timeout on large threads
+const MAX_THREAD_MESSAGES = 20; // Only process last N messages
+const BATCH_SIZE = 5; // Fetch N messages at a time to avoid rate limits
+
+// Dedup tracking to prevent redundant processing when multiple webhooks fire
+const DEDUP_WINDOW_MS = 5000; // 5 second window
+const recentlyProcessedThreads = new Map<string, number>(); // threadId -> timestamp
+
+/** Check if a thread was recently processed (within dedup window) */
+function wasRecentlyProcessed(threadId: string): boolean {
+  const now = Date.now();
+  const lastProcessed = recentlyProcessedThreads.get(threadId);
+  if (lastProcessed && now - lastProcessed < DEDUP_WINDOW_MS) {
+    return true;
+  }
+  recentlyProcessedThreads.set(threadId, now);
+  // Cleanup old entries (simple GC)
+  if (recentlyProcessedThreads.size > 100) {
+    for (const [id, time] of recentlyProcessedThreads) {
+      if (now - time > DEDUP_WINDOW_MS) {
+        recentlyProcessedThreads.delete(id);
+      }
+    }
+  }
+  return false;
+}
+
+/** Clear the dedup cache (for testing) */
+export function clearDedupCache(): void {
+  recentlyProcessedThreads.clear();
+}
+
 /**
  * Dependencies for the webhook handler.
  */
@@ -58,6 +90,33 @@ function buildFolderMaps(folders: NylasFolder[]): {
     nameToId.set(folder.name, folder.id);
   }
   return { idToName, nameToId };
+}
+
+/**
+ * Fetch thread messages with bounded count and batching.
+ * Returns the current message plus up to MAX_THREAD_MESSAGES other messages.
+ */
+async function fetchThreadMessages(
+  currentMessage: NylasMessage,
+  thread: NylasThread,
+  getMessage: (id: string) => Promise<NylasMessage>,
+): Promise<NylasMessage[]> {
+  const allMessageIds = thread.message_ids ?? [currentMessage.id];
+
+  // Get other message IDs (excluding current), limited to most recent
+  const otherMessageIds = allMessageIds
+    .filter((id) => id !== currentMessage.id)
+    .slice(-MAX_THREAD_MESSAGES);
+
+  // Fetch in batches to avoid rate limits
+  const otherMessages: NylasMessage[] = [];
+  for (let i = 0; i < otherMessageIds.length; i += BATCH_SIZE) {
+    const batch = otherMessageIds.slice(i, i + BATCH_SIZE);
+    const batchMessages = await Promise.all(batch.map((id) => getMessage(id)));
+    otherMessages.push(...batchMessages);
+  }
+
+  return [currentMessage, ...otherMessages];
 }
 
 /**
@@ -111,18 +170,15 @@ async function processMessageUpdate(
   // This handles the case where workflow labels are on sent messages but the received message is archived
   // We skip this check for sent messages since they never have INBOX
   if (!isSent && !hasInbox) {
-    // Get thread to find all messages
+    // Skip if this thread was recently processed (dedup concurrent webhooks)
+    if (wasRecentlyProcessed(message.thread_id)) {
+      return false;
+    }
+
     const thread = await deps.getThread(message.thread_id);
-    const allMessageIds = thread.message_ids ?? [message.id];
+    const allMessages = await fetchThreadMessages(message, thread, deps.getMessage);
 
-    // Get all messages except the current one (we already have it)
-    const otherMessageIds = allMessageIds.filter((id) => id !== messageId);
-    const otherMessages = await Promise.all(
-      otherMessageIds.map((id) => deps.getMessage(id)),
-    );
-    const allMessages = [message, ...otherMessages];
-
-    // Clear workflow labels from ALL messages in thread
+    // Clear workflow labels from ALL messages in thread (bounded to recent messages)
     const results = await Promise.all(
       allMessages.map((msg) => clearWorkflowLabels(msg, idToName, nameToId, deps)),
     );
@@ -303,15 +359,14 @@ async function processMessageCreated(
     return processMessageUpdate(messageId, deps, { message, folders });
   }
 
-  // Get thread to find all messages
-  const thread = await deps.getThread(message.thread_id);
+  // Skip if this thread was recently processed (dedup concurrent webhooks)
+  if (wasRecentlyProcessed(message.thread_id)) {
+    return false;
+  }
 
-  // Fetch all thread messages in parallel (reuse already-fetched message)
-  const otherMessageIds = thread.message_ids.filter((id) => id !== messageId);
-  const otherMessages = await Promise.all(
-    otherMessageIds.map((id) => deps.getMessage(id)),
-  );
-  const allMessages = [message, ...otherMessages];
+  // Get thread and fetch messages (bounded to recent messages)
+  const thread = await deps.getThread(message.thread_id);
+  const allMessages = await fetchThreadMessages(message, thread, deps.getMessage);
 
   // Clear workflow labels from ALL messages in thread (including the sent one)
   // This handles the case where a draft with "wf_drafted" label becomes a sent message

@@ -9,50 +9,39 @@
  * 2. Find the label by name and use its 'id' field
  */
 
-/**
- * Label for emails that have been drafted but not sent.
- * In Gmail, this is applied after a draft is saved.
- */
-export function getLabelDrafted(): string {
-  const labelId = process.env.GMAIL_LABEL_DRAFTED;
+/** Get a required Gmail label ID from environment variables */
+function getRequiredLabel(
+  envVar: string,
+  labelName: string,
+  fallbackEnvVar?: string
+): string {
+  const labelId =
+    process.env[envVar] ||
+    (fallbackEnvVar ? process.env[fallbackEnvVar] : undefined);
   if (!labelId) {
     throw new Error(
-      'GMAIL_LABEL_DRAFTED environment variable is required. ' +
-        'This should be the Gmail label ID for "wf_drafted" emails (e.g., Label_215).'
+      `${envVar} environment variable is required. ` +
+        `This should be the Gmail label ID for "${labelName}" emails.`
     );
   }
   return labelId;
 }
 
-/**
- * Label for emails that need a response.
- * In Gmail, this is a filter-applied label for prioritization.
- */
-export function getLabelRespond(): string {
-  // Support both env var names for backwards compatibility
-  const labelId = process.env.GMAIL_LABEL_RESPOND || process.env.GMAIL_LABEL_TO_RESPOND_PAUL;
-  if (!labelId) {
-    throw new Error(
-      'GMAIL_LABEL_RESPOND environment variable is required. ' +
-        'This should be the Gmail label ID for "wf_respond" emails (e.g., Label_139).'
-    );
-  }
-  return labelId;
-}
+/** Label for emails that have been drafted but not sent. */
+export const getLabelDrafted = () =>
+  getRequiredLabel('GMAIL_LABEL_DRAFTED', 'wf_drafted');
 
-/**
- * Label for emails that need review (lower priority than respond).
- */
-export function getLabelReview(): string {
-  const labelId = process.env.GMAIL_LABEL_REVIEW;
-  if (!labelId) {
-    throw new Error(
-      'GMAIL_LABEL_REVIEW environment variable is required. ' +
-        'This should be the Gmail label ID for "wf_review" emails.'
-    );
-  }
-  return labelId;
-}
+/** Label for emails that need a response (highest priority). */
+export const getLabelRespond = () =>
+  getRequiredLabel(
+    'GMAIL_LABEL_RESPOND',
+    'wf_respond',
+    'GMAIL_LABEL_TO_RESPOND_PAUL'
+  );
+
+/** Label for emails that need review (lower priority than respond). */
+export const getLabelReview = () =>
+  getRequiredLabel('GMAIL_LABEL_REVIEW', 'wf_review');
 
 /**
  * Validate that all required Gmail label environment variables are set.
