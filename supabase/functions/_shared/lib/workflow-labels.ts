@@ -37,7 +37,7 @@ export function removeWorkflowLabels(
 
 /**
  * Get the highest priority workflow label from a list.
- * Priority: triage > wf_respond > wf_review > wf_drafted
+ * Priority: wf_respond > wf_review > wf_drafted
  * Returns null if no workflow labels found.
  */
 export function getHighestPriorityLabel(

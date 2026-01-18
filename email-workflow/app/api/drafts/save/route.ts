@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   getLabelDrafted,
   getLabelRespond,
+  getLabelReview,
 } from '@/lib/gmail-labels';
 
 // Type definitions for Nylas API responses
@@ -212,7 +213,7 @@ export async function POST(request: Request) {
                 body: JSON.stringify({
                   threadId,
                   addLabels: [getLabelDrafted()],
-                  removeLabels: [getLabelRespond()],
+                  removeLabels: [getLabelRespond(), getLabelReview()],
                 }),
               }
             );
