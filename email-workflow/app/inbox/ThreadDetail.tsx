@@ -22,161 +22,55 @@ function getInitials(name: string): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
-// Hoisted RegExp patterns to avoid recreation on each call
-const IMG_TAG_REGEX = /<img[\s\S]*?(?:>|\/\s*>)/gi;
-const HTML_LINK_REGEX = /<a\s+href=['"]([^'"]+)['"][\s\S]*?>([^<]*)<\/a>/gi;
-const HTML_TAG_REGEX = /<[^>]+>/g;
-const EMPTY_MD_LINK_REGEX = /\[\]\([^)]+\)/g;
-const INLINE_HASH_REGEX = /\s*#{2,}\s*/g;
-const LINE_START_HASH_REGEX = /^\s*#{1,6}\s*/gm;
-const DASH_SEPARATOR_REGEX = /^-{3,}$/gm;
-const STAR_SEPARATOR_REGEX = /^\*{3,}$/gm;
-const ESCAPED_DASH_REGEX = /\\--/g;
-const BOLD_ITALIC_REGEX = /\*{1,3}([^*\n]+)\*{1,3}/g;
-const ASTERISK_BEFORE_WORD_REGEX = /\*+(\w)/g;
-const ASTERISK_AFTER_WORD_REGEX = /(\w)\*+/g;
-const BRACKET_NEWLINE_REGEX = /\[([^\]]*)\n([^\]]*)\]/g;
-const PAREN_NEWLINE_REGEX = /\]\(([^)\s]*)\n([^)\s]*)\)/g;
-const URL_NEWLINE_REGEX = /\]\(([^)]*)\n([^)]*)\)/g;
-const DAY_WROTE_REGEX = /^On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^<]*<[^>]+>\s*wrote:\s*$/gim;
-const MONTH_WROTE_REGEX = /^On\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)[^w]*wrote:\s*$/gim;
+// Minimal regex patterns - only what's truly needed
 const MULTIPLE_NEWLINES_REGEX = /\n{3,}/g;
 const MULTIPLE_SPACES_REGEX = /  +/g;
-const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
 const INLINE_DAY_WROTE_REGEX = /\s*On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^<]*<[^>]+>\s*wrote:\s*/gi;
 const INLINE_MONTH_WROTE_REGEX = /\s*On\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)[^w]*wrote:\s*/gi;
-const INLINE_QUOTE_REGEX = /\s*>\s*.*/g;
-const QUOTE_START_REGEX = /^>\s*/;
+const INLINE_QUOTE_REGEX = /^>.*$/gm;
 
-// Clean email content - remove raw HTML tags and convert links
-// This should be called on the ENTIRE message content before splitting by newlines
+// HTML cleanup patterns - Nylas sometimes leaves HTML in the output
+// Match img tags including malformed/incomplete ones (may lack closing >)
+const IMG_TAG_REGEX = /<img[^>]*(?:>|\/\s*>|\s*$)/gi;
+const LINK_TAG_REGEX = /<a\s+[^>]*href=['"]([^'"]+)['"][^>]*>([^<]*)<\/a>/gi;
+const REMAINING_HTML_REGEX = /<[^>]+>/g;
+// Catch broken img tags that span lines or are incomplete
+const BROKEN_IMG_REGEX = /<img\s+[^>]*["']\s*\/?$/gim;
+
+// Minimal email content cleanup - let Nylas Clean do the heavy lifting
 function cleanEmailContent(text: string): string {
-  // Remove <img ...> tags entirely (handle multi-line and various formats)
-  let cleaned = text.replace(IMG_TAG_REGEX, '');
+  let cleaned = text;
 
-  // Convert HTML links <a href='url'>text</a> to markdown [text](url)
-  cleaned = cleaned.replace(HTML_LINK_REGEX, '[$2]($1)');
+  // Remove image tags (signatures, tracking pixels)
+  cleaned = cleaned.replace(IMG_TAG_REGEX, '');
+  // Also catch broken/incomplete img tags
+  cleaned = cleaned.replace(BROKEN_IMG_REGEX, '');
 
-  // Remove any remaining HTML tags (but keep their content)
-  cleaned = cleaned.replace(HTML_TAG_REGEX, '');
+  // Convert links to "text (url)" format for readability
+  cleaned = cleaned.replace(LINK_TAG_REGEX, (_, url, linkText) => {
+    if (linkText && linkText.trim()) {
+      return `${linkText.trim()} (${url})`;
+    }
+    return url;
+  });
 
-  // Remove empty markdown links [](url) - links with no display text
-  cleaned = cleaned.replace(EMPTY_MD_LINK_REGEX, '');
+  // Remove any remaining HTML tags
+  cleaned = cleaned.replace(REMAINING_HTML_REGEX, '');
 
-  // Remove ### markers (used as separators in email signatures)
-  cleaned = cleaned.replace(INLINE_HASH_REGEX, ' '); // inline ### become spaces
-  cleaned = cleaned.replace(LINE_START_HASH_REGEX, ''); // start of line ### removed
-
-  // Clean up --- and *** separators
-  cleaned = cleaned.replace(DASH_SEPARATOR_REGEX, '');
-  cleaned = cleaned.replace(STAR_SEPARATOR_REGEX, '');
-  cleaned = cleaned.replace(ESCAPED_DASH_REGEX, ''); // escaped dashes
-
-  // Clean up markdown bold/italic formatting
-  cleaned = cleaned.replace(BOLD_ITALIC_REGEX, '$1');
-
-  // Clean up stray asterisks that are formatting markers (adjacent to word chars)
-  cleaned = cleaned.replace(ASTERISK_BEFORE_WORD_REGEX, '$1');
-  cleaned = cleaned.replace(ASTERISK_AFTER_WORD_REGEX, '$1');
-
-  // Fix broken markdown links that span multiple lines
-  cleaned = cleaned.replace(BRACKET_NEWLINE_REGEX, '[$1 $2]');
-  cleaned = cleaned.replace(PAREN_NEWLINE_REGEX, ']($1$2)');
-
-  // Handle case where URL has line break and more content
-  let prevCleaned = '';
-  while (prevCleaned !== cleaned) {
-    prevCleaned = cleaned;
-    cleaned = cleaned.replace(URL_NEWLINE_REGEX, ']($1$2)');
-  }
-
-  // Remove quoted reply headers
-  cleaned = cleaned.replace(DAY_WROTE_REGEX, '');
-  cleaned = cleaned.replace(MONTH_WROTE_REGEX, '');
-
-  // Clean up multiple consecutive blank lines
+  // Collapse excessive blank lines (3+ newlines → 2)
   cleaned = cleaned.replace(MULTIPLE_NEWLINES_REGEX, '\n\n');
-
-  // Clean up multiple spaces
-  cleaned = cleaned.replace(MULTIPLE_SPACES_REGEX, ' ');
-
-  // Clean up lines that are just whitespace or special chars
-  cleaned = cleaned.split('\n')
-    .map(line => line.trim())
-    .filter(line => line && line !== '###' && line !== '---' && line !== '***' && line !== '-')
-    .join('\n');
 
   return cleaned.trim();
 }
 
-// Parse markdown links to React elements (assumes text is already cleaned)
-function parseMarkdownLinks(text: string): (string | React.ReactElement)[] {
-  // Create a new regex instance for this call (needed since we use lastIndex)
-  const regex = new RegExp(MARKDOWN_LINK_REGEX.source, MARKDOWN_LINK_REGEX.flags);
-  const parts: (string | React.ReactElement)[] = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = regex.exec(text)) !== null) {
-    // Add text before the link
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
-    }
-    // Add the link
-    const linkText = match[1].trim();
-    const linkUrl = match[2].trim();
-    // Skip empty links or placeholder links
-    if (linkText && linkUrl && !linkUrl.startsWith('data:')) {
-      parts.push(
-        <a
-          key={match.index}
-          href={linkUrl}
-          className="text-primary hover:underline"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {linkText}
-        </a>
-      );
-    } else if (linkText) {
-      // Just show the text if URL is invalid
-      parts.push(linkText);
-    }
-    lastIndex = match.index + match[0].length;
-  }
-
-  // Add remaining text
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
-
-  return parts.length > 0 ? parts : [text];
-}
-
-// Render email content: clean first, then split by lines and parse links
+// Simple email content rendering using whitespace-pre-wrap
 function renderEmailContent(content: string): React.ReactNode {
-  const cleanedContent = cleanEmailContent(content);
-  const lines = cleanedContent.split('\n');
-
-  return lines.map((line, idx) => {
-    const isQuoted = line.trim().startsWith('>');
-    if (isQuoted) {
-      return (
-        <p key={idx} className="text-muted-foreground text-xs italic pl-3 border-l-2 border-muted my-1">
-          {parseMarkdownLinks(line.replace(QUOTE_START_REGEX, ''))}
-        </p>
-      );
-    }
-    // Skip empty lines but preserve spacing
-    if (!line.trim()) {
-      return <p key={idx} className="my-1">&nbsp;</p>;
-    }
-    return (
-      <p key={idx} className="my-1">
-        {parseMarkdownLinks(line)}
-      </p>
-    );
-  });
+  const cleaned = cleanEmailContent(content);
+  return (
+    <div className="whitespace-pre-wrap break-words">
+      {cleaned}
+    </div>
+  );
 }
 
 // Filter out quoted text and reply headers from draft preview
