@@ -4,84 +4,71 @@
 
 @layer base {
   :root {
-    /* Backgrounds - Light theme (neutral) */
-    --background: 0 0% 96%;             /* Light gray: #f5f5f5 */
-    --foreground: 0 0% 9%;              /* Near-black: #171717 */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
 
-    /* Cards and surfaces */
-    --card: 0 0% 100%;                  /* Pure white */
-    --card-foreground: 0 0% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
+    --popover-foreground: 0 0% 3.9%;
 
-    /* Primary - Black (professional CTA style) */
-    --primary: 0 0% 9%;                 /* Near-black: #171717 */
-    --primary-foreground: 0 0% 98%;     /* White text */
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
 
-    /* Secondary */
-    --secondary: 0 0% 96%;              /* Light gray: #f5f5f5 */
+    --secondary: 0 0% 96.1%;
     --secondary-foreground: 0 0% 9%;
 
-    /* Muted */
-    --muted: 0 0% 92%;                  /* Muted background */
-    --muted-foreground: 0 0% 45%;       /* Muted text */
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
 
-    /* Accent - Subtle hover state (neutral) */
-    --accent: 0 0% 94%;                 /* Light gray for hover */
-    --accent-foreground: 0 0% 9%;       /* Dark text */
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
 
-    /* Destructive */
-    --destructive: 357 96% 58%;         /* Red */
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
 
-    /* Status colors - documented semantic colors */
-    --success: 148 100% 32%;            /* Green: #00a544 */
-    --warning: 38 92% 50%;              /* Amber */
-    --error: 357 96% 58%;               /* Red (same as destructive) */
-    --info: 217 100% 60%;               /* Blue: #3080ff */
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
 
-    /* Borders */
-    --border: 0 0% 88%;                 /* Light border */
-    --input: 0 0% 88%;
-    --ring: 0 0% 9%;                    /* Black focus ring */
+    --radius: 0.5rem;
 
-    --radius: 0.625rem;                 /* 10px */
+    /* Status colors for app-specific UI */
+    --success: 142 76% 36%;
+    --warning: 38 92% 50%;
+    --error: 0 84.2% 60.2%;
+    --info: 221 83% 53%;
   }
 
   .dark {
-    /* Dark theme */
-    --background: 0 0% 7%;              /* Near black */
-    --foreground: 0 0% 95%;             /* Off-white text */
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
 
-    --card: 0 0% 11%;
-    --card-foreground: 0 0% 95%;
-    --popover: 0 0% 11%;
-    --popover-foreground: 0 0% 95%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
 
-    /* Primary - White button for dark mode */
-    --primary: 0 0% 98%;                /* White */
-    --primary-foreground: 0 0% 9%;      /* Black text */
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
 
-    /* Secondary */
-    --secondary: 0 0% 15%;
-    --secondary-foreground: 0 0% 95%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
 
-    /* Muted */
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 60%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
 
-    /* Accent - Subtle hover state (neutral) */
-    --accent: 0 0% 18%;                 /* Dark gray for hover */
-    --accent-foreground: 0 0% 95%;      /* Light text */
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
 
-    /* Destructive */
-    --destructive: 357 80% 50%;
-    --destructive-foreground: 0 0% 100%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
 
-    /* Borders */
-    --border: 0 0% 18%;
-    --input: 0 0% 18%;
-    --ring: 0 0% 98%;                   /* White focus ring */
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
   }
 }
 

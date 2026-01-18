@@ -10,7 +10,17 @@ import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Separator } from '@/components/ui/separator';
 import type { Thread, Message } from '@/types/email';
+
+// Get initials from name (e.g., "William Smith" -> "WS")
+function getInitials(name: string): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
 
 // Clean email content - remove raw HTML tags and convert links
 // This should be called on the ENTIRE message content before splitting by newlines
@@ -403,31 +413,36 @@ export function ThreadDetail({
           <h1 className="text-xl font-bold">{thread.subject}</h1>
 
           {/* Messages */}
-          <div className="space-y-3">
+          <div className="flex flex-col">
             {messages.map((msg, i) => (
-              <Card key={msg.id} className="shadow-sm">
-                <CardHeader className="pb-2">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">{msg.from[0]?.name || 'Unknown'}</p>
-                      <p className="text-xs text-muted-foreground">{msg.from[0]?.email}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {i === messages.length - 1 && (
-                        <Badge variant="default" className="text-xs">Latest</Badge>
-                      )}
-                      <span className="text-xs text-muted-foreground">
+              <div key={msg.id} className="flex flex-col">
+                {i > 0 && <Separator className="my-4" />}
+                <div className="flex gap-4">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback className="text-xs">
+                      {getInitials(msg.from[0]?.name || '')}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm leading-none">
+                          {msg.from[0]?.name || 'Unknown'}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {msg.from[0]?.email}
+                        </p>
+                      </div>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {formatRelativeTime(msg.date)}
                       </span>
                     </div>
+                    <div className="mt-3 text-sm leading-relaxed">
+                      {renderEmailContent(msg.conversation)}
+                    </div>
                   </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="text-sm leading-relaxed prose prose-sm max-w-none">
-                    {renderEmailContent(msg.conversation)}
-                  </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ))}
           </div>
 
