@@ -32,7 +32,11 @@ function escapeHtml(text: string): string {
 }
 
 // Helper to build Gmail-native quoted reply HTML
-function buildGmailQuotedReply(draftBody: string): string {
+// Structure based on how Gmail natively formats replies:
+// - gmail_extra: wraps the entire quote section (used by quote detection libraries)
+// - gmail_attr: marks the attribution line ("On [date] wrote:")
+// - gmail_quote: marks the quoted content blockquote
+export function buildGmailQuotedReply(draftBody: string): string {
   const lines = draftBody.split('\n');
   const replyLines: string[] = [];
   const quotedLines: string[] = [];
@@ -68,26 +72,27 @@ function buildGmailQuotedReply(draftBody: string): string {
   // Quoted content: escape HTML manually (it's original email text, not markdown)
   const escapedQuoted = quotedLines
     .map(line => escapeHtml(line) || '&nbsp;')
-    .join('<br>');
+    .join('<br>\n');
 
   // Build Gmail-native HTML structure
+  // This structure is recognized by email clients (Gmail, Superhuman, etc.) for quote collapsing
   if (quotedLines.length > 0) {
     const attributionHtml = quoteAttribution
-      ? `<div dir="ltr">${escapeHtml(quoteAttribution)} wrote:<br></div>`
+      ? `<div dir="ltr" class="gmail_attr">${escapeHtml(quoteAttribution)} wrote:<br></div>`
       : '';
 
-    return `<div>${replyHtml}</div>
-
-<div class="gmail_quote">
-  ${attributionHtml}
-  <blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex">
-    ${escapedQuoted}
-  </blockquote>
+    return `<div dir="ltr">${replyHtml}</div>
+<div class="gmail_extra"><br>
+<div class="gmail_quote">${attributionHtml}
+<blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex">
+<div dir="ltr">${escapedQuoted}</div>
+</blockquote>
+</div>
 </div>`;
   }
 
   // No quoted content, just return reply
-  return `<div>${replyHtml}</div>`;
+  return `<div dir="ltr">${replyHtml}</div>`;
 }
 
 const SaveDraftSchema = z.object({
