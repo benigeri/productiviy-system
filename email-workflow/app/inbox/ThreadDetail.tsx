@@ -22,40 +22,34 @@ function getInitials(name: string): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
-// Minimal regex patterns - only what's truly needed
+// Regex patterns for email cleanup
 const MULTIPLE_NEWLINES_REGEX = /\n{3,}/g;
 const MULTIPLE_SPACES_REGEX = /  +/g;
-const INLINE_DAY_WROTE_REGEX = /\s*On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^<]*<[^>]+>\s*wrote:\s*/gi;
-const INLINE_MONTH_WROTE_REGEX = /\s*On\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)[^w]*wrote:\s*/gi;
 const INLINE_QUOTE_REGEX = /^>.*$/gm;
 
-// HTML cleanup patterns - Nylas sometimes leaves HTML in the output
-// Match img tags including malformed/incomplete ones (may lack closing >)
-const IMG_TAG_REGEX = /<img[^>]*(?:>|\/\s*>|\s*$)/gi;
-const LINK_TAG_REGEX = /<a\s+[^>]*href=['"]([^'"]+)['"][^>]*>([^<]*)<\/a>/gi;
-const REMAINING_HTML_REGEX = /<[^>]+>/g;
-// Catch broken img tags that span lines or are incomplete
-const BROKEN_IMG_REGEX = /<img\s+[^>]*["']\s*\/?$/gim;
+// Patterns for filtering quoted text in draft previews
+const INLINE_DAY_WROTE_REGEX = /\s*On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^<]*<[^>]+>\s*wrote:\s*/gi;
+const INLINE_MONTH_WROTE_REGEX = /\s*On\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)[^w]*wrote:\s*/gi;
 
-// Minimal email content cleanup - let Nylas Clean do the heavy lifting
+// HTML cleanup patterns - including incomplete/broken tags
+const HTML_TAG_REGEX = /<[^>]*>?/g;
+
+// Signature detection - matches "--", "\--", "\\--" anywhere on a line
+// followed by typical signature content (newline then more text)
+const SIGNATURE_DELIMITER_REGEX = /\n?\\{0,2}--\s*\n/;
+
+// Minimal email content cleanup - strip signatures for quick glance
 function cleanEmailContent(text: string): string {
   let cleaned = text;
 
-  // Remove image tags (signatures, tracking pixels)
-  cleaned = cleaned.replace(IMG_TAG_REGEX, '');
-  // Also catch broken/incomplete img tags
-  cleaned = cleaned.replace(BROKEN_IMG_REGEX, '');
+  // Strip signature (everything from -- delimiter onward)
+  const sigMatch = cleaned.match(SIGNATURE_DELIMITER_REGEX);
+  if (sigMatch && sigMatch.index !== undefined) {
+    cleaned = cleaned.slice(0, sigMatch.index);
+  }
 
-  // Convert links to "text (url)" format for readability
-  cleaned = cleaned.replace(LINK_TAG_REGEX, (_, url, linkText) => {
-    if (linkText && linkText.trim()) {
-      return `${linkText.trim()} (${url})`;
-    }
-    return url;
-  });
-
-  // Remove any remaining HTML tags
-  cleaned = cleaned.replace(REMAINING_HTML_REGEX, '');
+  // Remove any HTML tags
+  cleaned = cleaned.replace(HTML_TAG_REGEX, '');
 
   // Collapse excessive blank lines (3+ newlines → 2)
   cleaned = cleaned.replace(MULTIPLE_NEWLINES_REGEX, '\n\n');
