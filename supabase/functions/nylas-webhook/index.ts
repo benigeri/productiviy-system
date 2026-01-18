@@ -312,14 +312,24 @@ export async function handleWebhook(
 if (import.meta.main) {
   // Dynamic import of braintrust to avoid issues when not available
   const braintrustModule = await import("npm:braintrust@0.0.182");
-  const { invoke } = braintrustModule;
+  const { invoke, initLogger } = braintrustModule;
+
+  const braintrustProjectName = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "";
+  const braintrustApiKey = Deno.env.get("BRAINTRUST_API_KEY") ?? "";
+
+  // Initialize Braintrust logger for tracing (required for logs to appear in dashboard)
+  if (braintrustApiKey && braintrustProjectName) {
+    initLogger({
+      projectName: braintrustProjectName,
+      apiKey: braintrustApiKey,
+      asyncFlush: false, // Required for serverless - flush synchronously
+    });
+  }
 
   Deno.serve((req) => {
     const apiKey = Deno.env.get("NYLAS_API_KEY") ?? "";
     const grantId = Deno.env.get("NYLAS_GRANT_ID") ?? "";
     const webhookSecret = Deno.env.get("NYLAS_WEBHOOK_SECRET") ?? "";
-    const braintrustProjectName = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "";
-    const braintrustApiKey = Deno.env.get("BRAINTRUST_API_KEY") ?? "";
     const classifierSlug = Deno.env.get("BRAINTRUST_CLASSIFIER_SLUG") ?? "email-classifier-v1";
 
     const client = createNylasClient(apiKey, grantId);
@@ -330,7 +340,6 @@ if (import.meta.main) {
           classifyEmail(input, {
             invoke: (params) => invoke({
               ...params,
-              // Braintrust uses BRAINTRUST_API_KEY env var automatically
             }),
             projectName: braintrustProjectName,
             classifierSlug,
