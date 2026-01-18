@@ -102,20 +102,36 @@ async function processMessageUpdate(
 
   const { idToName, nameToId } = buildFolderMaps(folders);
   const folderNames = message.folders.map((id) => idToName.get(id) ?? id);
-  const workflowLabels = getWorkflowLabels(folderNames);
 
-  // No workflow labels - nothing to do
-  if (workflowLabels.length === 0) {
-    return false;
-  }
-
-  // Archive detection: has workflow labels but no INBOX → clear all
+  // Check if this is a sent message (sent messages don't have INBOX)
+  const isSent = folderNames.includes("SENT");
   const hasInbox = folderNames.includes("INBOX");
-  if (!hasInbox) {
-    return clearWorkflowLabels(message, idToName, nameToId, deps);
+
+  // Archive detection: received message with no INBOX → clear workflow labels from ENTIRE thread
+  // This handles the case where workflow labels are on sent messages but the received message is archived
+  // We skip this check for sent messages since they never have INBOX
+  if (!isSent && !hasInbox) {
+    // Get thread to find all messages
+    const thread = await deps.getThread(message.thread_id);
+    const allMessageIds = thread.message_ids ?? [message.id];
+
+    // Get all messages except the current one (we already have it)
+    const otherMessageIds = allMessageIds.filter((id) => id !== messageId);
+    const otherMessages = await Promise.all(
+      otherMessageIds.map((id) => deps.getMessage(id)),
+    );
+    const allMessages = [message, ...otherMessages];
+
+    // Clear workflow labels from ALL messages in thread
+    const results = await Promise.all(
+      allMessages.map((msg) => clearWorkflowLabels(msg, idToName, nameToId, deps)),
+    );
+
+    return results.some((cleared) => cleared);
   }
 
   // Deduplication: multiple workflow labels → keep highest priority
+  const workflowLabels = getWorkflowLabels(folderNames);
   if (workflowLabels.length > 1) {
     const highestPriority = getHighestPriorityLabel(workflowLabels);
     if (highestPriority) {
