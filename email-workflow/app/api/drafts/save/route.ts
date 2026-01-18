@@ -61,7 +61,8 @@ function buildGmailQuotedReply(draftBody: string): string {
   }
 
   // Convert reply to HTML via markdown (handles escaping)
-  const replyHtml = marked.parse(replyLines.join('\n')) as string;
+  // breaks: true preserves single newlines (e.g., "Thanks,\nPaul")
+  const replyHtml = marked.parse(replyLines.join('\n'), { breaks: true }) as string;
 
   // Quoted content: escape HTML manually (it's original email text, not markdown)
   const escapedQuoted = quotedLines

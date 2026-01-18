@@ -85,7 +85,8 @@ export async function POST(request: Request) {
 
     // Convert markdown to HTML for proper Gmail rendering
     // marked handles HTML escaping by default - user content is their own draft
-    const htmlBody = marked.parse(draftBody) as string;
+    // breaks: true preserves single newlines (e.g., "Hi,\nThanks,\nPaul")
+    const htmlBody = marked.parse(draftBody, { breaks: true }) as string;
 
     console.log('Saving compose draft to Nylas:', {
       to: toRecipients.map((r) => r.email),
