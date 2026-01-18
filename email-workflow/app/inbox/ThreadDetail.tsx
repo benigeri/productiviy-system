@@ -407,11 +407,17 @@ export function ThreadDetail({
 
   return (
     <div className="h-full flex flex-col">
+      {/* Sticky Header */}
+      <div className="flex-none px-6 py-4 border-b bg-background">
+        <h1 className="text-xl font-bold">{thread.subject}</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {messages.length} {messages.length === 1 ? 'message' : 'messages'} in thread
+        </p>
+      </div>
+
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4 max-w-3xl mx-auto space-y-4">
-          <h1 className="text-xl font-bold">{thread.subject}</h1>
-
+        <div className="px-6 py-4">
           {/* Messages */}
           <div className="flex flex-col">
             {messages.map((msg, i) => (
@@ -448,31 +454,26 @@ export function ThreadDetail({
 
           {/* Conversation History (collapsed by default) */}
           {isLoaded && conversationMessages.length > 0 && (
-            <div className="border-t border-border pt-4">
-              <button
-                type="button"
-                onClick={() => setHistoryCollapsed(!historyCollapsed)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <span className="text-xs">{historyCollapsed ? '▶' : '▼'}</span>
-                <span>Draft iterations ({conversationMessages.length})</span>
-              </button>
-
-              {!historyCollapsed && (
-                <div className="mt-3 space-y-2 pl-4 border-l-2 border-muted">
+            <>
+              <Separator className="my-4" />
+              <details className="text-sm">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                  Draft iterations ({conversationMessages.length})
+                </summary>
+                <div className="mt-2 space-y-2 pl-4 border-l-2 border-muted">
                   {conversationMessages.map((msg, i) => (
-                    <div key={i} className="text-sm">
+                    <div key={i}>
                       <span className="text-xs text-muted-foreground">
                         {msg.role === 'user' ? 'Feedback:' : 'Draft:'}
                       </span>
-                      <p className={`mt-0.5 ${msg.role === 'user' ? 'text-muted-foreground italic' : ''}`}>
+                      <p className={msg.role === 'user' ? 'text-muted-foreground italic' : ''}>
                         {msg.content.length > 200 ? msg.content.slice(0, 200) + '...' : msg.content}
                       </p>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </details>
+            </>
           )}
 
           {/* Storage warning */}
@@ -532,93 +533,86 @@ export function ThreadDetail({
       </div>
 
       {/* Sticky Bottom Controls */}
-      <div className="border-t border-border bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        <div className="max-w-3xl mx-auto">
-          {error && (
-            <div className="p-3 bg-error/10 border border-error/20 rounded text-error text-sm mb-3">
-              {error}
-            </div>
-          )}
+      <div className="flex-none border-t bg-background px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        {error && (
+          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded text-destructive text-sm mb-3">
+            {error}
+          </div>
+        )}
 
-          {!draft ? (
-            <div className="space-y-3">
-              <div>
-                <Textarea
-                  placeholder="What should I say in the reply?"
-                  value={instructions}
-                  onChange={e => setInstructions(e.target.value)}
-                  onKeyDown={handleInstructionsKeyDown}
-                  className="resize-none text-sm"
-                  rows={2}
-                />
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  Press <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">⌘</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to generate
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={generateDraft}
-                  disabled={loading || !instructions.trim()}
-                  className="flex-1"
-                  size="lg"
-                >
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {loading ? 'Generating...' : 'Generate Draft'}
-                </Button>
-                <Button
-                  onClick={handleSkip}
-                  variant="ghost"
-                  size="lg"
-                >
-                  Skip
-                </Button>
-              </div>
+        {!draft ? (
+          <div className="space-y-3">
+            <div>
+              <Textarea
+                placeholder="What should I say in the reply?"
+                value={instructions}
+                onChange={e => setInstructions(e.target.value)}
+                onKeyDown={handleInstructionsKeyDown}
+                className="resize-none text-sm"
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Press <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">⌘</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to generate
+              </p>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div>
-                <Textarea
-                  placeholder="Need changes? Tell me what to improve..."
-                  value={feedback}
-                  onChange={e => setFeedback(e.target.value)}
-                  onKeyDown={handleFeedbackKeyDown}
-                  className="resize-none text-sm"
-                  rows={2}
-                  disabled={loading}
-                />
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  Press <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">⌘</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to regenerate
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={regenerateDraft}
-                  disabled={loading || !feedback.trim()}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Regenerate
-                </Button>
-                <Button
-                  onClick={handleSkip}
-                  disabled={saving}
-                  variant="ghost"
-                >
-                  Skip
-                </Button>
-                <Button
-                  onClick={handleApprove}
-                  disabled={saving || loading}
-                  className="flex-1"
-                >
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {saving ? 'Saving...' : 'Approve & Save'}
-                </Button>
-              </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                onClick={handleSkip}
+                variant="ghost"
+              >
+                Skip
+              </Button>
+              <Button
+                onClick={generateDraft}
+                disabled={loading || !instructions.trim()}
+              >
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {loading ? 'Generating...' : 'Generate Draft'}
+              </Button>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <Textarea
+                placeholder="Need changes? Tell me what to improve..."
+                value={feedback}
+                onChange={e => setFeedback(e.target.value)}
+                onKeyDown={handleFeedbackKeyDown}
+                className="resize-none text-sm"
+                rows={2}
+                disabled={loading}
+              />
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Press <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">⌘</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to regenerate
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                onClick={handleSkip}
+                disabled={saving}
+                variant="ghost"
+              >
+                Skip
+              </Button>
+              <Button
+                onClick={regenerateDraft}
+                disabled={loading || !feedback.trim()}
+                variant="outline"
+              >
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Regenerate
+              </Button>
+              <Button
+                onClick={handleApprove}
+                disabled={saving || loading}
+              >
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {saving ? 'Saving...' : 'Approve & Save'}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
