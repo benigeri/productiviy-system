@@ -166,15 +166,19 @@ async function processMessageUpdate(
   const isSent = folderNames.includes("SENT");
   const hasInbox = folderNames.includes("INBOX");
 
+  console.log(`[processMessageUpdate] messageId=${messageId} isSent=${isSent} hasInbox=${hasInbox} folders=${JSON.stringify(folderNames)}`);
+
   // Archive detection: received message with no INBOX → clear workflow labels from ENTIRE thread
   // This handles the case where workflow labels are on sent messages but the received message is archived
   // We skip this check for sent messages since they never have INBOX
   if (!isSent && !hasInbox) {
     // Skip if this thread was recently processed (dedup concurrent webhooks)
     if (wasRecentlyProcessed(message.thread_id)) {
+      console.log(`[processMessageUpdate] Skipping - thread ${message.thread_id} recently processed (dedup)`);
       return false;
     }
 
+    console.log(`[processMessageUpdate] Archive detected - clearing workflow labels from thread ${message.thread_id}`);
     const thread = await deps.getThread(message.thread_id);
     const allMessages = await fetchThreadMessages(message, thread, deps.getMessage);
 
@@ -183,6 +187,8 @@ async function processMessageUpdate(
       allMessages.map((msg) => clearWorkflowLabels(msg, idToName, nameToId, deps)),
     );
 
+    const cleared = results.filter(Boolean).length;
+    console.log(`[processMessageUpdate] Cleared workflow labels from ${cleared}/${allMessages.length} messages`);
     return results.some((cleared) => cleared);
   }
 
