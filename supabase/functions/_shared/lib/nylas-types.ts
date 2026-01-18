@@ -96,6 +96,15 @@ export type WorkflowLabel =
   | typeof WORKFLOW_LABELS.REVIEW
   | typeof WORKFLOW_LABELS.DRAFTED;
 
+// Gmail system labels that cannot be modified via API
+// These are automatically managed by Gmail and will cause 400 errors if included in folder updates
+export const READONLY_SYSTEM_LABELS = new Set([
+  "SENT",
+  "DRAFT",
+  "TRASH",
+  "SPAM",
+]);
+
 // AI labels for automatic classification (NOT mutually exclusive)
 export const AI_LABELS = {
   AUTO_REPLY: "ai_auto_reply",

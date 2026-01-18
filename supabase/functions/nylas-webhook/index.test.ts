@@ -584,11 +584,8 @@ Deno.test("handleWebhook - clears workflow labels from ALL thread messages when 
     false,
     "wf_drafted should be removed",
   );
-  assertEquals(
-    sentMsgFolders.includes("SENT"),
-    true,
-    "SENT folder should remain",
-  );
+  // Note: SENT is a read-only system label and is filtered out of update requests
+  // Gmail maintains SENT automatically - we don't need to include it
 });
 
 // ============================================================================
@@ -750,7 +747,8 @@ Deno.test("handleWebhook - clears workflow labels from sent message itself (draf
     updatedMessages[0].folders.includes("Label_3309485003314594938"),
     false,
   );
-  assertEquals(updatedMessages[0].folders.includes("SENT"), true);
+  // Note: SENT is a read-only system label and is filtered out of update requests
+  // Gmail maintains SENT automatically - we don't need to include it
 });
 
 // ============================================================================

@@ -11,6 +11,7 @@ import type {
   NylasThread,
   NylasWebhookPayload,
 } from "../_shared/lib/nylas-types.ts";
+import { READONLY_SYSTEM_LABELS } from "../_shared/lib/nylas-types.ts";
 import {
   getHighestPriorityLabel,
   getWorkflowLabels,
@@ -154,7 +155,15 @@ async function clearWorkflowLabels(
 
   // Remove all workflow labels
   const newFolderNames = removeWorkflowLabels(folderNames);
-  const newFolderIds = newFolderNames.map((name) => nameToId.get(name) ?? name);
+
+  // Filter out read-only system labels (SENT, DRAFT, TRASH, SPAM)
+  // These are managed by Gmail and cannot be set via API
+  const writableFolderNames = newFolderNames.filter(
+    (name) => !READONLY_SYSTEM_LABELS.has(name),
+  );
+  const newFolderIds = writableFolderNames.map((name) =>
+    nameToId.get(name) ?? name
+  );
 
   await deps.updateMessageFolders(message.id, newFolderIds);
   return true;
@@ -253,7 +262,11 @@ async function processMessageUpdate(
     const highestPriority = getHighestPriorityLabel(workflowLabels);
     if (highestPriority) {
       const newFolderNames = removeWorkflowLabels(folderNames, highestPriority);
-      const newFolderIds = newFolderNames.map((name) =>
+      // Filter out read-only system labels (SENT, DRAFT, TRASH, SPAM)
+      const writableFolderNames = newFolderNames.filter(
+        (name) => !READONLY_SYSTEM_LABELS.has(name),
+      );
+      const newFolderIds = writableFolderNames.map((name) =>
         nameToId.get(name) ?? name
       );
       await deps.updateMessageFolders(messageId, newFolderIds);
