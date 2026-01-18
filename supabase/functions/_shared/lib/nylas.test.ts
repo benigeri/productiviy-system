@@ -81,7 +81,7 @@ Deno.test("getMessage - fetches message by ID", async () => {
     from: [{ email: "sender@example.com", name: "Sender" }],
     to: [{ email: "recipient@example.com" }],
     date: 1704067200,
-    folders: ["INBOX", "to-respond-paul"],
+    folders: ["INBOX", "wf_respond"],
     snippet: "Message preview...",
   };
 
@@ -107,7 +107,7 @@ Deno.test("getMessage - fetches message by ID", async () => {
 
   assertEquals(result.id, "msg-123");
   assertEquals(result.subject, "Test Subject");
-  assertEquals(result.folders, ["INBOX", "to-respond-paul"]);
+  assertEquals(result.folders, ["INBOX", "wf_respond"]);
 });
 
 Deno.test("getMessage - throws on API error", async () => {
@@ -163,8 +163,8 @@ Deno.test("getThread - fetches thread by ID", async () => {
 Deno.test("getFolders - fetches all folders", async () => {
   const mockFolders: NylasFolder[] = [
     { id: "folder-1", grant_id: "grant-456", name: "INBOX" },
-    { id: "folder-2", grant_id: "grant-456", name: "to-respond-paul" },
-    { id: "folder-3", grant_id: "grant-456", name: "drafted" },
+    { id: "folder-2", grant_id: "grant-456", name: "wf_respond" },
+    { id: "folder-3", grant_id: "grant-456", name: "wf_review" },
   ];
 
   const mockFetch = (input: RequestInfo | URL) => {
@@ -181,7 +181,7 @@ Deno.test("getFolders - fetches all folders", async () => {
   const result = await client.getFolders();
 
   assertEquals(result.length, 3);
-  assertEquals(result[1].name, "to-respond-paul");
+  assertEquals(result[1].name, "wf_respond");
 });
 
 Deno.test("updateMessageFolders - updates message folders", async () => {
@@ -194,7 +194,7 @@ Deno.test("updateMessageFolders - updates message folders", async () => {
     assertEquals(init?.method, "PUT");
 
     const body = JSON.parse(init?.body as string);
-    assertEquals(body.folders, ["INBOX", "to-respond-paul"]);
+    assertEquals(body.folders, ["INBOX", "wf_respond"]);
 
     return Promise.resolve({
       ok: true,
@@ -208,7 +208,7 @@ Deno.test("updateMessageFolders - updates message folders", async () => {
             from: [{ email: "test@example.com" }],
             to: [{ email: "recipient@example.com" }],
             date: 1704067200,
-            folders: ["INBOX", "to-respond-paul"],
+            folders: ["INBOX", "wf_respond"],
           },
         }),
     } as Response);
@@ -217,10 +217,10 @@ Deno.test("updateMessageFolders - updates message folders", async () => {
   const client = createNylasClient("test-api-key", "grant-456", mockFetch);
   const result = await client.updateMessageFolders("msg-123", [
     "INBOX",
-    "to-respond-paul",
+    "wf_respond",
   ]);
 
-  assertEquals(result.folders, ["INBOX", "to-respond-paul"]);
+  assertEquals(result.folders, ["INBOX", "wf_respond"]);
 });
 
 Deno.test("updateMessageFolders - throws on API error", async () => {

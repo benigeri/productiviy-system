@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   getLabelDrafted,
-  getLabelToRespondPaul,
+  getLabelRespond,
   validateGmailLabels,
 } from './gmail-labels';
 
@@ -11,7 +11,7 @@ describe('gmail-labels', () => {
   beforeEach(() => {
     // Clear relevant env vars before each test
     delete process.env.GMAIL_LABEL_DRAFTED;
-    delete process.env.GMAIL_LABEL_TO_RESPOND_PAUL;
+    delete process.env.GMAIL_LABEL_RESPOND;
   });
 
   afterEach(() => {
@@ -39,22 +39,22 @@ describe('gmail-labels', () => {
     });
   });
 
-  describe('getLabelToRespondPaul', () => {
-    it('returns the label ID when GMAIL_LABEL_TO_RESPOND_PAUL is set', () => {
-      process.env.GMAIL_LABEL_TO_RESPOND_PAUL = 'Label_139';
-      expect(getLabelToRespondPaul()).toBe('Label_139');
+  describe('getLabelRespond', () => {
+    it('returns the label ID when GMAIL_LABEL_RESPOND is set', () => {
+      process.env.GMAIL_LABEL_RESPOND = 'Label_139';
+      expect(getLabelRespond()).toBe('Label_139');
     });
 
-    it('throws when GMAIL_LABEL_TO_RESPOND_PAUL is not set', () => {
-      expect(() => getLabelToRespondPaul()).toThrow(
-        'GMAIL_LABEL_TO_RESPOND_PAUL environment variable is required'
+    it('throws when GMAIL_LABEL_RESPOND is not set', () => {
+      expect(() => getLabelRespond()).toThrow(
+        'GMAIL_LABEL_RESPOND environment variable is required'
       );
     });
 
-    it('throws when GMAIL_LABEL_TO_RESPOND_PAUL is empty string', () => {
-      process.env.GMAIL_LABEL_TO_RESPOND_PAUL = '';
-      expect(() => getLabelToRespondPaul()).toThrow(
-        'GMAIL_LABEL_TO_RESPOND_PAUL environment variable is required'
+    it('throws when GMAIL_LABEL_RESPOND is empty string', () => {
+      process.env.GMAIL_LABEL_RESPOND = '';
+      expect(() => getLabelRespond()).toThrow(
+        'GMAIL_LABEL_RESPOND environment variable is required'
       );
     });
   });
@@ -62,21 +62,21 @@ describe('gmail-labels', () => {
   describe('validateGmailLabels', () => {
     it('succeeds when all required labels are set', () => {
       process.env.GMAIL_LABEL_DRAFTED = 'Label_215';
-      process.env.GMAIL_LABEL_TO_RESPOND_PAUL = 'Label_139';
+      process.env.GMAIL_LABEL_RESPOND = 'Label_139';
       expect(() => validateGmailLabels()).not.toThrow();
     });
 
     it('throws when GMAIL_LABEL_DRAFTED is missing', () => {
-      process.env.GMAIL_LABEL_TO_RESPOND_PAUL = 'Label_139';
+      process.env.GMAIL_LABEL_RESPOND = 'Label_139';
       expect(() => validateGmailLabels()).toThrow(
         'GMAIL_LABEL_DRAFTED environment variable is required'
       );
     });
 
-    it('throws when GMAIL_LABEL_TO_RESPOND_PAUL is missing', () => {
+    it('throws when GMAIL_LABEL_RESPOND is missing', () => {
       process.env.GMAIL_LABEL_DRAFTED = 'Label_215';
       expect(() => validateGmailLabels()).toThrow(
-        'GMAIL_LABEL_TO_RESPOND_PAUL environment variable is required'
+        'GMAIL_LABEL_RESPOND environment variable is required'
       );
     });
 

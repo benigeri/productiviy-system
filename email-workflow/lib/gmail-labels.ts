@@ -18,22 +18,22 @@ export function getLabelDrafted(): string {
   if (!labelId) {
     throw new Error(
       'GMAIL_LABEL_DRAFTED environment variable is required. ' +
-        'This should be the Gmail label ID for "drafted" emails (e.g., Label_215).'
+        'This should be the Gmail label ID for "wf_drafted" emails (e.g., Label_215).'
     );
   }
   return labelId;
 }
 
 /**
- * Label for emails that need a response from Paul.
+ * Label for emails that need a response.
  * In Gmail, this is a filter-applied label for prioritization.
  */
-export function getLabelToRespondPaul(): string {
-  const labelId = process.env.GMAIL_LABEL_TO_RESPOND_PAUL;
+export function getLabelRespond(): string {
+  const labelId = process.env.GMAIL_LABEL_RESPOND;
   if (!labelId) {
     throw new Error(
-      'GMAIL_LABEL_TO_RESPOND_PAUL environment variable is required. ' +
-        'This should be the Gmail label ID for "to-respond-paul" emails (e.g., Label_139).'
+      'GMAIL_LABEL_RESPOND environment variable is required. ' +
+        'This should be the Gmail label ID for "wf_respond" emails (e.g., Label_139).'
     );
   }
   return labelId;
@@ -45,5 +45,5 @@ export function getLabelToRespondPaul(): string {
  */
 export function validateGmailLabels(): void {
   getLabelDrafted();
-  getLabelToRespondPaul();
+  getLabelRespond();
 }

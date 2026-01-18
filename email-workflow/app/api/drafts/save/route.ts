@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import {
   getLabelDrafted,
-  getLabelToRespondPaul,
+  getLabelRespond,
 } from '@/lib/gmail-labels';
 
 // Type definitions for Nylas API responses
@@ -210,7 +210,7 @@ export async function POST(request: Request) {
                 body: JSON.stringify({
                   threadId,
                   addLabels: [getLabelDrafted()],
-                  removeLabels: [getLabelToRespondPaul()],
+                  removeLabels: [getLabelRespond()],
                 }),
               }
             );
@@ -263,7 +263,7 @@ export async function POST(request: Request) {
       draftId: draft.data.id,
       warning: labelUpdateSuccess
         ? undefined
-        : 'Draft saved but labels could not be updated. Please manually remove "to-respond-paul" label.',
+        : 'Draft saved but labels could not be updated. Please manually remove "wf_respond" label.',
     });
   } catch (error) {
     console.error('Draft save error:', {
