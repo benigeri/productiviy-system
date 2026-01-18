@@ -81,13 +81,13 @@ export interface NylasWebhookPayload {
   };
 }
 
-// Workflow labels for email triage
+// Workflow labels for email triage (mutually exclusive states)
 export const WORKFLOW_LABELS = {
   RESPOND: "wf_respond",
   REVIEW: "wf_review",
   DRAFTED: "wf_drafted",
-  // Priority order: higher index = lower priority
-  PRIORITY_ORDER: ["wf_respond", "wf_review", "wf_drafted"] as const,
+  // All workflow labels (used for detection, no priority)
+  ALL: ["wf_respond", "wf_review", "wf_drafted"] as const,
 } as const;
 
 // Type for workflow label values
@@ -95,6 +95,15 @@ export type WorkflowLabel =
   | typeof WORKFLOW_LABELS.RESPOND
   | typeof WORKFLOW_LABELS.REVIEW
   | typeof WORKFLOW_LABELS.DRAFTED;
+
+// Gmail system labels that cannot be modified via API
+// These are automatically managed by Gmail and will cause 400 errors if included in folder updates
+export const READONLY_SYSTEM_LABELS = new Set([
+  "SENT",
+  "DRAFT",
+  "TRASH",
+  "SPAM",
+]);
 
 // AI labels for automatic classification (NOT mutually exclusive)
 export const AI_LABELS = {
