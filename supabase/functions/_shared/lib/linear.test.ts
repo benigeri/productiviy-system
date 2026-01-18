@@ -1,8 +1,8 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import {
+  BACKLOG_STATE_ID,
   createTriageIssue,
   FEEDBACK_PROJECT_ID,
-  BACKLOG_STATE_ID,
 } from "./linear.ts";
 
 // ============================================================================
@@ -20,7 +20,10 @@ Deno.test("createTriageIssue - creates issue in triage", async () => {
       const body = JSON.parse(init?.body as string);
       assertEquals(body.query.includes("issueCreate"), true);
       assertEquals(body.variables.input.title, "Homepage redesign task");
-      assertEquals(body.variables.input.teamId, "418bd6ee-1f6d-47cc-87f2-88b7371b743a");
+      assertEquals(
+        body.variables.input.teamId,
+        "418bd6ee-1f6d-47cc-87f2-88b7371b743a",
+      );
 
       return Promise.resolve({
         ok: true,
@@ -45,7 +48,7 @@ Deno.test("createTriageIssue - creates issue in triage", async () => {
   const result = await createTriageIssue(
     "Homepage redesign task",
     "test_api_key",
-    mockFetch
+    mockFetch,
   );
 
   assertEquals(result.id, "issue-123");
@@ -83,10 +86,13 @@ Deno.test("createTriageIssue - includes description when provided", async () => 
     "Fix login bug",
     "test_api_key",
     mockFetch,
-    "Users cannot log in with OAuth"
+    "Users cannot log in with OAuth",
   );
 
-  assertEquals(capturedBody!.variables.input.description, "Users cannot log in with OAuth");
+  assertEquals(
+    capturedBody!.variables.input.description,
+    "Users cannot log in with OAuth",
+  );
 });
 
 Deno.test("createTriageIssue - throws on API failure", async () => {
@@ -107,7 +113,7 @@ Deno.test("createTriageIssue - throws on API failure", async () => {
   await assertRejects(
     () => createTriageIssue("Test issue", "test_api_key", mockFetch),
     Error,
-    "Failed to create Linear issue"
+    "Failed to create Linear issue",
   );
 });
 
@@ -122,7 +128,7 @@ Deno.test("createTriageIssue - throws on HTTP error", async () => {
   await assertRejects(
     () => createTriageIssue("Test issue", "bad_api_key", mockFetch),
     Error,
-    "Linear API error: 401 Unauthorized"
+    "Linear API error: 401 Unauthorized",
   );
 });
 
@@ -132,7 +138,7 @@ Deno.test("createTriageIssue - throws on network error", async () => {
   await assertRejects(
     () => createTriageIssue("Test issue", "test_api_key", mockFetch),
     Error,
-    "Network error"
+    "Network error",
   );
 });
 
@@ -149,7 +155,7 @@ Deno.test("createTriageIssue - throws on GraphQL errors", async () => {
   await assertRejects(
     () => createTriageIssue("Test issue", "test_api_key", mockFetch),
     Error,
-    "Linear GraphQL error: Team not found"
+    "Linear GraphQL error: Team not found",
   );
 });
 
@@ -167,7 +173,7 @@ Deno.test("createTriageIssue - throws on argument validation error (e.g., invali
   await assertRejects(
     () => createTriageIssue("Test issue", "test_api_key", mockFetch),
     Error,
-    "Linear GraphQL error: Argument Validation Error"
+    "Linear GraphQL error: Argument Validation Error",
   );
 });
 
@@ -207,7 +213,7 @@ Deno.test("createTriageIssue - includes projectId when provided in options", asy
     mockFetch,
     "User feedback content",
     undefined, // use default teamId
-    { projectId: FEEDBACK_PROJECT_ID }
+    { projectId: FEEDBACK_PROJECT_ID },
   );
 
   assertEquals(capturedBody!.variables.input.projectId, FEEDBACK_PROJECT_ID);
@@ -246,7 +252,7 @@ Deno.test("createTriageIssue - includes stateId when provided in options", async
     mockFetch,
     undefined,
     undefined,
-    { stateId: BACKLOG_STATE_ID }
+    { stateId: BACKLOG_STATE_ID },
   );
 
   assertEquals(capturedBody!.variables.input.stateId, BACKLOG_STATE_ID);
@@ -285,7 +291,7 @@ Deno.test("createTriageIssue - includes both projectId and stateId for feedback 
     mockFetch,
     "Great product!",
     undefined,
-    { projectId: FEEDBACK_PROJECT_ID, stateId: BACKLOG_STATE_ID }
+    { projectId: FEEDBACK_PROJECT_ID, stateId: BACKLOG_STATE_ID },
   );
 
   assertEquals(capturedBody!.variables.input.projectId, FEEDBACK_PROJECT_ID);
@@ -322,7 +328,7 @@ Deno.test("createTriageIssue - omits projectId and stateId when options is undef
     "Regular issue",
     "test_api_key",
     mockFetch,
-    "Description"
+    "Description",
   );
 
   // Verify projectId and stateId are not in the request

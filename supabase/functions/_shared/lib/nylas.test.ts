@@ -169,7 +169,7 @@ Deno.test("getFolders - fetches all folders", async () => {
 
   const mockFetch = (input: RequestInfo | URL) => {
     const url = input.toString();
-    assertEquals(url, "https://api.us.nylas.com/v3/grants/grant-456/folders");
+    assertEquals(url, "https://api.us.nylas.com/v3/grants/grant-456/folders?limit=200");
 
     return Promise.resolve({
       ok: true,

@@ -4,15 +4,15 @@ import {
   type IssueCreateOptions,
 } from "../_shared/lib/linear.ts";
 import {
-  captureToLinear,
   type CaptureDeps,
   type CaptureResult,
+  captureToLinear,
 } from "../_shared/lib/capture.ts";
 import type { CreateIssueResponse, LinearIssue } from "../_shared/lib/types.ts";
 import {
-  jsonResponseWithCors,
-  errorResponseWithCors,
   type ErrorCode,
+  errorResponseWithCors,
+  jsonResponseWithCors,
 } from "../_shared/lib/http.ts";
 
 /**
@@ -31,7 +31,8 @@ export interface CreateIssueDeps {
 function corsHeaders(): HeadersInit {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
   };
 }
 
@@ -57,19 +58,37 @@ export async function handleCreateIssue(
   let effectiveDeps = deps;
   if (!effectiveDeps) {
     const braintrustKey = Deno.env.get("BRAINTRUST_API_KEY");
-    const braintrustProjectId = Deno.env.get("BRAINTRUST_PROJECT_ID") ?? "183dc023-466f-4dd9-8a33-ccfdf798a0e5";
-    const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ?? "capture-cleanup";
+    const braintrustProjectId = Deno.env.get("BRAINTRUST_PROJECT_ID") ??
+      "183dc023-466f-4dd9-8a33-ccfdf798a0e5";
+    const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ??
+      "capture-cleanup";
     const linearKey = Deno.env.get("LINEAR_API_KEY");
 
     if (!braintrustKey || !linearKey) {
-      return errorResponseWithCors("Server configuration error", "CONFIG_ERROR", 500);
+      return errorResponseWithCors(
+        "Server configuration error",
+        "CONFIG_ERROR",
+        500,
+      );
     }
 
     effectiveDeps = {
       processCapture: (text) =>
-        processCaptureImpl(text, braintrustKey, braintrustProjectId, braintrustSlug),
+        processCaptureImpl(
+          text,
+          braintrustKey,
+          braintrustProjectId,
+          braintrustSlug,
+        ),
       createIssue: (title, description, options) =>
-        createTriageIssueImpl(title, linearKey, undefined, description, undefined, options),
+        createTriageIssueImpl(
+          title,
+          linearKey,
+          undefined,
+          description,
+          undefined,
+          options,
+        ),
     };
   }
 
@@ -77,7 +96,11 @@ export async function handleCreateIssue(
     const body: CreateIssueRequest = await request.json();
 
     if (!body.text || typeof body.text !== "string") {
-      return errorResponseWithCors("Missing or invalid 'text' field", "MISSING_TEXT", 400);
+      return errorResponseWithCors(
+        "Missing or invalid 'text' field",
+        "MISSING_TEXT",
+        400,
+      );
     }
 
     const trimmedText = body.text.trim();

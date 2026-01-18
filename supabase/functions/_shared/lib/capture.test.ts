@@ -5,9 +5,9 @@ import {
   captureToLinear,
 } from "./capture.ts";
 import {
-  type IssueCreateOptions,
-  FEEDBACK_PROJECT_ID,
   BACKLOG_STATE_ID,
+  FEEDBACK_PROJECT_ID,
+  type IssueCreateOptions,
 } from "./linear.ts";
 
 function createMockDeps(overrides: Partial<CaptureDeps> = {}): CaptureDeps {
@@ -171,7 +171,10 @@ Deno.test("captureToLinear - routes feedback to Feedback project in Backlog stat
     },
   });
 
-  const result = await captureToLinear("// fb - John Doe - Great product!", deps);
+  const result = await captureToLinear(
+    "// fb - John Doe - Great product!",
+    deps,
+  );
 
   assertEquals(capturedOptions?.projectId, FEEDBACK_PROJECT_ID);
   assertEquals(capturedOptions?.stateId, BACKLOG_STATE_ID);
@@ -179,7 +182,9 @@ Deno.test("captureToLinear - routes feedback to Feedback project in Backlog stat
 });
 
 Deno.test("captureToLinear - regular items do not get routing options", async () => {
-  let capturedOptions: IssueCreateOptions | undefined = { projectId: "should-be-undefined" };
+  let capturedOptions: IssueCreateOptions | undefined = {
+    projectId: "should-be-undefined",
+  };
 
   const deps = createMockDeps({
     processCapture: () =>
@@ -211,7 +216,8 @@ Deno.test("captureToLinear - feedback with description routes correctly", async 
   const deps = createMockDeps({
     processCapture: () =>
       Promise.resolve({
-        cleanedContent: "Customer Feedback\n\nThe product is amazing, keep up the good work!",
+        cleanedContent:
+          "Customer Feedback\n\nThe product is amazing, keep up the good work!",
         isFeedback: true,
       }),
     createIssue: (title, description, options) => {
@@ -229,7 +235,10 @@ Deno.test("captureToLinear - feedback with description routes correctly", async 
   await captureToLinear("// fb - Customer Feedback...", deps);
 
   assertEquals(capturedTitle, "Customer Feedback");
-  assertEquals(capturedDescription, "The product is amazing, keep up the good work!");
+  assertEquals(
+    capturedDescription,
+    "The product is amazing, keep up the good work!",
+  );
   assertEquals(capturedOptions?.projectId, FEEDBACK_PROJECT_ID);
   assertEquals(capturedOptions?.stateId, BACKLOG_STATE_ID);
 });

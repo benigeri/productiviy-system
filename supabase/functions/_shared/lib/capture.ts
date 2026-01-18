@@ -1,9 +1,9 @@
 import type { LinearIssue } from "./types.ts";
 import { parseIssueContent } from "./parse.ts";
 import {
-  type IssueCreateOptions,
-  FEEDBACK_PROJECT_ID,
   BACKLOG_STATE_ID,
+  FEEDBACK_PROJECT_ID,
+  type IssueCreateOptions,
 } from "./linear.ts";
 
 /**

@@ -1,8 +1,8 @@
 // Supabase edge runtime types (only needed for Deno.serve type hints)
 // @ts-ignore: Types only available in Supabase Edge Runtime
 import {
-  parseWebhookUpdate,
   getFileUrl as getFileUrlImpl,
+  parseWebhookUpdate,
   reactToMessage as reactToMessageImpl,
   validateWebhookSecret,
   type WebhookUpdate,
@@ -14,12 +14,16 @@ import {
   type IssueCreateOptions,
 } from "../_shared/lib/linear.ts";
 import {
-  captureToLinear,
   type CaptureDeps,
   type CaptureResult,
+  captureToLinear,
 } from "../_shared/lib/capture.ts";
 import type { LinearIssue } from "../_shared/lib/types.ts";
-import { jsonResponse, errorResponse, type ErrorCode } from "../_shared/lib/http.ts";
+import {
+  type ErrorCode,
+  errorResponse,
+  jsonResponse,
+} from "../_shared/lib/http.ts";
 
 /**
  * Dependencies for the Telegram webhook handler.
@@ -35,12 +39,16 @@ export interface WebhookDeps {
     description?: string,
     options?: IssueCreateOptions,
   ) => Promise<LinearIssue>;
-  reactToMessage: (chatId: number, messageId: number, emoji: string) => Promise<void>;
+  reactToMessage: (
+    chatId: number,
+    messageId: number,
+    emoji: string,
+  ) => Promise<void>;
 }
 
 export async function handleWebhook(
   request: Request,
-  deps: WebhookDeps
+  deps: WebhookDeps,
 ): Promise<Response> {
   // Validate webhook secret
   if (!validateWebhookSecret(request.headers, deps.webhookSecret)) {
@@ -83,7 +91,10 @@ export async function handleWebhook(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
 
-    if (message === "Unsupported message type" || message === "No message in update") {
+    if (
+      message === "Unsupported message type" ||
+      message === "No message in update"
+    ) {
       return errorResponse(message, "INVALID_PAYLOAD", 400);
     }
 
@@ -109,8 +120,10 @@ if (import.meta.main) {
     const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
     const deepgramKey = Deno.env.get("DEEPGRAM_API_KEY") ?? "";
     const braintrustKey = Deno.env.get("BRAINTRUST_API_KEY") ?? "";
-    const braintrustProject = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "2026_01 Email Flow";
-    const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ?? "capture-cleanup";
+    const braintrustProject = Deno.env.get("BRAINTRUST_PROJECT_NAME") ??
+      "2026_01 Email Flow";
+    const braintrustSlug = Deno.env.get("BRAINTRUST_CAPTURE_SLUG") ??
+      "capture-cleanup";
     const linearKey = Deno.env.get("LINEAR_API_KEY") ?? "";
 
     // Create deps with API keys pre-bound
@@ -119,9 +132,21 @@ if (import.meta.main) {
       getFileUrl: (fileId) => getFileUrlImpl(fileId, botToken),
       transcribeAudio: (url) => transcribeAudioImpl(url, deepgramKey),
       processCapture: (text) =>
-        processCaptureImpl(text, braintrustKey, braintrustProject, braintrustSlug),
+        processCaptureImpl(
+          text,
+          braintrustKey,
+          braintrustProject,
+          braintrustSlug,
+        ),
       createIssue: (title, description, options) =>
-        createTriageIssueImpl(title, linearKey, undefined, description, undefined, options),
+        createTriageIssueImpl(
+          title,
+          linearKey,
+          undefined,
+          description,
+          undefined,
+          options,
+        ),
       reactToMessage: (chatId, messageId, emoji) =>
         reactToMessageImpl(chatId, messageId, emoji, botToken),
     };

@@ -13,10 +13,15 @@ Deno.test("parseIssueContent - extracts title from single line", () => {
 });
 
 Deno.test("parseIssueContent - extracts title and description from multiline", () => {
-  const result = parseIssueContent("Fix the bug\nThis is a description\nWith multiple lines");
+  const result = parseIssueContent(
+    "Fix the bug\nThis is a description\nWith multiple lines",
+  );
 
   assertEquals(result.title, "Fix the bug");
-  assertEquals(result.description, "This is a description\nWith multiple lines");
+  assertEquals(
+    result.description,
+    "This is a description\nWith multiple lines",
+  );
 });
 
 Deno.test("parseIssueContent - trims whitespace from title", () => {
@@ -40,7 +45,9 @@ Deno.test("parseIssueContent - handles empty description lines", () => {
 });
 
 Deno.test("parseIssueContent - preserves prefix tags", () => {
-  const result = parseIssueContent("// fb - ethan - Qualification questions\nAsk about team size\nAsk about budget");
+  const result = parseIssueContent(
+    "// fb - ethan - Qualification questions\nAsk about team size\nAsk about budget",
+  );
 
   assertEquals(result.title, "// fb - ethan - Qualification questions");
   assertEquals(result.description, "Ask about team size\nAsk about budget");

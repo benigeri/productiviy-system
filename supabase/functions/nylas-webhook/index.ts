@@ -20,11 +20,11 @@ import {
   createNylasClient,
   verifyNylasSignature,
 } from "../_shared/lib/nylas.ts";
-import { jsonResponse, errorResponse } from "../_shared/lib/http.ts";
+import { errorResponse, jsonResponse } from "../_shared/lib/http.ts";
 import {
-  classifyEmail,
   type ClassifierInput,
   type ClassifierResult,
+  classifyEmail,
 } from "../_shared/lib/classifier.ts";
 
 /**
@@ -132,24 +132,41 @@ async function processMessageUpdate(
 }
 
 /**
- * Build classifier input from a message and its clean content.
+ * Build classifier input from a message with thread context.
+ * Uses clean conversation text from last 5 messages for 90%+ token savings.
  */
 function buildClassifierInput(
   message: NylasMessage,
-  cleanBody: string,
+  threadContext: {
+    messages: Array<{ from: string; date: string; content: string }>;
+    isReply: boolean;
+    threadLength: number;
+  },
 ): ClassifierInput {
+  // Build combined body from thread messages
+  const bodyParts = threadContext.messages.map((m, i) =>
+    `--- Message ${i + 1} (from: ${m.from}, ${m.date}) ---\n${m.content}`
+  );
+  const combinedBody = bodyParts.join("\n\n");
+
   return {
     subject: message.subject ?? "",
     from: message.from?.map((p) => p.email).join(", ") ?? "",
     to: message.to?.map((p) => p.email).join(", ") ?? "",
     cc: message.cc?.map((p) => p.email).join(", ") ?? "",
     date: new Date(message.date * 1000).toISOString().split("T")[0],
-    body: cleanBody,
+    is_reply: String(threadContext.isReply),
+    thread_length: String(threadContext.threadLength),
+    has_attachments: String((message.attachments?.length ?? 0) > 0),
+    attachment_types:
+      message.attachments?.map((a) => a.content_type).join(", ") ?? "",
+    body: combinedBody,
   };
 }
 
 /**
  * Process a received email for classification.
+ * Fetches thread context (last 5 messages) and uses clean conversation text.
  * Calls the classifier and applies ai_* labels to the message.
  */
 async function processReceivedMessage(
@@ -165,15 +182,44 @@ async function processReceivedMessage(
   const { idToName, nameToId } = buildFolderMaps(folders);
 
   try {
-    // Get clean content for classification
-    const cleanMessages = await deps.getCleanMessages([message.id]);
-    const cleanBody = cleanMessages[0]?.body ?? message.snippet ?? "";
+    // Get thread to find all messages
+    const thread = await deps.getThread(message.thread_id);
+    const threadMsgIds = thread.message_ids ?? [message.id];
+    const threadLength = threadMsgIds.length;
 
-    // Build input and classify
-    const input = buildClassifierInput(message, cleanBody);
+    // Get last 5 messages from thread for context
+    const lastMsgIds = threadMsgIds.slice(-5);
+
+    // Clean all thread messages (uses conversation field for clean text)
+    const cleanMessages = await deps.getCleanMessages(lastMsgIds);
+
+    // Get message details for each (need sender info)
+    const msgDetails = await Promise.all(
+      lastMsgIds.map((id) => id === message.id ? message : deps.getMessage(id)),
+    );
+
+    // Build thread context using conversation field (clean text, no HTML)
+    const threadMessages = cleanMessages.map((cleaned, i) => ({
+      from: msgDetails[i]?.from?.[0]?.email ?? "unknown",
+      date:
+        new Date((msgDetails[i]?.date ?? 0) * 1000).toISOString().split("T")[0],
+      content: cleaned.conversation ?? cleaned.body ?? "(no content)",
+    }));
+
+    // Determine if this is a reply (not the first message in thread)
+    const isReply = threadLength > 1 && threadMsgIds[0] !== message.id;
+
+    // Build input with thread context and classify
+    const input = buildClassifierInput(message, {
+      messages: threadMessages,
+      isReply,
+      threadLength,
+    });
     const result = await deps.classify(input);
 
-    console.log(`Classification result for ${message.id}: ${JSON.stringify(result)}`);
+    console.log(
+      `Classification result for ${message.id}: ${JSON.stringify(result)}`,
+    );
 
     // Skip if no labels to apply
     if (result.labels.length === 0) {
@@ -247,14 +293,16 @@ async function processMessageCreated(
   // Fetch all thread messages in parallel (reuse already-fetched message)
   const otherMessageIds = thread.message_ids.filter((id) => id !== messageId);
   const otherMessages = await Promise.all(
-    otherMessageIds.map((id) => deps.getMessage(id))
+    otherMessageIds.map((id) => deps.getMessage(id)),
   );
   const allMessages = [message, ...otherMessages];
 
   // Clear workflow labels from ALL messages in thread (including the sent one)
   // This handles the case where a draft with "wf_drafted" label becomes a sent message
   const results = await Promise.all(
-    allMessages.map((msg) => clearWorkflowLabels(msg, idToName, nameToId, deps))
+    allMessages.map((msg) =>
+      clearWorkflowLabels(msg, idToName, nameToId, deps)
+    ),
   );
 
   return results.some((cleared) => cleared);
@@ -311,7 +359,7 @@ export async function handleWebhook(
 // Production handler - only runs when invoked directly by Supabase Edge Functions
 if (import.meta.main) {
   // Dynamic import of braintrust to avoid issues when not available
-  const braintrustModule = await import("npm:braintrust@0.0.182");
+  const braintrustModule = await import("npm:braintrust@2.0.2");
   const { invoke, initLogger } = braintrustModule;
 
   const braintrustProjectName = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "";
@@ -330,20 +378,22 @@ if (import.meta.main) {
     const apiKey = Deno.env.get("NYLAS_API_KEY") ?? "";
     const grantId = Deno.env.get("NYLAS_GRANT_ID") ?? "";
     const webhookSecret = Deno.env.get("NYLAS_WEBHOOK_SECRET") ?? "";
-    const classifierSlug = Deno.env.get("BRAINTRUST_CLASSIFIER_SLUG") ?? "email-classifier-v1";
+    const classifierSlug = Deno.env.get("BRAINTRUST_CLASSIFIER_SLUG") ??
+      "email-classifier-v2";
 
     const client = createNylasClient(apiKey, grantId);
 
     // Only enable classification if Braintrust is configured
     const classifyFn = braintrustApiKey && braintrustProjectName
       ? (input: ClassifierInput) =>
-          classifyEmail(input, {
-            invoke: (params) => invoke({
+        classifyEmail(input, {
+          invoke: (params) =>
+            invoke({
               ...params,
             }),
-            projectName: braintrustProjectName,
-            classifierSlug,
-          })
+          projectName: braintrustProjectName,
+          classifierSlug,
+        })
       : undefined;
 
     const deps: WebhookDeps = {
