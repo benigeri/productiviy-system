@@ -29,7 +29,8 @@ export function getLabelDrafted(): string {
  * In Gmail, this is a filter-applied label for prioritization.
  */
 export function getLabelRespond(): string {
-  const labelId = process.env.GMAIL_LABEL_RESPOND;
+  // Support both env var names for backwards compatibility
+  const labelId = process.env.GMAIL_LABEL_RESPOND || process.env.GMAIL_LABEL_TO_RESPOND_PAUL;
   if (!labelId) {
     throw new Error(
       'GMAIL_LABEL_RESPOND environment variable is required. ' +
