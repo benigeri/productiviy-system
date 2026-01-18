@@ -1,9 +1,11 @@
 /**
  * Nylas webhook handler for email workflow automation.
- * Handles label changes and ensures only one workflow label is active at a time.
+ * Handles label changes, ensures only one workflow label is active at a time,
+ * and classifies incoming emails with ai_* labels.
  */
 
 import type {
+  NylasCleanMessage,
   NylasFolder,
   NylasMessage,
   NylasThread,
@@ -18,6 +20,12 @@ import {
   createNylasClient,
   verifyNylasSignature,
 } from "../_shared/lib/nylas.ts";
+import { errorResponse, jsonResponse } from "../_shared/lib/http.ts";
+import {
+  type ClassifierInput,
+  type ClassifierResult,
+  classifyEmail,
+} from "../_shared/lib/classifier.ts";
 
 /**
  * Dependencies for the webhook handler.
@@ -31,13 +39,9 @@ export interface WebhookDeps {
     messageId: string,
     folders: string[],
   ) => Promise<NylasMessage>;
-}
-
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+  getCleanMessages: (messageIds: string[]) => Promise<NylasCleanMessage[]>;
+  // Classification dependencies (optional - only needed if classification is enabled)
+  classify?: (input: ClassifierInput) => Promise<ClassifierResult>;
 }
 
 /**
@@ -84,15 +88,17 @@ async function clearWorkflowLabels(
 /**
  * Process a message update event.
  * Handles: deduplication (multiple workflow labels) and archive (no INBOX).
+ * Accepts optional pre-fetched data to avoid duplicate API calls.
  */
 async function processMessageUpdate(
   messageId: string,
   deps: WebhookDeps,
+  prefetched?: { message: NylasMessage; folders: NylasFolder[] },
 ): Promise<boolean> {
-  const [message, folders] = await Promise.all([
-    deps.getMessage(messageId),
-    deps.getFolders(),
-  ]);
+  // Use prefetched data if available, otherwise fetch
+  const [message, folders] = prefetched
+    ? [prefetched.message, prefetched.folders]
+    : await Promise.all([deps.getMessage(messageId), deps.getFolders()]);
 
   const { idToName, nameToId } = buildFolderMaps(folders);
   const folderNames = message.folders.map((id) => idToName.get(id) ?? id);
@@ -126,6 +132,137 @@ async function processMessageUpdate(
 }
 
 /**
+ * Build classifier input from a message with thread context.
+ * Uses clean conversation text from last 5 messages for 90%+ token savings.
+ */
+function buildClassifierInput(
+  message: NylasMessage,
+  threadContext: {
+    messages: Array<{ from: string; date: string; content: string }>;
+    isReply: boolean;
+    threadLength: number;
+  },
+): ClassifierInput {
+  // Build combined body from thread messages
+  const bodyParts = threadContext.messages.map((m, i) =>
+    `--- Message ${i + 1} (from: ${m.from}, ${m.date}) ---\n${m.content}`
+  );
+  const combinedBody = bodyParts.join("\n\n");
+
+  return {
+    subject: message.subject ?? "",
+    from: message.from?.map((p) => p.email).join(", ") ?? "",
+    to: message.to?.map((p) => p.email).join(", ") ?? "",
+    cc: message.cc?.map((p) => p.email).join(", ") ?? "",
+    date: new Date(message.date * 1000).toISOString().split("T")[0],
+    is_reply: String(threadContext.isReply),
+    thread_length: String(threadContext.threadLength),
+    has_attachments: String((message.attachments?.length ?? 0) > 0),
+    attachment_types:
+      message.attachments?.map((a) => a.content_type).join(", ") ?? "",
+    body: combinedBody,
+  };
+}
+
+/**
+ * Process a received email for classification.
+ * Fetches thread context (last 5 messages) and uses clean conversation text.
+ * Calls the classifier and applies ai_* labels to the message.
+ */
+async function processReceivedMessage(
+  message: NylasMessage,
+  folders: NylasFolder[],
+  deps: WebhookDeps,
+): Promise<boolean> {
+  // Skip if classification is not enabled
+  if (!deps.classify) {
+    return false;
+  }
+
+  const { idToName, nameToId } = buildFolderMaps(folders);
+
+  try {
+    // Get thread to find all messages
+    const thread = await deps.getThread(message.thread_id);
+    const threadMsgIds = thread.message_ids ?? [message.id];
+    const threadLength = threadMsgIds.length;
+
+    // Get last 5 messages from thread for context
+    const lastMsgIds = threadMsgIds.slice(-5);
+
+    // Clean all thread messages (uses conversation field for clean text)
+    const cleanMessages = await deps.getCleanMessages(lastMsgIds);
+
+    // Get message details for each (need sender info)
+    const msgDetails = await Promise.all(
+      lastMsgIds.map((id) => id === message.id ? message : deps.getMessage(id)),
+    );
+
+    // Build thread context using conversation field (clean text, no HTML)
+    const threadMessages = cleanMessages.map((cleaned, i) => ({
+      from: msgDetails[i]?.from?.[0]?.email ?? "unknown",
+      date:
+        new Date((msgDetails[i]?.date ?? 0) * 1000).toISOString().split("T")[0],
+      content: cleaned.conversation ?? cleaned.body ?? "(no content)",
+    }));
+
+    // Determine if this is a reply (not the first message in thread)
+    const isReply = threadLength > 1 && threadMsgIds[0] !== message.id;
+
+    // Build input with thread context and classify
+    const input = buildClassifierInput(message, {
+      messages: threadMessages,
+      isReply,
+      threadLength,
+    });
+    const result = await deps.classify(input);
+
+    console.log(
+      `Classification result for ${message.id}: ${JSON.stringify(result)}`,
+    );
+
+    // Skip if no labels to apply
+    if (result.labels.length === 0) {
+      return false;
+    }
+
+    // Get current folder names
+    const folderNames = message.folders.map((id) => idToName.get(id) ?? id);
+
+    // Remove all existing ai_* labels, keep everything else
+    const withoutAI = folderNames.filter((name) => !name.startsWith("ai_"));
+
+    // Add new AI labels (only if they exist in Gmail)
+    const validAILabels = result.labels.filter((name) => nameToId.has(name));
+    if (validAILabels.length < result.labels.length) {
+      const missing = result.labels.filter((name) => !nameToId.has(name));
+      console.log(`Warning: Missing Gmail labels: ${missing.join(", ")}`);
+    }
+    const newFolderNames = [...withoutAI, ...validAILabels];
+
+    // Convert back to IDs
+    const newFolderIds = newFolderNames
+      .map((name) => nameToId.get(name))
+      .filter((id): id is string => id !== undefined);
+
+    // Update only if changed
+    const currentIds = message.folders.slice().sort();
+    const newIds = newFolderIds.slice().sort();
+    if (JSON.stringify(currentIds) !== JSON.stringify(newIds)) {
+      await deps.updateMessageFolders(message.id, newFolderIds);
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    // Re-throw classification errors so they're visible at the top level
+    // This prevents silent failures that are indistinguishable from "no labels"
+    console.error(`Classification error for ${message.id}:`, error);
+    throw error;
+  }
+}
+
+/**
  * Process a message created event (new message sent).
  * If sent message is a reply, clear workflow labels from entire thread.
  */
@@ -141,33 +278,34 @@ async function processMessageCreated(
   const { idToName, nameToId } = buildFolderMaps(folders);
   const folderNames = message.folders.map((id) => idToName.get(id) ?? id);
 
-  // Only process sent messages
+  // Check if sent or received message
   const isSent = folderNames.includes("SENT");
   if (!isSent) {
-    // Not a sent message - check for deduplication/archive like message.updated
-    return processMessageUpdate(messageId, deps);
+    // Received message - classify it, then check for deduplication/archive
+    await processReceivedMessage(message, folders, deps);
+    // Pass prefetched data to avoid duplicate API calls
+    return processMessageUpdate(messageId, deps, { message, folders });
   }
 
   // Get thread to find all messages
   const thread = await deps.getThread(message.thread_id);
 
-  // Clear workflow labels from ALL messages in thread (including the sent one)
-  // This handles the case where a draft with "drafted" label becomes a sent message
-  let updated = false;
-  for (const threadMessageId of thread.message_ids) {
-    const threadMessage = threadMessageId === messageId
-      ? message  // Reuse already-fetched message
-      : await deps.getMessage(threadMessageId);
-    const cleared = await clearWorkflowLabels(
-      threadMessage,
-      idToName,
-      nameToId,
-      deps,
-    );
-    if (cleared) updated = true;
-  }
+  // Fetch all thread messages in parallel (reuse already-fetched message)
+  const otherMessageIds = thread.message_ids.filter((id) => id !== messageId);
+  const otherMessages = await Promise.all(
+    otherMessageIds.map((id) => deps.getMessage(id)),
+  );
+  const allMessages = [message, ...otherMessages];
 
-  return updated;
+  // Clear workflow labels from ALL messages in thread (including the sent one)
+  // This handles the case where a draft with "wf_drafted" label becomes a sent message
+  const results = await Promise.all(
+    allMessages.map((msg) =>
+      clearWorkflowLabels(msg, idToName, nameToId, deps)
+    ),
+  );
+
+  return results.some((cleared) => cleared);
 }
 
 /**
@@ -192,7 +330,7 @@ export async function handleWebhook(
   // Verify signature
   const isValid = await deps.verifySignature(signature, body);
   if (!isValid) {
-    return jsonResponse({ error: "Invalid signature" }, 401);
+    return errorResponse("Invalid signature", "UNAUTHORIZED", 401);
   }
 
   try {
@@ -214,18 +352,49 @@ export async function handleWebhook(
     return jsonResponse({ ok: true, skipped: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return jsonResponse({ error: message }, 500);
+    return errorResponse(message, "UNKNOWN_ERROR", 500);
   }
 }
 
 // Production handler - only runs when invoked directly by Supabase Edge Functions
 if (import.meta.main) {
+  // Dynamic import of braintrust to avoid issues when not available
+  const braintrustModule = await import("npm:braintrust@2.0.2");
+  const { invoke, initLogger } = braintrustModule;
+
+  const braintrustProjectName = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "";
+  const braintrustApiKey = Deno.env.get("BRAINTRUST_API_KEY") ?? "";
+
+  // Initialize Braintrust logger for tracing (required for logs to appear in dashboard)
+  if (braintrustApiKey && braintrustProjectName) {
+    initLogger({
+      projectName: braintrustProjectName,
+      apiKey: braintrustApiKey,
+      asyncFlush: false, // Required for serverless - flush synchronously
+    });
+  }
+
   Deno.serve((req) => {
     const apiKey = Deno.env.get("NYLAS_API_KEY") ?? "";
     const grantId = Deno.env.get("NYLAS_GRANT_ID") ?? "";
     const webhookSecret = Deno.env.get("NYLAS_WEBHOOK_SECRET") ?? "";
+    const classifierSlug = Deno.env.get("BRAINTRUST_CLASSIFIER_SLUG") ??
+      "email-classifier-v2";
 
     const client = createNylasClient(apiKey, grantId);
+
+    // Only enable classification if Braintrust is configured
+    const classifyFn = braintrustApiKey && braintrustProjectName
+      ? (input: ClassifierInput) =>
+        classifyEmail(input, {
+          invoke: (params) =>
+            invoke({
+              ...params,
+            }),
+          projectName: braintrustProjectName,
+          classifierSlug,
+        })
+      : undefined;
 
     const deps: WebhookDeps = {
       verifySignature: (signature, body) =>
@@ -235,6 +404,8 @@ if (import.meta.main) {
       getFolders: () => client.getFolders(),
       updateMessageFolders: (id, folders) =>
         client.updateMessageFolders(id, folders),
+      getCleanMessages: (ids) => client.getCleanMessages(ids),
+      classify: classifyFn,
     };
 
     return handleWebhook(req, deps);

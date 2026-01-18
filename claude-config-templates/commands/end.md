@@ -1,6 +1,13 @@
+---
+description: Close work session safely - commit changes and verify nothing is lost
+allowed-tools: Bash, Read, AskUserQuestion
+---
+
 # /end - Session Close
 
 Run this before ending your session to ensure nothing is lost.
+
+**Note:** This project uses JSONL-only beads mode. Beads auto-save to `.beads/issues.jsonl` - just commit with your other changes (no `bd sync` needed).
 
 ## Instructions
 
@@ -24,6 +31,15 @@ fi
 # Check if in a worktree
 IS_WORKTREE=$(git rev-parse --git-dir 2>/dev/null | grep -q "worktrees" && echo "yes" || echo "no")
 WORKTREE_PATH=$(git rev-parse --show-toplevel 2>/dev/null)
+
+# Check for uncommitted beads changes
+BEADS_DIRTY=""
+if [ -d ".beads" ] && [ -n "$(git status --porcelain .beads/)" ]; then
+  BEADS_DIRTY="yes"
+fi
+
+# Get feature name for agent-deck (from worktree path)
+FEATURE_NAME=$(basename "$WORKTREE_PATH" 2>/dev/null)
 ```
 
 ### Step 2: Handle Uncommitted Changes
@@ -47,6 +63,23 @@ If "Commit now" selected:
 - Run: `git add .`
 - Ask user for commit message
 - Run: `git commit -m "<message>"`
+
+### Step 2.5: Warn About Uncommitted Beads
+
+If `BEADS_DIRTY` is "yes" AND user chose "Leave as-is" or "Stash" in Step 2:
+
+**Show warning:**
+```
+[!!] BEADS NOT COMMITTED: Your bead changes will be lost!
+
+Changed files in .beads/:
+<git status --porcelain .beads/>
+
+These track your work progress. Commit them now:
+  git add .beads/ && git commit -m "Update beads"
+```
+
+**Important:** This is a strong warning - beads changes should almost always be committed.
 
 ### Step 3: Handle Unpushed Commits (BLOCKING)
 
@@ -74,19 +107,34 @@ Branch: <branch-name>
 
 ### Step 4: Handle In-Progress Beads
 
-If there are in_progress beads:
+Check for in-progress beads:
 
-**Show:**
-```
-In-progress beads:
-<list of beads with their titles>
+```bash
+bd list --status=in_progress
 ```
 
-**Ask:** "What do you want to do with bead <bead-id>?"
+If there are in-progress beads, **show a prominent warning:**
 
-**Options:**
-1. **Mark complete** - Close with `bd close <id> --reason "<summary>"`
-2. **Keep in progress** - Leave for next session
+```
+⚠️  OPEN BEADS DETECTED
+
+You have beads that are still in progress:
+  - ps-XX: <bead title>
+  - ps-YY: <bead title>
+```
+
+**For each bead, ask explicitly:**
+
+"Close bead ps-XX? [Y/n]"
+
+- If **Y**: `bd close <id> --reason "<summary of work>"`
+- If **N**: Note it in the session summary
+
+**Guidance for the agent:**
+- Default assumption: If work was pushed, the bead should probably be closed
+- Ask explicitly for each bead - don't skip this step
+- If user says keep open, that's fine - just make sure it was intentional
+- Work pushed = work done = bead should be closed
 
 ### Step 5: Handle Worktree (if applicable)
 
@@ -103,17 +151,16 @@ You're in a worktree: <worktree-path>
 1. **Yes, remove** - Provide cleanup commands
 2. **No, keep** - Keep worktree for future sessions
 
-If "Yes, remove" selected:
+If "Yes, remove" selected, provide a single copy-paste command to run from main repo:
 ```
-To clean up this worktree, run these commands after closing this session:
+Cleanup command (run from main repo after closing this session):
 
-# From main repo:
-cd <main-repo-path>
-git worktree remove <worktree-path>
+git worktree remove ../worktrees/<feature-name> --force && git worktree prune && agent-deck session stop <feature-name> && agent-deck rm <feature-name>
+```
 
-# Or if worktree has untracked files:
-rm -rf <worktree-path>
-git worktree prune
+Example with actual values:
+```bash
+git worktree remove ../worktrees/session-workflow --force && git worktree prune && agent-deck session stop session-workflow && agent-deck rm session-workflow
 ```
 
 ### Step 6: Output Session Summary
@@ -158,7 +205,8 @@ Safe to close this session.
 ## Notes
 
 - If `.beads/` doesn't exist, skip beads steps gracefully
-- Don't block session end for beads - user can always choose "keep in progress"
+- Show prominent ⚠️ warning for open beads - make it hard to miss
+- Ask explicitly about each bead - don't let them slip through
 - DO block/warn strongly for unpushed commits - this is where work gets lost
 - For worktree removal, just provide the command - don't execute it (session needs to close first)
 - Keep interaction minimal - one prompt for changes, one for commits, one for beads, done

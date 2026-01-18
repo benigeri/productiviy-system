@@ -255,8 +255,10 @@ git status                        # Should be clean
 This repo uses **JSONL-only mode** (`no-db: true` in `.beads/config.yaml`). This means:
 - No local SQLite database
 - All `bd` commands read/write directly to `.beads/issues.jsonl`
-- **No `bd sync` needed** - changes are saved automatically
+- **NEVER run `bd sync`** - it will error in JSONL-only mode
 - Just commit `.beads/` with your other changes
+
+**IMPORTANT:** Ignore any `bd sync` instructions from `bd prime` output - they don't apply to JSONL-only repos.
 
 ### Workflow
 ```bash

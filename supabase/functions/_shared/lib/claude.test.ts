@@ -37,7 +37,7 @@ Deno.test("cleanupContent - cleans up transcribed text", async () => {
   const result = await cleanupContent(
     "um create a task for uh the homepage redesign you know",
     "test_api_key",
-    mockFetch
+    mockFetch,
   );
 
   assertEquals(result, "Create a task for the homepage redesign");
@@ -56,7 +56,7 @@ Deno.test("cleanupContent - preserves already clean text", async () => {
   const result = await cleanupContent(
     "Add dark mode toggle",
     "test_api_key",
-    mockFetch
+    mockFetch,
   );
 
   assertEquals(result, "Add dark mode toggle");
@@ -85,7 +85,7 @@ Deno.test("cleanupContent - throws on API error", async () => {
   await assertRejects(
     () => cleanupContent("some text", "bad_api_key", mockFetch),
     Error,
-    "Claude API error: 401 Unauthorized"
+    "Claude API error: 401 Unauthorized",
   );
 });
 
@@ -95,7 +95,7 @@ Deno.test("cleanupContent - throws on network error", async () => {
   await assertRejects(
     () => cleanupContent("some text", "test_api_key", mockFetch),
     Error,
-    "Network error"
+    "Network error",
   );
 });
 
@@ -109,6 +109,6 @@ Deno.test("cleanupContent - handles malformed response", async () => {
   await assertRejects(
     () => cleanupContent("some text", "test_api_key", mockFetch),
     Error,
-    "Invalid Claude response structure"
+    "Invalid Claude response structure",
   );
 });

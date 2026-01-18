@@ -37,6 +37,6 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Deploy nylas-webhook function
-        run: supabase functions deploy nylas-webhook --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: supabase functions deploy nylas-webhook --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

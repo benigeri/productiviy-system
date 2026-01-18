@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { marked } from 'marked';
 import { z } from 'zod';
+import {
+  getLabelDrafted,
+  getLabelRespond,
+} from '@/lib/gmail-labels';
 
 // Type definitions for Nylas API responses
 interface NylasGrantResponse {
@@ -197,15 +201,17 @@ export async function POST(request: Request) {
         const maxRetries = 3;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
+            // Use server-side env var instead of client-controlled Origin header (SSRF prevention)
+            const baseUrl = process.env.APP_URL || 'http://localhost:3000';
             const labelRes = await fetch(
-              `${request.headers.get('origin') || 'http://localhost:3000'}/api/threads`,
+              `${baseUrl}/api/threads`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   threadId,
-                  addLabels: ['Label_215'], // drafted label
-                  removeLabels: ['Label_139'], // to-respond-paul label
+                  addLabels: [getLabelDrafted()],
+                  removeLabels: [getLabelRespond()],
                 }),
               }
             );
@@ -258,7 +264,7 @@ export async function POST(request: Request) {
       draftId: draft.data.id,
       warning: labelUpdateSuccess
         ? undefined
-        : 'Draft saved but labels could not be updated. Please manually remove "to-respond-paul" label.',
+        : 'Draft saved but labels could not be updated. Please manually remove "wf_respond" label.',
     });
   } catch (error) {
     console.error('Draft save error:', {

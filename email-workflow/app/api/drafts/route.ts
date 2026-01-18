@@ -2,9 +2,14 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { invoke, wrapTraced, initLogger } from 'braintrust';
 import { z } from 'zod';
+import {
+  ConversationHistorySchema,
+  RecipientsSchema,
+  type ConversationMessage,
+} from '@/lib/schemas/email-generation';
 
-// Initialize Braintrust logger for tracing (REQUIRED for logging to work)
-const logger = initLogger({
+// Initialize Braintrust logger for tracing (side effect enables logging)
+initLogger({
   projectName: process.env.BRAINTRUST_PROJECT_NAME!,
   apiKey: process.env.BRAINTRUST_API_KEY,
   asyncFlush: false, // CRITICAL: Prevents log loss in serverless (Vercel)
@@ -22,15 +27,20 @@ const DraftRequestSchema = z.object({
       body: z.string(),
     })
   ),
-  instructions: z.string().min(1),
+  instructions: z.string().min(1).max(5000),
   latestMessageId: z.string(),
+  // Optional: Previous draft context for iterative refinement
+  previousDraft: z.string().optional(),
+  previousRecipients: RecipientsSchema.optional(),
+  // Optional: Full conversation history of user/assistant messages
+  conversationHistory: ConversationHistorySchema.optional(),
 });
 
 // Zod schema for Braintrust response validation
 const DraftResponseSchema = z.object({
   subject: z.string().optional(), // AI returns this (unified prompt), but reply endpoint ignores it
-  to: z.array(z.string()),
-  cc: z.array(z.string()),
+  to: z.array(z.string().email()),
+  cc: z.array(z.string().email()),
   body: z.string(),
 });
 
@@ -85,6 +95,15 @@ const generateEmailDraft = wrapTraced(async function generateEmailDraft(input: {
     body: string;
   }>;
   user_instructions: string;
+  previous_draft?: {
+    body: string;
+    to: string[];
+    cc: string[];
+  };
+  conversation_history?: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+  }>;
 }): Promise<DraftResponse> {
   const projectName = process.env.BRAINTRUST_PROJECT_NAME;
   const draftSlug = process.env.BRAINTRUST_DRAFT_SLUG;
@@ -144,14 +163,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const { threadId, subject, messages, instructions, latestMessageId } =
-      result.data;
+    const {
+      threadId,
+      subject,
+      messages,
+      instructions,
+      latestMessageId,
+      previousDraft,
+      previousRecipients,
+      conversationHistory,
+    } = result.data;
 
     console.log('Draft generation request:', {
       threadId,
       subject,
       messageCount: messages.length,
       instructionsLength: instructions.length,
+      hasPreviousDraft: !!previousDraft,
+      conversationHistoryLength: conversationHistory?.length || 0,
     });
 
     // Get reply recipients (last message sender)
@@ -175,6 +204,19 @@ export async function POST(request: Request) {
         body: m.body,
       })),
       user_instructions: instructions,
+      // Pass previous draft for iterative refinement
+      ...(previousDraft && {
+        previous_draft: {
+          body: previousDraft,
+          to: previousRecipients?.to || [],
+          cc: previousRecipients?.cc || [],
+        },
+      }),
+      // Pass conversation history so LLM remembers all prior instructions
+      ...(conversationHistory &&
+        conversationHistory.length > 0 && {
+          conversation_history: conversationHistory,
+        }),
     });
 
     // Get current user's email for filtering history

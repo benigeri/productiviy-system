@@ -1,29 +1,15 @@
 // Server Component - fetches data directly
-import { ThreadList } from './ThreadList';
-import { ThreadDetail } from './ThreadDetail';
+import { Mail } from './Mail';
+import { getLabelRespond } from '@/lib/gmail-labels';
+import type { ThreadWithPreview, Message } from '@/types/email';
 
-interface Thread {
-  id: string;
-  subject: string;
-  message_ids: string[];
-  latest_draft_or_message: {
-    from: Array<{ name: string; email: string }>;
-    date: number;
-  };
-}
+// Force dynamic rendering - this page fetches live email data
+export const dynamic = 'force-dynamic';
 
-interface Message {
-  id: string;
-  from: Array<{ name: string; email: string }>;
-  to: Array<{ name: string; email: string }>;
-  cc?: Array<{ name: string; email: string }>;
-  date: number;
-  conversation: string;
-}
-
-async function getThreads(): Promise<Thread[]> {
+async function getThreads(): Promise<ThreadWithPreview[]> {
+  const respondLabel = getLabelRespond();
   const res = await fetch(
-    `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/threads?in=Label_139&limit=20`,
+    `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/threads?in=${respondLabel}&limit=20`,
     {
       headers: { Authorization: `Bearer ${process.env.NYLAS_API_KEY}` },
       cache: 'no-store',
@@ -49,8 +35,8 @@ async function getMessages(messageIds: string[]): Promise<Message[]> {
       body: JSON.stringify({
         message_id: messageIds,
         ignore_links: false,     // Keep URLs in content
-        ignore_images: true,     // Remove images for chat view
-        html_as_markdown: false, // Plain text instead of markdown (fixes link rendering)
+        ignore_images: false,    // Keep images (ignore_images: true causes 'span' text issues)
+        html_as_markdown: true,  // Convert HTML to markdown for proper link rendering
       }),
       cache: 'no-store',
     }
@@ -68,30 +54,27 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{ thread?: string }>;
 }) {
-  const threads = await getThreads();
-  const params = await searchParams;
+  // Parallelize independent async operations to avoid waterfall
+  const [threads, params] = await Promise.all([getThreads(), searchParams]);
   const selectedThreadId = params.thread;
 
-  let messages: Message[] = [];
-  let selectedThread: Thread | undefined;
-
+  // Pre-fetch messages if thread is specified in URL
+  let initialMessages: Message[] = [];
   if (selectedThreadId) {
-    selectedThread = threads.find(t => t.id === selectedThreadId);
+    const selectedThread = threads.find(t => t.id === selectedThreadId);
     if (selectedThread) {
-      messages = await getMessages(selectedThread.message_ids);
-      messages.sort((a, b) => a.date - b.date);
+      initialMessages = await getMessages(selectedThread.message_ids);
+      initialMessages.sort((a, b) => a.date - b.date);
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {!selectedThreadId ? (
-        <ThreadList threads={threads} />
-      ) : selectedThread ? (
-        <ThreadDetail thread={selectedThread} messages={messages} allThreads={threads} />
-      ) : (
-        <div className="p-4">Thread not found</div>
-      )}
+    <div className="h-full bg-background">
+      <Mail
+        threads={threads}
+        initialThreadId={selectedThreadId}
+        initialMessages={initialMessages}
+      />
     </div>
   );
 }

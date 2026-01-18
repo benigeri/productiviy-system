@@ -13,7 +13,7 @@ function isClaudeResponse(data: unknown): data is ClaudeResponse {
 export async function cleanupContent(
   text: string,
   apiKey: string,
-  fetchFn: typeof fetch = fetch
+  fetchFn: typeof fetch = fetch,
 ): Promise<string> {
   const trimmed = text.trim();
   if (trimmed === "") {
@@ -40,7 +40,9 @@ export async function cleanupContent(
   });
 
   if (!response.ok) {
-    throw new Error(`Claude API error: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Claude API error: ${response.status} ${response.statusText}`,
+    );
   }
 
   const data = await response.json();

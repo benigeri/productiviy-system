@@ -57,17 +57,6 @@ Use these templates to **verify** your CLAUDE.md has all standard sections:
 
 ---
 
-## Standardization Status
-
-| Repo | Status | Beads Prefix | Last Updated |
-|------|--------|--------------|--------------|
-| productiviy-system | ✅ Standardized | `ps` | 2026-01-10 |
-| deep-research-archive | ⏳ Pending | `dra` | - |
-| recruiting-docs | ⏳ Pending | `rd` | - |
-| product-marketing-bot | ⏳ Pending | `pmb` | - |
-
----
-
 ## Questions?
 
 See the main project CLAUDE.md or BEADS-WORKFLOW.md for detailed workflow guidance.
