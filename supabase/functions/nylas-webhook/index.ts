@@ -26,6 +26,17 @@ import {
   type ClassifierResult,
   classifyEmail,
 } from "../_shared/lib/classifier.ts";
+import { z } from "zod";
+
+// Zod schema for Nylas webhook payload validation
+const NylasWebhookPayloadSchema = z.object({
+  type: z.string(),
+  data: z.object({
+    object: z.object({
+      id: z.string(),
+    }),
+  }),
+});
 
 // Performance limits to prevent webhook timeout on large threads
 const MAX_THREAD_MESSAGES = 20; // Only process last N messages
@@ -57,6 +68,11 @@ function wasRecentlyProcessed(threadId: string): boolean {
 /** Clear the dedup cache (for testing) */
 export function clearDedupCache(): void {
   recentlyProcessedThreads.clear();
+}
+
+/** Generate a short correlation ID for request tracing */
+function generateCorrelationId(): string {
+  return crypto.randomUUID().slice(0, 8);
 }
 
 /**
@@ -145,6 +161,39 @@ async function clearWorkflowLabels(
 }
 
 /**
+ * Clear workflow labels from all messages in a thread.
+ * Returns true if any labels were cleared.
+ */
+async function clearThreadWorkflowLabels(
+  message: NylasMessage,
+  idToName: Map<string, string>,
+  nameToId: Map<string, string>,
+  deps: WebhookDeps,
+  logPrefix: string,
+  correlationId: string,
+): Promise<boolean> {
+  const thread = await deps.getThread(message.thread_id);
+  const allMessages = await fetchThreadMessages(
+    message,
+    thread,
+    deps.getMessage,
+  );
+
+  const results = await Promise.all(
+    allMessages.map((msg) =>
+      clearWorkflowLabels(msg, idToName, nameToId, deps)
+    ),
+  );
+
+  const cleared = results.filter(Boolean).length;
+  console.log(
+    `[${logPrefix}] cid=${correlationId} Cleared workflow labels from ${cleared}/${allMessages.length} messages in thread ${message.thread_id}`,
+  );
+
+  return results.some((result) => result);
+}
+
+/**
  * Process a message update event.
  * Handles: deduplication (multiple workflow labels) and archive (no INBOX).
  * Accepts optional pre-fetched data to avoid duplicate API calls.
@@ -152,6 +201,7 @@ async function clearWorkflowLabels(
 async function processMessageUpdate(
   messageId: string,
   deps: WebhookDeps,
+  correlationId: string,
   prefetched?: { message: NylasMessage; folders: NylasFolder[] },
 ): Promise<boolean> {
   // Use prefetched data if available, otherwise fetch
@@ -167,7 +217,7 @@ async function processMessageUpdate(
   const hasInbox = folderNames.includes("INBOX");
 
   console.log(
-    `[processMessageUpdate] messageId=${messageId} isSent=${isSent} hasInbox=${hasInbox} folders=${
+    `[processMessageUpdate] cid=${correlationId} messageId=${messageId} isSent=${isSent} hasInbox=${hasInbox} folders=${
       JSON.stringify(folderNames)
     }`,
   );
@@ -179,33 +229,22 @@ async function processMessageUpdate(
     // Skip if this thread was recently processed (dedup concurrent webhooks)
     if (wasRecentlyProcessed(message.thread_id)) {
       console.log(
-        `[processMessageUpdate] Skipping - thread ${message.thread_id} recently processed (dedup)`,
+        `[processMessageUpdate] cid=${correlationId} Skipping - thread ${message.thread_id} recently processed (dedup)`,
       );
       return false;
     }
 
     console.log(
-      `[processMessageUpdate] Archive detected - clearing workflow labels from thread ${message.thread_id}`,
+      `[processMessageUpdate] cid=${correlationId} Archive detected - clearing workflow labels from thread ${message.thread_id}`,
     );
-    const thread = await deps.getThread(message.thread_id);
-    const allMessages = await fetchThreadMessages(
+    return clearThreadWorkflowLabels(
       message,
-      thread,
-      deps.getMessage,
+      idToName,
+      nameToId,
+      deps,
+      "processMessageUpdate",
+      correlationId,
     );
-
-    // Clear workflow labels from ALL messages in thread (bounded to recent messages)
-    const results = await Promise.all(
-      allMessages.map((msg) =>
-        clearWorkflowLabels(msg, idToName, nameToId, deps)
-      ),
-    );
-
-    const cleared = results.filter(Boolean).length;
-    console.log(
-      `[processMessageUpdate] Cleared workflow labels from ${cleared}/${allMessages.length} messages`,
-    );
-    return results.some((cleared) => cleared);
   }
 
   // Deduplication: multiple workflow labels → keep highest priority
@@ -267,6 +306,7 @@ async function processReceivedMessage(
   message: NylasMessage,
   folders: NylasFolder[],
   deps: WebhookDeps,
+  correlationId: string,
 ): Promise<boolean> {
   // Skip if classification is not enabled
   if (!deps.classify) {
@@ -312,7 +352,9 @@ async function processReceivedMessage(
     const result = await deps.classify(input);
 
     console.log(
-      `Classification result for ${message.id}: ${JSON.stringify(result)}`,
+      `[processReceivedMessage] cid=${correlationId} Classification result for ${message.id}: ${
+        JSON.stringify(result)
+      }`,
     );
 
     // Skip if no labels to apply
@@ -330,7 +372,11 @@ async function processReceivedMessage(
     const validAILabels = result.labels.filter((name) => nameToId.has(name));
     if (validAILabels.length < result.labels.length) {
       const missing = result.labels.filter((name) => !nameToId.has(name));
-      console.log(`Warning: Missing Gmail labels: ${missing.join(", ")}`);
+      console.log(
+        `[processReceivedMessage] cid=${correlationId} Warning: Missing Gmail labels: ${
+          missing.join(", ")
+        }`,
+      );
     }
     const newFolderNames = [...withoutAI, ...validAILabels];
 
@@ -351,7 +397,10 @@ async function processReceivedMessage(
   } catch (error) {
     // Re-throw classification errors so they're visible at the top level
     // This prevents silent failures that are indistinguishable from "no labels"
-    console.error(`Classification error for ${message.id}:`, error);
+    console.error(
+      `[processReceivedMessage] cid=${correlationId} Classification error for ${message.id}:`,
+      error,
+    );
     throw error;
   }
 }
@@ -363,6 +412,7 @@ async function processReceivedMessage(
 async function processMessageCreated(
   messageId: string,
   deps: WebhookDeps,
+  correlationId: string,
 ): Promise<boolean> {
   const [message, folders] = await Promise.all([
     deps.getMessage(messageId),
@@ -375,49 +425,39 @@ async function processMessageCreated(
   // Check if sent or received message
   const isSent = folderNames.includes("SENT");
   console.log(
-    `[processMessageCreated] messageId=${messageId} threadId=${message.thread_id} isSent=${isSent}`,
+    `[processMessageCreated] cid=${correlationId} messageId=${messageId} threadId=${message.thread_id} isSent=${isSent}`,
   );
 
   if (!isSent) {
     // Received message - classify it, then check for deduplication/archive
-    await processReceivedMessage(message, folders, deps);
+    await processReceivedMessage(message, folders, deps, correlationId);
     // Pass prefetched data to avoid duplicate API calls
-    return processMessageUpdate(messageId, deps, { message, folders });
+    return processMessageUpdate(messageId, deps, correlationId, {
+      message,
+      folders,
+    });
   }
 
   // Skip if this thread was recently processed (dedup concurrent webhooks)
   if (wasRecentlyProcessed(message.thread_id)) {
     console.log(
-      `[processMessageCreated] Skipping thread ${message.thread_id} - recently processed (dedup)`,
+      `[processMessageCreated] cid=${correlationId} Skipping thread ${message.thread_id} - recently processed (dedup)`,
     );
     return false;
   }
 
-  // Get thread and fetch messages (bounded to recent messages)
+  // Sent message detected - clearing workflow labels from thread
   console.log(
-    `[processMessageCreated] Sent message detected - clearing workflow labels from thread ${message.thread_id}`,
+    `[processMessageCreated] cid=${correlationId} Sent message detected - clearing workflow labels from thread ${message.thread_id}`,
   );
-  const thread = await deps.getThread(message.thread_id);
-  const allMessages = await fetchThreadMessages(
+  return clearThreadWorkflowLabels(
     message,
-    thread,
-    deps.getMessage,
+    idToName,
+    nameToId,
+    deps,
+    "processMessageCreated",
+    correlationId,
   );
-
-  // Clear workflow labels from ALL messages in thread (including the sent one)
-  // This handles the case where a draft with "wf_drafted" label becomes a sent message
-  const results = await Promise.all(
-    allMessages.map((msg) =>
-      clearWorkflowLabels(msg, idToName, nameToId, deps)
-    ),
-  );
-
-  const cleared = results.filter(Boolean).length;
-  console.log(
-    `[processMessageCreated] Cleared workflow labels from ${cleared}/${allMessages.length} messages in thread ${message.thread_id}`,
-  );
-
-  return results.some((cleared) => cleared);
 }
 
 /**
@@ -445,26 +485,43 @@ export async function handleWebhook(
     return errorResponse("Invalid signature", "UNAUTHORIZED", 401);
   }
 
+  const correlationId = generateCorrelationId();
+
   try {
-    const payload: NylasWebhookPayload = JSON.parse(body);
+    // Parse and validate payload structure
+    const rawPayload = JSON.parse(body);
+    const parseResult = NylasWebhookPayloadSchema.safeParse(rawPayload);
+    if (!parseResult.success) {
+      console.error(
+        `[handleWebhook] cid=${correlationId} Invalid payload structure: ${parseResult.error.message}`,
+      );
+      return errorResponse("Invalid payload structure", "INVALID_PAYLOAD", 400);
+    }
+    const payload = rawPayload as NylasWebhookPayload;
     const messageId = payload.data.object.id;
-    console.log(`[handleWebhook] type=${payload.type} messageId=${messageId}`);
+    console.log(
+      `[handleWebhook] cid=${correlationId} type=${payload.type} messageId=${messageId}`,
+    );
 
     // Route based on event type
     if (payload.type === "message.created") {
-      await processMessageCreated(messageId, deps);
+      await processMessageCreated(messageId, deps, correlationId);
       return jsonResponse({ ok: true, action: "message.created" });
     }
 
     if (payload.type === "message.updated") {
-      await processMessageUpdate(messageId, deps);
+      await processMessageUpdate(messageId, deps, correlationId);
       return jsonResponse({ ok: true, action: "message.updated" });
     }
 
     // Unknown event type - skip
+    console.log(
+      `[handleWebhook] cid=${correlationId} Unknown event type, skipping`,
+    );
     return jsonResponse({ ok: true, skipped: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[handleWebhook] cid=${correlationId} Error: ${message}`);
     return errorResponse(message, "UNKNOWN_ERROR", 500);
   }
 }
@@ -476,31 +533,33 @@ if (import.meta.main) {
   // Try to load Braintrust - if it fails, webhook still works (just without classification)
   // deno-lint-ignore no-explicit-any
   let invoke: ((params: any) => Promise<any>) | undefined;
-  let braintrustReady = false;
 
   const braintrustProjectName = Deno.env.get("BRAINTRUST_PROJECT_NAME") ?? "";
   const braintrustApiKey = Deno.env.get("BRAINTRUST_API_KEY") ?? "";
 
-  try {
-    const braintrustModule = await import("braintrust");
-    invoke = braintrustModule.invoke;
-    const { initLogger } = braintrustModule;
+  if (braintrustApiKey && braintrustProjectName) {
+    try {
+      const braintrustModule = await import("braintrust");
+      invoke = braintrustModule.invoke;
+      const { initLogger } = braintrustModule;
 
-    // Initialize Braintrust logger for tracing (required for logs to appear in dashboard)
-    if (braintrustApiKey && braintrustProjectName) {
+      // Initialize Braintrust logger for tracing (required for logs to appear in dashboard)
       initLogger({
         projectName: braintrustProjectName,
         apiKey: braintrustApiKey,
         asyncFlush: false, // Required for serverless - flush synchronously
       });
-      braintrustReady = true;
       console.log("[nylas-webhook] Braintrust initialized successfully");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`[nylas-webhook] Braintrust initialization failed: ${msg}`);
+      console.log(
+        "[nylas-webhook] Continuing without classification - label management will still work",
+      );
     }
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error(`[nylas-webhook] Braintrust initialization failed: ${msg}`);
+  } else {
     console.log(
-      "[nylas-webhook] Continuing without classification - label management will still work",
+      "[nylas-webhook] Braintrust not configured - classification disabled",
     );
   }
 
@@ -514,7 +573,7 @@ if (import.meta.main) {
     const client = createNylasClient(apiKey, grantId);
 
     // Only enable classification if Braintrust loaded successfully
-    const classifyFn = braintrustReady && invoke
+    const classifyFn = invoke
       ? (input: ClassifierInput) =>
         classifyEmail(input, {
           invoke: (params) =>
