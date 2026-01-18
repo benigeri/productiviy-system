@@ -74,8 +74,8 @@ export async function GET(request: NextRequest) {
         },
         body: JSON.stringify({
           message_id: messageIds,
-          ignore_links: false,
-          ignore_images: false,
+          // Use Nylas defaults: ignore_links=true, ignore_images=true
+          // This strips signature junk (URLs, images, tables)
           html_as_markdown: true,
         }),
       }

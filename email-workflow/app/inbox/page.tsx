@@ -34,9 +34,8 @@ async function getMessages(messageIds: string[]): Promise<Message[]> {
       },
       body: JSON.stringify({
         message_id: messageIds,
-        ignore_links: false,     // Keep URLs in content
-        ignore_images: false,    // Keep images (ignore_images: true causes 'span' text issues)
-        html_as_markdown: true,  // Convert HTML to markdown for proper link rendering
+        // Use Nylas defaults to strip signature junk (links, images, tables)
+        html_as_markdown: true,
       }),
       cache: 'no-store',
     }

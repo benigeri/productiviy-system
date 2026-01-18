@@ -33,3 +33,4 @@ SESSION_CONTEXT.md
 todos/
 node_modules/
 deno.lock
+.env*.local
