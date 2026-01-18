@@ -574,9 +574,21 @@ Deno.test("handleWebhook - clears workflow labels from ALL thread messages when 
   // The sent message should have workflow labels removed
   const sentMsgFolders = updatedMessages.get("sent-msg-456");
   assertExists(sentMsgFolders, "Sent message should have been updated");
-  assertEquals(sentMsgFolders.includes("Label_5390221056707111040"), false, "wf_respond should be removed");
-  assertEquals(sentMsgFolders.includes("Label_3309485003314594938"), false, "wf_drafted should be removed");
-  assertEquals(sentMsgFolders.includes("SENT"), true, "SENT folder should remain");
+  assertEquals(
+    sentMsgFolders.includes("Label_5390221056707111040"),
+    false,
+    "wf_respond should be removed",
+  );
+  assertEquals(
+    sentMsgFolders.includes("Label_3309485003314594938"),
+    false,
+    "wf_drafted should be removed",
+  );
+  assertEquals(
+    sentMsgFolders.includes("SENT"),
+    true,
+    "SENT folder should remain",
+  );
 });
 
 // ============================================================================

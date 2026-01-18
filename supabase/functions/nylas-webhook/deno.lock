@@ -1438,7 +1438,8 @@
   "workspace": {
     "dependencies": [
       "jsr:@std/assert@1.0.0",
-      "npm:@supabase/functions-js@2.4.3"
+      "npm:@supabase/functions-js@2.4.3",
+      "npm:braintrust@2.0.2"
     ]
   }
 }
