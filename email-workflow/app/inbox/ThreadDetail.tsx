@@ -217,7 +217,6 @@ export function ThreadDetail({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [historyCollapsed, setHistoryCollapsed] = useState(true);
 
   // Sync draft state with storedDraft when thread changes
   useEffect(() => {
@@ -408,83 +407,81 @@ export function ThreadDetail({
   return (
     <div className="h-full flex flex-col">
       {/* Sticky Header */}
-      <div className="flex-none px-6 py-4 border-b bg-background">
+      <div className="flex-none px-4 py-3 border-b bg-background">
         <h1 className="text-xl font-bold">{thread.subject}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground">
           {messages.length} {messages.length === 1 ? 'message' : 'messages'} in thread
         </p>
       </div>
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="px-6 py-4">
-          {/* Messages */}
-          <div className="flex flex-col">
-            {messages.map((msg, i) => (
-              <div key={msg.id} className="flex flex-col">
-                {i > 0 && <Separator className="my-4" />}
-                <div className="flex gap-4">
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback className="text-xs">
-                      {getInitials(msg.from[0]?.name || '')}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm leading-none">
-                          {msg.from[0]?.name || 'Unknown'}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {msg.from[0]?.email}
-                        </p>
-                      </div>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatRelativeTime(msg.date)}
-                      </span>
-                    </div>
-                    <div className="mt-3 text-sm leading-relaxed">
-                      {renderEmailContent(msg.conversation)}
-                    </div>
+        {/* Messages */}
+        {messages.map((msg, i) => (
+          <div key={msg.id}>
+            {i > 0 && <Separator />}
+            <div className="flex gap-4 px-6 py-4">
+              <Avatar className="h-10 w-10">
+                <AvatarFallback className="text-xs">
+                  {getInitials(msg.from[0]?.name || '')}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm leading-none">
+                      {msg.from[0]?.name || 'Unknown'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {msg.from[0]?.email}
+                    </p>
                   </div>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {formatRelativeTime(msg.date)}
+                  </span>
+                </div>
+                <div className="mt-3 text-sm leading-relaxed">
+                  {renderEmailContent(msg.conversation)}
                 </div>
               </div>
-            ))}
-          </div>
-
-          {/* Conversation History (collapsed by default) */}
-          {isLoaded && conversationMessages.length > 0 && (
-            <>
-              <Separator className="my-4" />
-              <details className="text-sm">
-                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                  Draft iterations ({conversationMessages.length})
-                </summary>
-                <div className="mt-2 space-y-2 pl-4 border-l-2 border-muted">
-                  {conversationMessages.map((msg, i) => (
-                    <div key={i}>
-                      <span className="text-xs text-muted-foreground">
-                        {msg.role === 'user' ? 'Feedback:' : 'Draft:'}
-                      </span>
-                      <p className={msg.role === 'user' ? 'text-muted-foreground italic' : ''}>
-                        {msg.content.length > 200 ? msg.content.slice(0, 200) + '...' : msg.content}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            </>
-          )}
-
-          {/* Storage warning */}
-          {storageWarning && (
-            <div className="p-3 bg-warning/10 border border-warning/20 rounded text-warning text-sm">
-              {storageWarning}
             </div>
-          )}
+          </div>
+        ))}
 
-          {/* Draft Preview */}
-          {draft && (
+        {/* Conversation History (collapsed by default) */}
+        {isLoaded && conversationMessages.length > 0 && (
+          <div className="px-6 pb-4">
+            <Separator className="mb-4" />
+            <details className="text-sm">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                Draft iterations ({conversationMessages.length})
+              </summary>
+              <div className="mt-2 space-y-2 pl-4 border-l-2 border-muted">
+                {conversationMessages.map((msg, i) => (
+                  <div key={i}>
+                    <span className="text-xs text-muted-foreground">
+                      {msg.role === 'user' ? 'Feedback:' : 'Draft:'}
+                    </span>
+                    <p className={msg.role === 'user' ? 'text-muted-foreground italic' : ''}>
+                      {msg.content.length > 200 ? msg.content.slice(0, 200) + '...' : msg.content}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
+
+        {/* Storage warning */}
+        {storageWarning && (
+          <div className="mx-6 mb-4 p-3 bg-warning/10 border border-warning/20 rounded text-warning text-sm">
+            {storageWarning}
+          </div>
+        )}
+
+        {/* Draft Preview */}
+        {draft && (
+          <div className="px-6 pb-4">
             <Card ref={draftRef} className="border-primary/30 shadow-md">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
@@ -528,8 +525,8 @@ export function ThreadDetail({
                 </div>
               </CardContent>
             </Card>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Sticky Bottom Controls */}
@@ -564,7 +561,7 @@ export function ThreadDetail({
               </Button>
               <Button
                 onClick={generateDraft}
-                disabled={loading || !instructions.trim()}
+                disabled={loading}
               >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {loading ? 'Generating...' : 'Generate Draft'}

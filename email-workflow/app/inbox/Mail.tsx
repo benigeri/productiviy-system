@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/resizable';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { formatRelativeDate } from '@/lib/date-utils';
 import { ThreadDetail } from './ThreadDetail';
 import { ComposeView } from './ComposeView';
@@ -78,7 +79,7 @@ export function Mail({ threads, initialThreadId, initialMessages }: MailProps) {
       <ResizablePanel id="thread-list" defaultSize="35%" minSize="25%" maxSize="50%">
         <div className="h-full flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-2">
+          <div className="flex items-center justify-between px-4 py-3 border-b">
             <div>
               <h1 className="text-xl font-bold">Inbox</h1>
               <p className="text-xs text-muted-foreground">
@@ -87,33 +88,31 @@ export function Mail({ threads, initialThreadId, initialMessages }: MailProps) {
             </div>
             <Button
               size="sm"
-              variant={viewMode === 'compose' ? 'default' : 'outline'}
               onClick={handleCompose}
             >
-              <Plus className="h-4 w-4 mr-1" />
+              <Plus className="h-4 w-4" />
               Compose
             </Button>
           </div>
 
           <ScrollArea className="flex-1">
-            <div className="px-4 pt-2 pb-4">
+            <div className="p-2 space-y-2">
               {threads.length === 0 ? (
                 <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
                   No emails to respond to.
                 </div>
               ) : (
-                threads.map((thread, index) => {
+                threads.map((thread) => {
                   const isSelected = thread.id === selectedThreadId && viewMode === 'thread';
                   return (
-                    <button
+                    <Card
                       key={thread.id}
-                      type="button"
                       onClick={() => handleSelectThread(thread)}
-                      className={`w-full text-left flex flex-col gap-1 border-b py-3 transition-colors ${
+                      className={`cursor-pointer p-3 transition-colors ${
                         isSelected
                           ? 'bg-muted'
                           : 'hover:bg-muted/50'
-                      } ${index === 0 ? 'border-t' : ''}`}
+                      }`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className={`text-sm truncate ${isSelected ? 'font-semibold' : 'font-medium'}`}>
@@ -123,13 +122,13 @@ export function Mail({ threads, initialThreadId, initialMessages }: MailProps) {
                           {formatRelativeDate(thread.latest_draft_or_message.date)}
                         </span>
                       </div>
-                      <span className="text-sm truncate">
+                      <span className="text-sm truncate block mt-1">
                         {thread.subject}
                       </span>
-                      <span className="text-xs text-muted-foreground line-clamp-2">
+                      <span className="text-xs text-muted-foreground line-clamp-2 mt-1">
                         {thread.latest_draft_or_message.snippet || ''}
                       </span>
-                    </button>
+                    </Card>
                   );
                 })
               )}
