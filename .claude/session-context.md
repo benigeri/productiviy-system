@@ -1,38 +1,57 @@
-# Session Context - Email Label Debugging
+# Session Context - Email Workflow Labels
 
-## Current State (2026-01-18)
+## Key Learning: Gmail Array Ordering
 
-The nylas-webhook has:
-- Correlation IDs for request tracing
-- Detailed logging at each decision point
-- Improved error logging that captures full Nylas API error body (just deployed)
+**Gmail does NOT guarantee the order of labels in the folders array.** Do not rely on array position to determine which label was "most recently added."
 
-## Active Investigation
+## Architecture Decision: Workflow Label Management
 
-### Superhuman "Done" → Label Removal
-**Status**: FIXED ✓
+Workflow labels (`wf_respond`, `wf_review`, `wf_drafted`) are mutually exclusive states.
 
-**Root cause**: When clearing workflow labels from sent messages, we were including
-SENT in the folder update request. Gmail doesn't allow setting read-only system labels.
+### Responsibility Split
 
-**Fix**: Filter out read-only system labels (SENT, DRAFT, TRASH, SPAM) from folder
-update requests. Gmail maintains these automatically.
+**Composer (email-workflow app):**
+- When adding `wf_drafted`, remove `wf_respond` and `wf_review` in the SAME Nylas API call
+- The app knows user intent, so it handles state transitions
 
-**Deployed**: fdc53ed
+**Webhook (nylas-webhook):**
+- Archive detected (no INBOX) → clear ALL workflow labels from thread
+- Sent detected → clear ALL workflow labels from thread
+- No deduplication logic needed - just handles "done" transitions
 
-### ps-58: Emails going unlabeled
-- TikTok emails not getting ai_* labels
-- Need to trace classifier calls
+### Why This Is Better
+- No reliance on Gmail array ordering
+- Each component has single responsibility
+- Deterministic behavior controlled by our code
 
-### ps-59: Gmail quote handling
-- Lower priority
+## Plan: Update Composer to Clear Workflow Labels
 
-## Debug Commands
+### Task 1: Find composer label-setting code
+Location: `email-workflow/` app - find where `wf_drafted` is added
 
-```bash
-# Check for 400 errors with full details (after improved logging deployed)
-SQL="SELECT timestamp, event_message FROM function_logs WHERE event_message LIKE '%400%' ORDER BY timestamp DESC LIMIT 20"
+### Task 2: Update to remove other workflow labels
+When adding `wf_drafted`:
+```typescript
+// Instead of just adding wf_drafted:
+folders: [...currentFolders, wf_drafted_id]
 
-# Check archive detection flow
-SQL="SELECT timestamp, event_message FROM function_logs WHERE event_message LIKE '%cid=%' ORDER BY timestamp DESC LIMIT 50"
+// Remove other workflow labels AND add wf_drafted:
+folders: currentFolders
+  .filter(id => !isWorkflowLabel(id))  // Remove wf_respond, wf_review, wf_drafted
+  .concat(wf_drafted_id)               // Add wf_drafted
 ```
+
+### Task 3: Remove/simplify webhook deduplication
+- Remove `getMostRecentWorkflowLabel` usage from webhook
+- Keep the function as utility but don't use for deduplication
+- Webhook only handles archive/sent detection (already working)
+
+## Fixed This Session
+
+1. **SENT label error** - Filter out read-only system labels (SENT, DRAFT, TRASH, SPAM) from folder updates
+2. **Superhuman "Done"** - Archive detection triggers workflow label removal (working)
+
+## Open Issues
+
+- **ps-58**: Some emails not getting classified - need to investigate classifier calls
+- **ps-59**: Gmail quote handling
