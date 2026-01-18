@@ -671,16 +671,11 @@ curl -s "https://api.us.nylas.com/v3/grants/${NYLAS_GRANT_ID}/messages/MESSAGE_I
 ```
 
 **3. Workflow label logic:**
-- `message.updated` event → `processMessageUpdate()`:
-  - If received message (not SENT) has no INBOX → clears workflow labels from ALL messages in thread
-  - If multiple workflow labels exist → keeps highest priority (wf_respond > wf_review > wf_drafted)
-- `message.created` event → `processMessageCreated()`:
-  - If sent message → clears workflow labels from entire thread
-  - If received message → classifies email, then checks for archive/deduplication
+- `message.updated` event → archived message (no INBOX) clears workflow labels from entire thread
+- `message.created` event → sent message clears workflow labels from entire thread
 
 **4. Common issues:**
 - Labels disappearing: Check if message has INBOX. Archived messages trigger thread-wide label clearing.
-- Wrong label priority: Check `WORKFLOW_LABELS.PRIORITY_ORDER` in `nylas-types.ts`
 - Webhook not firing: Check Nylas webhook configuration in Nylas dashboard
 
 ### Common Issues
