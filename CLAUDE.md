@@ -678,6 +678,20 @@ curl -s "https://api.us.nylas.com/v3/grants/${NYLAS_GRANT_ID}/messages/MESSAGE_I
 - Labels disappearing: Check if message has INBOX. Archived messages trigger thread-wide label clearing.
 - Webhook not firing: Check Nylas webhook configuration in Nylas dashboard
 
+**Query logs via API (for programmatic access):**
+```bash
+# Get recent function console output (function_logs table)
+SQL="SELECT timestamp, event_message FROM function_logs ORDER BY timestamp DESC LIMIT 50"
+curl -s "https://api.supabase.com/v1/projects/aadqqdsclktlyeuweqrv/analytics/endpoints/logs.all?iso_timestamp_start=$(date -u -v-2H '+%Y-%m-%dT%H:%M:%SZ')&iso_timestamp_end=$(date -u '+%Y-%m-%dT%H:%M:%SZ')&sql=$(python3 -c "import urllib.parse; print(urllib.parse.quote('''$SQL'''))")" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" | jq '.result'
+
+# Get HTTP status codes (function_edge_logs table)
+SQL="SELECT timestamp, event_message FROM function_edge_logs ORDER BY timestamp DESC LIMIT 50"
+# Same curl pattern as above
+```
+
+Available tables: `function_logs` (console output), `function_edge_logs` (HTTP status), `edge_logs`, `postgres_logs`, `auth_logs`.
+
 ### Common Issues
 
 1. **Code not taking effect** - Function wasn't redeployed after merge. Check `updated_at` timestamp vs git commit time.

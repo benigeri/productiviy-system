@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { marked } from 'marked';
 import { z } from 'zod';
 
 // Type definitions for Nylas API responses
@@ -82,13 +83,10 @@ export async function POST(request: Request) {
     // Convert CC array (strings) to Nylas format with email objects
     const ccRecipients = filteredCc.map((email) => ({ email }));
 
-    // Convert plain text line breaks to HTML for better Gmail rendering
-    const htmlBody = draftBody
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-      .map((line) => `<p>${line}</p>`)
-      .join('');
+    // Convert markdown to HTML for proper Gmail rendering
+    // marked handles HTML escaping by default - user content is their own draft
+    // breaks: true preserves single newlines (e.g., "Hi,\nThanks,\nPaul")
+    const htmlBody = marked.parse(draftBody, { breaks: true }) as string;
 
     console.log('Saving compose draft to Nylas:', {
       to: toRecipients.map((r) => r.email),

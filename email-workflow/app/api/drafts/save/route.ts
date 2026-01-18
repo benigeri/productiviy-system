@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { marked } from 'marked';
 import { z } from 'zod';
 import {
   getLabelDrafted,
@@ -54,18 +55,17 @@ function buildGmailQuotedReply(draftBody: string): string {
     } else if (inQuotedSection) {
       // Still in quoted section, but no > prefix (blank line or continuation)
       quotedLines.push(trimmed);
-    } else if (trimmed.length > 0) {
-      // Reply content (before quoted section)
-      replyLines.push(trimmed);
+    } else {
+      // Reply content (before quoted section) - keep original line for markdown
+      replyLines.push(line);
     }
   }
 
-  // Escape and format reply body
-  const escapedReply = replyLines
-    .map(line => escapeHtml(line))
-    .join('<br>');
+  // Convert reply to HTML via markdown (handles escaping)
+  // breaks: true preserves single newlines (e.g., "Thanks,\nPaul")
+  const replyHtml = marked.parse(replyLines.join('\n'), { breaks: true }) as string;
 
-  // Escape and format quoted body
+  // Quoted content: escape HTML manually (it's original email text, not markdown)
   const escapedQuoted = quotedLines
     .map(line => escapeHtml(line) || '&nbsp;')
     .join('<br>');
@@ -76,7 +76,7 @@ function buildGmailQuotedReply(draftBody: string): string {
       ? `<div dir="ltr">${escapeHtml(quoteAttribution)} wrote:<br></div>`
       : '';
 
-    return `<div>${escapedReply}</div>
+    return `<div>${replyHtml}</div>
 
 <div class="gmail_quote">
   ${attributionHtml}
@@ -87,7 +87,7 @@ function buildGmailQuotedReply(draftBody: string): string {
   }
 
   // No quoted content, just return reply
-  return `<div>${escapedReply}</div>`;
+  return `<div>${replyHtml}</div>`;
 }
 
 const SaveDraftSchema = z.object({
