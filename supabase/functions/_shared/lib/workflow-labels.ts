@@ -24,30 +24,9 @@ export function getWorkflowLabels(folders: string[]): WorkflowLabel[] {
 }
 
 /**
- * Remove workflow labels from a list of folders.
- * Optionally keep one specific label.
+ * Remove all workflow labels from a list of folders.
  */
-export function removeWorkflowLabels(
-  folders: string[],
-  keepLabel?: WorkflowLabel,
-): string[] {
-  return folders.filter(
-    (folder) => !isWorkflowLabel(folder) || folder === keepLabel,
-  );
+export function removeWorkflowLabels(folders: string[]): string[] {
+  return folders.filter((folder) => !isWorkflowLabel(folder));
 }
 
-/**
- * Get the most recently added workflow label (last in array).
- * Gmail/Nylas typically appends new labels to the end.
- * Returns null if no workflow labels found.
- */
-export function getMostRecentWorkflowLabel(
-  folders: string[],
-): WorkflowLabel | null {
-  const workflowLabels = getWorkflowLabels(folders);
-  if (workflowLabels.length === 0) {
-    return null;
-  }
-  // Return the last one (most recently added)
-  return workflowLabels[workflowLabels.length - 1];
-}

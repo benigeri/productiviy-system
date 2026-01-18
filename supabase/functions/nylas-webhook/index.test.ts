@@ -193,60 +193,9 @@ Deno.test("handleWebhook - accepts valid signature", async () => {
 // Workflow label processing tests
 // ============================================================================
 
-Deno.test("handleWebhook - keeps most recent workflow label when multiple present", async () => {
-  const payload = createWebhookPayload("message.updated");
-  const request = new Request("https://example.com/nylas-webhook", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-nylas-signature": "valid-signature",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  let updatedFolders: string[] = [];
-  const deps = createMockDeps({
-    getMessage: () =>
-      Promise.resolve({
-        id: "msg-123",
-        grant_id: "grant-456",
-        thread_id: "thread-789",
-        subject: "Test",
-        from: [{ email: "sender@example.com" }],
-        to: [{ email: "recipient@example.com" }],
-        date: 1704067200,
-        // Use folder IDs as Nylas returns them
-        // wf_drafted is last = most recently added
-        folders: [
-          "INBOX",
-          "Label_5390221056707111040", // wf_respond
-          "Label_1177410809872040327", // wf_review
-          "Label_3309485003314594938", // wf_drafted (most recent)
-        ],
-      }),
-    updateMessageFolders: (_id, folders) => {
-      updatedFolders = folders;
-      return Promise.resolve({
-        id: "msg-123",
-        grant_id: "grant-456",
-        thread_id: "thread-789",
-        subject: "Test",
-        from: [{ email: "sender@example.com" }],
-        to: [{ email: "recipient@example.com" }],
-        date: 1704067200,
-        folders,
-      });
-    },
-  });
-
-  await handleWebhook(request, deps);
-
-  // Should keep INBOX and wf_drafted (most recent = last in array), remove others
-  assertEquals(updatedFolders.includes("INBOX"), true);
-  assertEquals(updatedFolders.includes("Label_3309485003314594938"), true); // wf_drafted kept
-  assertEquals(updatedFolders.includes("Label_5390221056707111040"), false); // wf_respond removed
-  assertEquals(updatedFolders.includes("Label_1177410809872040327"), false); // wf_review removed
-});
+// Note: We no longer test "keeps most recent workflow label when multiple present"
+// because we removed that unreliable deduplication logic. The composer app
+// now handles mutual exclusivity, and Gmail array ordering is not reliable.
 
 Deno.test("handleWebhook - no update needed when only one workflow label", async () => {
   const payload = createWebhookPayload("message.updated");

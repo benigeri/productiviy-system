@@ -13,43 +13,58 @@ Workflow labels (`wf_respond`, `wf_review`, `wf_drafted`) are mutually exclusive
 **Composer (email-workflow app):**
 - When adding `wf_drafted`, remove `wf_respond` and `wf_review` in the SAME Nylas API call
 - The app knows user intent, so it handles state transitions
+- **Status: WORKING** - `/api/drafts/save` calls `/api/threads` with:
+  - `addLabels: [wf_drafted]`
+  - `removeLabels: [wf_respond, wf_review]`
 
 **Webhook (nylas-webhook):**
 - Archive detected (no INBOX) → clear ALL workflow labels from thread
 - Sent detected → clear ALL workflow labels from thread
-- No deduplication logic needed - just handles "done" transitions
+- No deduplication logic - just handles "done" transitions
+
+**Raycast Extension:**
+- Uses `/api/compose/save` for NEW emails (not replies)
+- No workflow labels needed - correct behavior
 
 ### Why This Is Better
 - No reliance on Gmail array ordering
 - Each component has single responsibility
 - Deterministic behavior controlled by our code
 
-## Plan: Update Composer to Clear Workflow Labels
+---
 
-### Task 1: Find composer label-setting code
-Location: `email-workflow/` app - find where `wf_drafted` is added
+## Completed: Removed Webhook Deduplication Logic
 
-### Task 2: Update to remove other workflow labels
-When adding `wf_drafted`:
-```typescript
-// Instead of just adding wf_drafted:
-folders: [...currentFolders, wf_drafted_id]
+### Changes Made
 
-// Remove other workflow labels AND add wf_drafted:
-folders: currentFolders
-  .filter(id => !isWorkflowLabel(id))  // Remove wf_respond, wf_review, wf_drafted
-  .concat(wf_drafted_id)               // Add wf_drafted
-```
+| File | Change |
+|------|--------|
+| `nylas-webhook/index.ts` | Removed `getMostRecentWorkflowLabel` import and dedup logic (lines 259-278) |
+| `_shared/lib/workflow-labels.ts` | Deleted `getMostRecentWorkflowLabel()` function |
+| `_shared/lib/workflow-labels.ts` | Simplified `removeWorkflowLabels()` - removed `keepLabel` parameter |
+| `_shared/lib/workflow-labels.test.ts` | Removed `getHighestPriorityLabel` import and tests (function didn't exist) |
+| `_shared/lib/workflow-labels.test.ts` | Removed tests for `keepLabel` parameter |
+| `nylas-webhook/index.test.ts` | Removed "keeps most recent workflow label" test |
 
-### Task 3: Remove/simplify webhook deduplication
-- Remove `getMostRecentWorkflowLabel` usage from webhook
-- Keep the function as utility but don't use for deduplication
-- Webhook only handles archive/sent detection (already working)
+### LOC Reduction
+- ~85 lines removed
+- All tests pass (16/16 in both test files)
+
+### What Was Removed
+The webhook used to try to "pick a winner" when multiple workflow labels existed on a single message by using `getMostRecentWorkflowLabel()`. This was unreliable because Gmail doesn't guarantee array ordering.
+
+### What Remains Working
+- Archive detection (no INBOX → clears all workflow labels from thread)
+- Sent detection (SENT folder → clears all workflow labels from thread)
+- Composer handles mutual exclusivity proactively
+
+---
 
 ## Fixed This Session
 
 1. **SENT label error** - Filter out read-only system labels (SENT, DRAFT, TRASH, SPAM) from folder updates
 2. **Superhuman "Done"** - Archive detection triggers workflow label removal (working)
+3. **Removed unreliable deduplication** - Deleted `getMostRecentWorkflowLabel` and associated logic
 
 ## Open Issues
 
