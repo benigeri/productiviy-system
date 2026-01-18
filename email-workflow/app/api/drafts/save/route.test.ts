@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { POST, buildGmailQuotedReply, buildGmailQuotedReplyWithHtml, extractReplyText } from './route';
+import { POST, buildSimpleReplyHtml, buildGmailQuotedReplyWithHtml, extractReplyText } from './route';
 import { NextResponse } from 'next/server';
 
 // Mock fetch globally
@@ -129,46 +129,45 @@ describe('buildGmailQuotedReplyWithHtml', () => {
     // Original HTML must be preserved exactly - no escaping or modification
     expect(result).toContain(complexHtml);
   });
+
+  it('escapes sender name and email in attribution', () => {
+    const result = buildGmailQuotedReplyWithHtml(
+      'Reply',
+      '<p>Original</p>',
+      { name: '<script>alert("xss")</script>', email: 'test@example.com' },
+      1704067200
+    );
+
+    // Sender name should be escaped
+    expect(result).not.toContain('<script>');
+    expect(result).toContain('&lt;script&gt;');
+  });
 });
 
-describe('buildGmailQuotedReply', () => {
-  it('generates Gmail-native HTML structure with proper classes for quote collapsing', () => {
+describe('buildSimpleReplyHtml', () => {
+  it('extracts reply text and returns simple HTML', () => {
     const draftBody = `Thanks for the update!
 
 Best,
 Paul
 
 On Sat, Jan 18, 2026 at 10:30 AM John Doe <john@example.com> wrote:
-> Here is the original message content.
-> This is line 2 of the original.`;
+> Here is the original message content.`;
 
-    const result = buildGmailQuotedReply(draftBody);
+    const result = buildSimpleReplyHtml(draftBody);
 
-    // Should have gmail_extra wrapper (recognized by quote detection libraries)
-    expect(result).toContain('class="gmail_extra"');
-
-    // Should have gmail_attr class on attribution line (for "On [date] wrote:" detection)
-    expect(result).toContain('class="gmail_attr"');
-
-    // Should have gmail_quote class on outer div
-    expect(result).toContain('class="gmail_quote"');
-
-    // Should have blockquote with gmail_quote class and proper styling
-    expect(result).toContain('<blockquote class="gmail_quote"');
-    expect(result).toContain('border-left:1px solid rgb(204,204,204)');
-
-    // Should have dir="ltr" attributes for proper text direction
+    // Should have dir="ltr" wrapper
     expect(result).toContain('dir="ltr"');
 
-    // Should contain the reply content
+    // Should contain only the reply content (not quoted)
     expect(result).toContain('Thanks for the update!');
+    expect(result).toContain('Best,');
+    expect(result).toContain('Paul');
 
-    // Should contain the quoted content
-    expect(result).toContain('Here is the original message content');
-    expect(result).toContain('This is line 2 of the original');
-
-    // Should contain the attribution (without "wrote:" since we add it in HTML)
-    expect(result).toContain('John Doe');
+    // Should NOT contain quoted content or gmail classes
+    expect(result).not.toContain('gmail_quote');
+    expect(result).not.toContain('John Doe');
+    expect(result).not.toContain('original message');
   });
 
   it('returns simple structure when no quoted content is present', () => {
@@ -177,32 +176,13 @@ On Sat, Jan 18, 2026 at 10:30 AM John Doe <john@example.com> wrote:
 Best,
 Paul`;
 
-    const result = buildGmailQuotedReply(draftBody);
-
-    // Should NOT have gmail_extra or gmail_quote classes
-    expect(result).not.toContain('gmail_extra');
-    expect(result).not.toContain('gmail_quote');
-    expect(result).not.toContain('gmail_attr');
+    const result = buildSimpleReplyHtml(draftBody);
 
     // Should have dir="ltr" wrapper
     expect(result).toContain('dir="ltr"');
 
     // Should contain the reply content
     expect(result).toContain('Just a simple reply');
-  });
-
-  it('properly escapes HTML in quoted content', () => {
-    const draftBody = `Reply here.
-
-On Sat, Jan 18, 2026 at 10:30 AM Sender <s@example.com> wrote:
-> Check this <script>alert('xss')</script> content`;
-
-    const result = buildGmailQuotedReply(draftBody);
-
-    // Should NOT contain raw script tag
-    expect(result).not.toContain('<script>');
-    // Should contain escaped version
-    expect(result).toContain('&lt;script&gt;');
   });
 });
 

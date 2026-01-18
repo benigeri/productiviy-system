@@ -21,6 +21,14 @@ interface NylasDraftResponse {
   };
 }
 
+interface NylasMessageResponse {
+  data: {
+    body?: string;
+    from?: Array<{ name?: string; email: string }>;
+    date?: number;
+  };
+}
+
 // Helper to escape HTML in user-generated content
 function escapeHtml(text: string): string {
   return text
@@ -100,61 +108,18 @@ export function buildGmailQuotedReplyWithHtml(
     minute: '2-digit',
     hour12: true,
   });
-  const senderName = originalSender.name || originalSender.email;
+  const senderName = escapeHtml(originalSender.name || originalSender.email);
+  const senderEmail = escapeHtml(originalSender.email);
 
   // Superhuman-compatible structure - original HTML preserved unchanged in blockquote
-  return `<div dir="ltr">${replyHtml}</div><br/><div class="gmail_quote">On ${dateStr} at ${timeStr}, ${senderName} <span dir="ltr">&lt;<a href="mailto:${originalSender.email}">${originalSender.email}</a>&gt;</span> wrote:<br/><blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-left:1px #ccc solid;padding-left:1ex">${originalMessageHtml}</blockquote></div>`;
+  return `<div dir="ltr">${replyHtml}</div><br/><div class="gmail_quote">On ${dateStr} at ${timeStr}, ${senderName} <span dir="ltr">&lt;<a href="mailto:${senderEmail}">${senderEmail}</a>&gt;</span> wrote:<br/><blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-left:1px #ccc solid;padding-left:1ex">${originalMessageHtml}</blockquote></div>`;
 }
 
-// Legacy function for backward compatibility (used by tests)
-// Note: This produces escaped text, not original HTML - may not collapse in all clients
-export function buildGmailQuotedReply(draftBody: string): string {
-  const lines = draftBody.split('\n');
-  const replyLines: string[] = [];
-  const quotedLines: string[] = [];
-  let inQuotedSection = false;
-  let quoteAttribution = '';
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (trimmed.startsWith('On ') && trimmed.includes('wrote:')) {
-      inQuotedSection = true;
-      quoteAttribution = trimmed.replace(' wrote:', '');
-      continue;
-    }
-
-    if (trimmed.startsWith('>')) {
-      inQuotedSection = true;
-      quotedLines.push(trimmed.slice(1).trim());
-    } else if (inQuotedSection) {
-      quotedLines.push(trimmed);
-    } else {
-      replyLines.push(line);
-    }
-  }
-
-  const replyHtml = marked.parse(replyLines.join('\n'), { breaks: true }) as string;
-
-  const escapedQuoted = quotedLines
-    .map(line => escapeHtml(line) || '&nbsp;')
-    .join('<br>\n');
-
-  if (quotedLines.length > 0) {
-    const attributionHtml = quoteAttribution
-      ? `<div dir="ltr" class="gmail_attr">${escapeHtml(quoteAttribution)} wrote:<br></div>`
-      : '';
-
-    return `<div dir="ltr">${replyHtml}</div>
-<div class="gmail_extra"><br>
-<div class="gmail_quote">${attributionHtml}
-<blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex">
-<div dir="ltr">${escapedQuoted}</div>
-</blockquote>
-</div>
-</div>`;
-  }
-
+// Fallback function when original message HTML is unavailable
+// Returns simple HTML without quote structure (won't collapse, but functional)
+export function buildSimpleReplyHtml(draftBody: string): string {
+  const replyText = extractReplyText(draftBody);
+  const replyHtml = marked.parse(replyText, { breaks: true }) as string;
   return `<div dir="ltr">${replyHtml}</div>`;
 }
 
@@ -193,20 +158,30 @@ export async function POST(request: Request) {
       ccCount: cc.length,
     });
 
-    // Get current user's email from Nylas grant to filter from CC
-    const grantRes = await fetch(
-      `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.NYLAS_API_KEY}`,
-        },
-      }
-    );
+    // Fetch grant info and original message in parallel (with timeout)
+    const API_TIMEOUT_MS = 5000;
+    const nylasHeaders = { Authorization: `Bearer ${process.env.NYLAS_API_KEY}` };
 
+    const [grantRes, originalMsgRes] = await Promise.all([
+      // Get current user's email from Nylas grant to filter from CC
+      fetch(
+        `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}`,
+        { headers: nylasHeaders }
+      ),
+      // Fetch the original message to get its HTML body for proper quote collapsing
+      fetch(
+        `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/messages/${latestMessageId}`,
+        { headers: nylasHeaders, signal: AbortSignal.timeout(API_TIMEOUT_MS) }
+      ).catch((err) => {
+        console.warn('Original message fetch failed:', err.message);
+        return null;
+      }),
+    ]);
+
+    // Process grant response for CC filtering
     if (!grantRes.ok) {
       console.warn('Failed to fetch grant details, using CC as-is');
     }
-
     const grant: NylasGrantResponse | null = grantRes.ok
       ? await grantRes.json()
       : null;
@@ -217,20 +192,10 @@ export async function POST(request: Request) {
       ? cc.filter((recipient) => recipient.email !== userEmail)
       : cc;
 
-    // Fetch the original message to get its HTML body for proper quote collapsing
-    const originalMsgRes = await fetch(
-      `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/messages/${latestMessageId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.NYLAS_API_KEY}`,
-        },
-      }
-    );
-
     let htmlBody: string;
 
-    if (originalMsgRes.ok) {
-      const originalMsg = await originalMsgRes.json();
+    if (originalMsgRes?.ok) {
+      const originalMsg: NylasMessageResponse = await originalMsgRes.json();
       const originalHtml = originalMsg.data?.body || '';
       const originalSender = originalMsg.data?.from?.[0] || { email: 'unknown@example.com' };
       const originalDate = originalMsg.data?.date || Math.floor(Date.now() / 1000);
@@ -252,9 +217,9 @@ export async function POST(request: Request) {
         originalHtmlLength: originalHtml.length,
       });
     } else {
-      // Fallback to legacy method if we can't fetch original message
-      console.warn('Could not fetch original message, using legacy quote method');
-      htmlBody = buildGmailQuotedReply(draftBody);
+      // Fallback to simple HTML if we can't fetch original message (quote won't collapse)
+      console.warn('Could not fetch original message, using simple HTML fallback');
+      htmlBody = buildSimpleReplyHtml(draftBody);
     }
 
     console.log('Saving draft to Nylas:', {
@@ -383,6 +348,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to save draft',
+        errorCode: 'DRAFT_SAVE_FAILED',
       },
       { status: 500 }
     );
