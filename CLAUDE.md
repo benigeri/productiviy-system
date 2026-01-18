@@ -619,10 +619,17 @@ Never commit secrets. Use:
 
 Functions auto-deploy on push to main via GitHub Actions (see `.github/workflows/deploy-functions.yml`).
 
-To manually deploy:
+To manually deploy (token is in `.env` file in main repo):
 ```bash
-SUPABASE_ACCESS_TOKEN=$SUPABASE_ACCESS_TOKEN supabase functions deploy telegram-webhook --project-ref aadqqdsclktlyeuweqrv
+# Load token from .env and deploy
+export SUPABASE_ACCESS_TOKEN=$(grep '^SUPABASE_ACCESS_TOKEN=' /Users/benigeri/Projects/productiviy-system/.env | cut -d'=' -f2) && supabase functions deploy <function-name> --project-ref aadqqdsclktlyeuweqrv
+
+# Examples:
+# supabase functions deploy nylas-webhook --project-ref aadqqdsclktlyeuweqrv
+# supabase functions deploy telegram-webhook --project-ref aadqqdsclktlyeuweqrv
 ```
+
+**Note:** The `.env` file can't be sourced directly (has non-key-value lines), so we extract just the token.
 
 ### Debugging
 
@@ -633,7 +640,7 @@ SUPABASE_ACCESS_TOKEN=$SUPABASE_ACCESS_TOKEN supabase functions list --project-r
 
 **Check deployment version and timestamp:**
 ```bash
-curl -s 'https://api.supabase.com/v1/projects/aadqqdsclktlyeuweqrv/functions/telegram-webhook' \
+curl -s 'https://api.supabase.com/v1/projects/aadqqdsclktlyeuweqrv/functions/nylas-webhook' \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 ```
 
@@ -641,7 +648,56 @@ The `updated_at` field (Unix timestamp in ms) shows when the function was last d
 
 **View logs:**
 Logs are available in the Supabase Dashboard:
-https://supabase.com/dashboard/project/aadqqdsclktlyeuweqrv/functions/telegram-webhook/logs
+- nylas-webhook: https://supabase.com/dashboard/project/aadqqdsclktlyeuweqrv/functions/nylas-webhook/logs
+- telegram-webhook: https://supabase.com/dashboard/project/aadqqdsclktlyeuweqrv/functions/telegram-webhook/logs
+
+### Debugging Nylas Webhook (Workflow Labels)
+
+The `nylas-webhook` function handles email workflow automation (labels like `wf_respond`, `wf_drafted`, etc.).
+
+**1. Check what labels a thread has:**
+```bash
+# Get thread by searching
+curl -s "https://api.us.nylas.com/v3/grants/${NYLAS_GRANT_ID}/threads?search_query_native=subject:YOUR_SUBJECT" \
+  -H "Authorization: Bearer ${NYLAS_API_KEY}" | jq '.data[0] | {id, subject, folders}'
+
+# Get label ID to name mapping
+curl -s "https://api.us.nylas.com/v3/grants/${NYLAS_GRANT_ID}/folders" \
+  -H "Authorization: Bearer ${NYLAS_API_KEY}" | jq '.data[] | select(.name | test("wf_|triage|ai_")) | {id, name}'
+```
+
+**2. Check individual messages in a thread:**
+```bash
+# Get thread messages
+curl -s "https://api.us.nylas.com/v3/grants/${NYLAS_GRANT_ID}/threads/THREAD_ID" \
+  -H "Authorization: Bearer ${NYLAS_API_KEY}" | jq '.data.message_ids'
+
+# Check each message's folders
+curl -s "https://api.us.nylas.com/v3/grants/${NYLAS_GRANT_ID}/messages/MESSAGE_ID" \
+  -H "Authorization: Bearer ${NYLAS_API_KEY}" | jq '{id: .data.id, folders: .data.folders, from: .data.from[0].email}'
+```
+
+**3. Workflow label logic:**
+- `message.updated` event → archived message (no INBOX) clears workflow labels from entire thread
+- `message.created` event → sent message clears workflow labels from entire thread
+
+**4. Common issues:**
+- Labels disappearing: Check if message has INBOX. Archived messages trigger thread-wide label clearing.
+- Webhook not firing: Check Nylas webhook configuration in Nylas dashboard
+
+**Query logs via API (for programmatic access):**
+```bash
+# Get recent function console output (function_logs table)
+SQL="SELECT timestamp, event_message FROM function_logs ORDER BY timestamp DESC LIMIT 50"
+curl -s "https://api.supabase.com/v1/projects/aadqqdsclktlyeuweqrv/analytics/endpoints/logs.all?iso_timestamp_start=$(date -u -v-2H '+%Y-%m-%dT%H:%M:%SZ')&iso_timestamp_end=$(date -u '+%Y-%m-%dT%H:%M:%SZ')&sql=$(python3 -c "import urllib.parse; print(urllib.parse.quote('''$SQL'''))")" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" | jq '.result'
+
+# Get HTTP status codes (function_edge_logs table)
+SQL="SELECT timestamp, event_message FROM function_edge_logs ORDER BY timestamp DESC LIMIT 50"
+# Same curl pattern as above
+```
+
+Available tables: `function_logs` (console output), `function_edge_logs` (HTTP status), `edge_logs`, `postgres_logs`, `auth_logs`.
 
 **Query logs via API (for programmatic access):**
 ```bash
@@ -661,6 +717,7 @@ Available tables: `function_logs` (console output), `function_edge_logs` (HTTP s
 
 1. **Code not taking effect** - Function wasn't redeployed after merge. Check `updated_at` timestamp vs git commit time.
 2. **Function errors** - Check logs in Supabase Dashboard for stack traces.
+3. **Workflow labels disappearing** - Check if any message in thread lacks INBOX (archived), which triggers thread-wide clearing.
 
 ---
 

@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
-import { handleWebhook, type WebhookDeps } from "./index.ts";
+import { assertEquals, assertExists } from "@std/assert";
+import { clearDedupCache, handleWebhook, type WebhookDeps } from "./index.ts";
 import type {
   NylasFolder,
   NylasMessage,
@@ -497,11 +497,94 @@ Deno.test("handleWebhook - clears workflow labels when archived (no INBOX)", asy
   assertEquals(updatedFolders.includes("CATEGORY_UPDATES"), true);
 });
 
+Deno.test("handleWebhook - clears workflow labels from ALL thread messages when archived", async () => {
+  clearDedupCache(); // Reset dedup tracking between tests
+  // This tests the case where workflow labels are on SENT messages, but the RECEIVED message is archived
+  const payload = createWebhookPayload("message.updated", "received-msg-123");
+  const request = new Request("https://example.com/nylas-webhook", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nylas-signature": "valid-signature",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const updatedMessages: Map<string, string[]> = new Map();
+
+  // Received message: archived (no INBOX), no workflow labels
+  const receivedMessage = {
+    id: "received-msg-123",
+    grant_id: "grant-456",
+    thread_id: "thread-789",
+    subject: "Test",
+    from: [{ email: "external@example.com" }],
+    to: [{ email: "user@example.com" }],
+    date: 1704067200,
+    folders: ["CATEGORY_PERSONAL", "IMPORTANT"], // Archived: no INBOX, no workflow labels
+  };
+
+  // Sent message: has workflow labels
+  const sentMessage = {
+    id: "sent-msg-456",
+    grant_id: "grant-456",
+    thread_id: "thread-789",
+    subject: "Re: Test",
+    from: [{ email: "user@example.com" }],
+    to: [{ email: "external@example.com" }],
+    date: 1704067300,
+    folders: ["SENT", "Label_5390221056707111040", "Label_3309485003314594938"], // Has wf_respond and wf_drafted
+  };
+
+  const deps = createMockDeps({
+    getMessage: (id) => {
+      if (id === "received-msg-123") return Promise.resolve(receivedMessage);
+      if (id === "sent-msg-456") return Promise.resolve(sentMessage);
+      return Promise.resolve(receivedMessage);
+    },
+    getThread: () =>
+      Promise.resolve({
+        id: "thread-789",
+        grant_id: "grant-456",
+        subject: "Test",
+        participants: [
+          { email: "external@example.com" },
+          { email: "user@example.com" },
+        ],
+        message_ids: ["received-msg-123", "sent-msg-456"],
+        folders: ["CATEGORY_PERSONAL", "IMPORTANT", "SENT"],
+      }),
+    updateMessageFolders: (id, folders) => {
+      updatedMessages.set(id, folders);
+      return Promise.resolve({
+        id,
+        grant_id: "grant-456",
+        thread_id: "thread-789",
+        subject: "Test",
+        from: [{ email: "user@example.com" }],
+        to: [{ email: "external@example.com" }],
+        date: 1704067200,
+        folders,
+      });
+    },
+  });
+
+  await handleWebhook(request, deps);
+
+  // The sent message should have workflow labels removed
+  const sentMsgFolders = updatedMessages.get("sent-msg-456");
+  assertExists(sentMsgFolders, "Sent message should have been updated");
+  assertEquals(sentMsgFolders.includes("Label_5390221056707111040"), false, "wf_respond should be removed");
+  assertEquals(sentMsgFolders.includes("Label_3309485003314594938"), false, "wf_drafted should be removed");
+  assertEquals(sentMsgFolders.includes("SENT"), true, "SENT folder should remain");
+});
+
 // ============================================================================
 // Send detection tests
 // ============================================================================
 
 Deno.test("handleWebhook - clears workflow labels from thread when reply sent", async () => {
+  clearDedupCache(); // Reset dedup tracking between tests
   const payload = createWebhookPayload("message.created", "sent-msg-456");
   const request = new Request("https://example.com/nylas-webhook", {
     method: "POST",
@@ -580,6 +663,7 @@ Deno.test("handleWebhook - clears workflow labels from thread when reply sent", 
 });
 
 Deno.test("handleWebhook - clears workflow labels from sent message itself (draft becomes sent)", async () => {
+  clearDedupCache(); // Reset dedup tracking between tests
   const payload = createWebhookPayload("message.created", "sent-msg-456");
   const request = new Request("https://example.com/nylas-webhook", {
     method: "POST",

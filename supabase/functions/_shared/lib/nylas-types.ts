@@ -82,19 +82,16 @@ export interface NylasWebhookPayload {
 }
 
 // Workflow labels for email triage
-// Note: "triage" has no prefix (applies on top of other wf_ labels)
 export const WORKFLOW_LABELS = {
-  TRIAGE: "triage",
   RESPOND: "wf_respond",
   REVIEW: "wf_review",
   DRAFTED: "wf_drafted",
   // Priority order: higher index = lower priority
-  PRIORITY_ORDER: ["triage", "wf_respond", "wf_review", "wf_drafted"] as const,
+  PRIORITY_ORDER: ["wf_respond", "wf_review", "wf_drafted"] as const,
 } as const;
 
 // Type for workflow label values
 export type WorkflowLabel =
-  | typeof WORKFLOW_LABELS.TRIAGE
   | typeof WORKFLOW_LABELS.RESPOND
   | typeof WORKFLOW_LABELS.REVIEW
   | typeof WORKFLOW_LABELS.DRAFTED;

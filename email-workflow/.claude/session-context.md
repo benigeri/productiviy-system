@@ -1,47 +1,52 @@
-# Session Context: ps-53 Inbox UI Redesign
+# Session Context: ps-56 Workflow Labels
 
-## Date: 2026-01-17
+## Date: 2026-01-18
 
-## Changes Made This Session
+## Problem
 
-### UI Fixes Completed:
-1. **Thread list uses Card components** - Changed from raw `<button>` to `<Card>` in Mail.tsx
-2. **Message separators edge-to-edge** - Restructured layout so Separator is outside padded container
-3. **Headers aligned** - Both panels now use `text-xl font-bold` + `text-xs text-muted-foreground` with `px-4 py-3`
-4. **Compose button primary style** - Removed conditional variant, always uses default (primary)
-5. **Generate Draft always enabled** - Removed `!instructions.trim()` requirement
-6. **Card border reset** - Removed `border-primary` from selected cards, uses standard `bg-muted`
-7. **Added snippet to type** - Added optional `snippet?: string` to ThreadWithPreview
+When saving a draft on a thread with `wf_review`, the thread ends up with `["wf_review", "wf_drafted"]`. The webhook's priority-based dedup incorrectly keeps `wf_review` (higher priority) when we want `wf_drafted`.
 
-### Files Modified:
-- `app/inbox/Mail.tsx` - Card components, button styling, header alignment
-- `app/inbox/ThreadDetail.tsx` - Separator layout, header alignment, button enablement
-- `types/email.ts` - Added snippet field
+**Root cause:** Draft save API only removes `wf_respond`, not all workflow labels.
 
-## Code Review Findings
+## Decision from Previous Session Reviews
 
-### P1 - Deferred (not blocking this PR):
-1. **XSS via javascript: URLs** - `parseMarkdownLinks()` doesn't block javascript: protocol
-   - Location: ThreadDetail.tsx:95-136
-   - Fix: Add URL scheme allowlist
-   - Note: Existing code, not introduced by this PR
+Three reviewers (DHH, Kieran, Simplification) all concluded: **Don't add a database. Fix the algorithm.**
 
-2. **Card accessibility** - Thread list Cards missing tabIndex, role, keyboard handlers
-   - Location: Mail.tsx:108-131
-   - Fix: Add ARIA attributes or wrap in button
-   - Note: Acceptable for MVP, track for follow-up
+The atomic label update approach is the right solution:
+- Draft save should remove ALL workflow labels, not just `wf_respond`
+- Archive/send already clear all workflow labels (implemented)
+- Priority dedup is acceptable for manual label conflicts
 
-### P2 - Fixed This Session:
-3. **Unused historyCollapsed state** - FIXED
-4. **Type duplication in page.tsx** - FIXED
-5. **Unused Card import in ComposeView.tsx** - FIXED
+## Plan: Fix Draft Save + Clean Up Workflow Labels
 
-## React Audit Findings
-(To be added after audit)
+### Changes
 
-## Plan
-- [x] Fix 003, 004, 005 (quick cleanups)
-- [x] Ignore 001, 002 for now (defer to follow-up)
-- [ ] Run React best practices audit
-- [ ] Save audit findings to session context
-- [ ] Ship when ready
+1. **Remove `triage` from PRIORITY_ORDER** (unused, cleanup)
+   - File: `supabase/functions/_shared/lib/nylas-types.ts`
+
+2. **Add `getLabelReview()` to gmail-labels.ts**
+   - File: `email-workflow/lib/gmail-labels.ts`
+
+3. **Update draft save to remove ALL workflow labels**
+   - File: `email-workflow/app/api/drafts/save/route.ts`
+   - Change: `removeLabels: [getLabelRespond(), getLabelReview()]`
+
+### Environment Variable Needed
+
+```
+GMAIL_LABEL_REVIEW=Label_XXX
+```
+
+To find: `curl -s "https://api.us.nylas.com/v3/grants/${NYLAS_GRANT_ID}/folders" -H "Authorization: Bearer ${NYLAS_API_KEY}" | jq '.data[] | select(.name == "wf_review") | .id'`
+
+### What's Already Working
+
+- Archive clears all workflow labels from thread ✓
+- Send clears all workflow labels from thread ✓
+- Priority dedup handles manual conflicts ✓
+
+## Key Learnings
+
+1. Gmail labels ARE your state - don't add a database to track what's already there
+2. Make label updates atomic (remove ALL workflow labels, add new one) to avoid race conditions
+3. Priority-based dedup is acceptable for human error (manual label conflicts)
