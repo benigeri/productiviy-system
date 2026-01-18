@@ -673,7 +673,7 @@ curl -s "https://api.us.nylas.com/v3/grants/${NYLAS_GRANT_ID}/messages/MESSAGE_I
 **3. Workflow label logic:**
 - `message.updated` event → `processMessageUpdate()`:
   - If received message (not SENT) has no INBOX → clears workflow labels from ALL messages in thread
-  - If multiple workflow labels exist → keeps highest priority (triage > wf_respond > wf_review > wf_drafted)
+  - If multiple workflow labels exist → keeps highest priority (wf_respond > wf_review > wf_drafted)
 - `message.created` event → `processMessageCreated()`:
   - If sent message → clears workflow labels from entire thread
   - If received message → classifies email, then checks for archive/deduplication

@@ -12,16 +12,14 @@ import {
 // ============================================================================
 
 Deno.test("WORKFLOW_LABELS - contains expected labels", () => {
-  assertEquals(WORKFLOW_LABELS.TRIAGE, "triage");
   assertEquals(WORKFLOW_LABELS.RESPOND, "wf_respond");
   assertEquals(WORKFLOW_LABELS.REVIEW, "wf_review");
   assertEquals(WORKFLOW_LABELS.DRAFTED, "wf_drafted");
 });
 
 Deno.test("WORKFLOW_LABELS - priority order is correct", () => {
-  // Priority: triage > wf_respond > wf_review > wf_drafted
+  // Priority: wf_respond > wf_review > wf_drafted
   assertEquals(WORKFLOW_LABELS.PRIORITY_ORDER, [
-    "triage",
     "wf_respond",
     "wf_review",
     "wf_drafted",
@@ -30,7 +28,6 @@ Deno.test("WORKFLOW_LABELS - priority order is correct", () => {
 
 Deno.test("WORKFLOW_LABELS - all labels are in priority order", () => {
   const allLabels = [
-    WORKFLOW_LABELS.TRIAGE,
     WORKFLOW_LABELS.RESPOND,
     WORKFLOW_LABELS.REVIEW,
     WORKFLOW_LABELS.DRAFTED,
@@ -142,13 +139,11 @@ Deno.test("NylasWebhookPayload - type structure for message.created", () => {
 
 Deno.test("WorkflowLabel - type accepts valid labels", () => {
   // These should compile without errors
-  const label1: WorkflowLabel = "triage";
-  const label2: WorkflowLabel = "wf_respond";
-  const label3: WorkflowLabel = "wf_review";
-  const label4: WorkflowLabel = "wf_drafted";
+  const label1: WorkflowLabel = "wf_respond";
+  const label2: WorkflowLabel = "wf_review";
+  const label3: WorkflowLabel = "wf_drafted";
 
-  assertEquals(label1, WORKFLOW_LABELS.TRIAGE);
-  assertEquals(label2, WORKFLOW_LABELS.RESPOND);
-  assertEquals(label3, WORKFLOW_LABELS.REVIEW);
-  assertEquals(label4, WORKFLOW_LABELS.DRAFTED);
+  assertEquals(label1, WORKFLOW_LABELS.RESPOND);
+  assertEquals(label2, WORKFLOW_LABELS.REVIEW);
+  assertEquals(label3, WORKFLOW_LABELS.DRAFTED);
 });
