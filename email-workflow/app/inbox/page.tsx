@@ -1,15 +1,15 @@
 // Server Component - fetches data directly
 import { Mail } from './Mail';
-import { getLabelToRespondPaul } from '@/lib/gmail-labels';
+import { getLabelRespond } from '@/lib/gmail-labels';
 import type { ThreadWithPreview, Message } from '@/types/email';
 
 // Force dynamic rendering - this page fetches live email data
 export const dynamic = 'force-dynamic';
 
 async function getThreads(): Promise<ThreadWithPreview[]> {
-  const toRespondLabel = getLabelToRespondPaul();
+  const respondLabel = getLabelRespond();
   const res = await fetch(
-    `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/threads?in=${toRespondLabel}&limit=20`,
+    `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/threads?in=${respondLabel}&limit=20`,
     {
       headers: { Authorization: `Bearer ${process.env.NYLAS_API_KEY}` },
       cache: 'no-store',

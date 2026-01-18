@@ -3,7 +3,12 @@
  * Uses dependency injection for fetch to enable testing.
  */
 
-import type { NylasFolder, NylasMessage, NylasThread } from "./nylas-types.ts";
+import type {
+  NylasCleanMessage,
+  NylasFolder,
+  NylasMessage,
+  NylasThread,
+} from "./nylas-types.ts";
 
 const NYLAS_BASE_URL = "https://api.us.nylas.com/v3";
 
@@ -15,10 +20,26 @@ export interface NylasClient {
     messageId: string,
     folders: string[],
   ): Promise<NylasMessage>;
+  getCleanMessages(messageIds: string[]): Promise<NylasCleanMessage[]>;
+}
+
+/**
+ * Constant-time string comparison to prevent timing attacks.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
 }
 
 /**
  * Verify Nylas webhook signature using HMAC-SHA256.
+ * Uses constant-time comparison to prevent timing attacks.
  */
 export async function verifyNylasSignature(
   signature: string,
@@ -45,7 +66,7 @@ export async function verifyNylasSignature(
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    return signature === expectedHex;
+    return timingSafeEqual(signature, expectedHex);
   } catch {
     return false;
   }
@@ -98,7 +119,8 @@ export function createNylasClient(
     },
 
     getFolders(): Promise<NylasFolder[]> {
-      return apiRequest<NylasFolder[]>("/folders");
+      // Use limit=200 to ensure all folders are returned (default is ~50)
+      return apiRequest<NylasFolder[]>("/folders?limit=200");
     },
 
     updateMessageFolders(
@@ -109,6 +131,28 @@ export function createNylasClient(
         method: "PUT",
         body: JSON.stringify({ folders }),
       });
+    },
+
+    async getCleanMessages(messageIds: string[]): Promise<NylasCleanMessage[]> {
+      // Clean API returns array directly, not wrapped in data
+      const response = await fetchFn(`${baseUrl}/messages/clean`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          message_id: messageIds,
+          ignore_images: false, // Don't ignore images - prevents 'span' text in output
+          html_as_markdown: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Nylas API error: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const json = await response.json();
+      return json.data;
     },
   };
 }

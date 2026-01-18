@@ -31,3 +31,4 @@ SESSION_CONTEXT.md
 
 # File-based todos (local tracking)
 todos/
+node_modules/

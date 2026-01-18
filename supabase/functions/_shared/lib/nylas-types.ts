@@ -73,16 +73,43 @@ export interface NylasWebhookPayload {
 }
 
 // Workflow labels for email triage
+// Note: "triage" has no prefix (applies on top of other wf_ labels)
 export const WORKFLOW_LABELS = {
-  TO_RESPOND: "to-respond-paul",
-  TO_READ: "to-read-paul",
-  DRAFTED: "drafted",
+  TRIAGE: "triage",
+  RESPOND: "wf_respond",
+  REVIEW: "wf_review",
+  DRAFTED: "wf_drafted",
   // Priority order: higher index = lower priority
-  PRIORITY_ORDER: ["to-respond-paul", "to-read-paul", "drafted"] as const,
+  PRIORITY_ORDER: ["triage", "wf_respond", "wf_review", "wf_drafted"] as const,
 } as const;
 
 // Type for workflow label values
 export type WorkflowLabel =
-  | typeof WORKFLOW_LABELS.TO_RESPOND
-  | typeof WORKFLOW_LABELS.TO_READ
+  | typeof WORKFLOW_LABELS.TRIAGE
+  | typeof WORKFLOW_LABELS.RESPOND
+  | typeof WORKFLOW_LABELS.REVIEW
   | typeof WORKFLOW_LABELS.DRAFTED;
+
+// AI labels for automatic classification (NOT mutually exclusive)
+export const AI_LABELS = {
+  AUTO_REPLY: "ai_auto_reply",
+  GROUP_CC: "ai_group_cc",
+  TOOL: "ai_tool",
+  SERVICE: "ai_service",
+  AUTH: "ai_auth",
+  TRANSACTION: "ai_transaction",
+  LARGE_PAYMENT: "ai_large_payment",
+  SALES: "ai_sales",
+  CALENDAR: "ai_calendar",
+} as const;
+
+export type AILabel = typeof AI_LABELS[keyof typeof AI_LABELS];
+
+// Clean message response from PUT /messages/clean
+export interface NylasCleanMessage {
+  body: string; // Cleaned content (markdown if html_as_markdown: true)
+  grant_id: string;
+  conversation?: string; // Conversation thread text
+  message_id?: string[]; // IDs of messages in the conversation
+  from?: NylasEmailParticipant[];
+}
