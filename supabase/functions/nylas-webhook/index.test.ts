@@ -7,6 +7,24 @@ import type {
 } from "../_shared/lib/nylas-types.ts";
 
 // ============================================================================
+// Mock message factory to reduce duplication
+// ============================================================================
+
+function createMockMessage(overrides: Partial<NylasMessage> = {}): NylasMessage {
+  return {
+    id: "msg-123",
+    grant_id: "grant-456",
+    thread_id: "thread-789",
+    subject: "Test",
+    from: [{ email: "sender@example.com" }],
+    to: [{ email: "recipient@example.com" }],
+    date: 1704067200,
+    folders: ["INBOX"],
+    ...overrides,
+  };
+}
+
+// ============================================================================
 // Helper to create mock deps
 // ============================================================================
 

@@ -24,7 +24,22 @@ export interface NylasClient {
 }
 
 /**
+ * Constant-time string comparison to prevent timing attacks.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+/**
  * Verify Nylas webhook signature using HMAC-SHA256.
+ * Uses constant-time comparison to prevent timing attacks.
  */
 export async function verifyNylasSignature(
   signature: string,
@@ -51,7 +66,7 @@ export async function verifyNylasSignature(
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    return signature === expectedHex;
+    return timingSafeEqual(signature, expectedHex);
   } catch {
     return false;
   }

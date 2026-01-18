@@ -88,15 +88,17 @@ async function clearWorkflowLabels(
 /**
  * Process a message update event.
  * Handles: deduplication (multiple workflow labels) and archive (no INBOX).
+ * Accepts optional pre-fetched data to avoid duplicate API calls.
  */
 async function processMessageUpdate(
   messageId: string,
   deps: WebhookDeps,
+  prefetched?: { message: NylasMessage; folders: NylasFolder[] },
 ): Promise<boolean> {
-  const [message, folders] = await Promise.all([
-    deps.getMessage(messageId),
-    deps.getFolders(),
-  ]);
+  // Use prefetched data if available, otherwise fetch
+  const [message, folders] = prefetched
+    ? [prefetched.message, prefetched.folders]
+    : await Promise.all([deps.getMessage(messageId), deps.getFolders()]);
 
   const { idToName, nameToId } = buildFolderMaps(folders);
   const folderNames = message.folders.map((id) => idToName.get(id) ?? id);
@@ -127,13 +129,6 @@ async function processMessageUpdate(
   }
 
   return false;
-}
-
-/**
- * Helper to get all AI labels from a list of folder names.
- */
-function getAILabels(folderNames: string[]): string[] {
-  return folderNames.filter((name) => name.startsWith("ai_"));
 }
 
 /**
@@ -214,8 +209,10 @@ async function processReceivedMessage(
 
     return false;
   } catch (error) {
+    // Re-throw classification errors so they're visible at the top level
+    // This prevents silent failures that are indistinguishable from "no labels"
     console.error(`Classification error for ${message.id}:`, error);
-    return false;
+    throw error;
   }
 }
 
@@ -240,29 +237,27 @@ async function processMessageCreated(
   if (!isSent) {
     // Received message - classify it, then check for deduplication/archive
     await processReceivedMessage(message, folders, deps);
-    return processMessageUpdate(messageId, deps);
+    // Pass prefetched data to avoid duplicate API calls
+    return processMessageUpdate(messageId, deps, { message, folders });
   }
 
   // Get thread to find all messages
   const thread = await deps.getThread(message.thread_id);
 
+  // Fetch all thread messages in parallel (reuse already-fetched message)
+  const otherMessageIds = thread.message_ids.filter((id) => id !== messageId);
+  const otherMessages = await Promise.all(
+    otherMessageIds.map((id) => deps.getMessage(id))
+  );
+  const allMessages = [message, ...otherMessages];
+
   // Clear workflow labels from ALL messages in thread (including the sent one)
   // This handles the case where a draft with "wf_drafted" label becomes a sent message
-  let updated = false;
-  for (const threadMessageId of thread.message_ids) {
-    const threadMessage = threadMessageId === messageId
-      ? message  // Reuse already-fetched message
-      : await deps.getMessage(threadMessageId);
-    const cleared = await clearWorkflowLabels(
-      threadMessage,
-      idToName,
-      nameToId,
-      deps,
-    );
-    if (cleared) updated = true;
-  }
+  const results = await Promise.all(
+    allMessages.map((msg) => clearWorkflowLabels(msg, idToName, nameToId, deps))
+  );
 
-  return updated;
+  return results.some((cleared) => cleared);
 }
 
 /**
