@@ -1,9 +1,77 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { POST, buildGmailQuotedReply } from './route';
+import { POST, buildGmailQuotedReply, buildGmailQuotedReplyWithHtml, extractReplyText } from './route';
 import { NextResponse } from 'next/server';
 
 // Mock fetch globally
 global.fetch = vi.fn();
+
+describe('extractReplyText', () => {
+  it('extracts reply text before quoted section', () => {
+    const draftBody = `Thanks for the update!
+
+Best,
+Paul
+
+On Sat, Jan 18, 2026 at 10:30 AM John Doe <john@example.com> wrote:
+> Here is the original message content.`;
+
+    const result = extractReplyText(draftBody);
+
+    expect(result).toContain('Thanks for the update!');
+    expect(result).toContain('Best,');
+    expect(result).toContain('Paul');
+    expect(result).not.toContain('On Sat, Jan 18');
+    expect(result).not.toContain('Here is the original');
+  });
+
+  it('returns full text when no quoted section', () => {
+    const draftBody = `Just a simple message.
+
+Best,
+Paul`;
+
+    const result = extractReplyText(draftBody);
+    expect(result).toBe(draftBody);
+  });
+});
+
+describe('buildGmailQuotedReplyWithHtml', () => {
+  it('includes original HTML in blockquote without escaping', () => {
+    const replyText = 'Thanks for the update!';
+    const originalHtml = '<div style="color:blue"><p>Original <strong>formatted</strong> message</p></div>';
+    const sender = { name: 'John Doe', email: 'john@example.com' };
+    const date = 1704067200; // Jan 1, 2024 UTC
+
+    const result = buildGmailQuotedReplyWithHtml(replyText, originalHtml, sender, date);
+
+    // Should have gmail_extra wrapper
+    expect(result).toContain('class="gmail_extra"');
+
+    // Should have gmail_attr class on attribution
+    expect(result).toContain('class="gmail_attr"');
+
+    // Should contain attribution with sender
+    expect(result).toContain('John Doe');
+    expect(result).toContain('john@example.com');
+
+    // Critical: Should contain ORIGINAL HTML unescaped (not &lt;div&gt;)
+    expect(result).toContain('<div style="color:blue">');
+    expect(result).toContain('<strong>formatted</strong>');
+    expect(result).not.toContain('&lt;div');
+    expect(result).not.toContain('&lt;strong');
+  });
+
+  it('uses email as sender name when name is missing', () => {
+    const result = buildGmailQuotedReplyWithHtml(
+      'Reply',
+      '<p>Original</p>',
+      { email: 'test@example.com' },
+      1704067200
+    );
+
+    expect(result).toContain('test@example.com');
+  });
+});
 
 describe('buildGmailQuotedReply', () => {
   it('generates Gmail-native HTML structure with proper classes for quote collapsing', () => {
@@ -106,6 +174,18 @@ describe('POST /api/drafts/save', () => {
       }),
     });
 
+    // Mock original message API response (for quote HTML)
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: {
+          body: '<div>Original message HTML</div>',
+          from: [{ name: 'Test Sender', email: 'sender@example.com' }],
+          date: 1704067200, // Jan 1, 2024
+        },
+      }),
+    });
+
     // Mock draft creation response
     (fetch as any).mockResolvedValueOnce({
       ok: true,
@@ -135,7 +215,8 @@ describe('POST /api/drafts/save', () => {
     await POST(request);
 
     // Verify draft creation was called with filtered CC (user removed)
-    const draftCall = (fetch as any).mock.calls[1];
+    // Index 2 because: 0=grant, 1=original message, 2=draft creation
+    const draftCall = (fetch as any).mock.calls[2];
     const draftBody = JSON.parse(draftCall[1].body);
 
     expect(draftBody.cc).toHaveLength(1);
@@ -153,6 +234,18 @@ describe('POST /api/drafts/save', () => {
     (fetch as any).mockResolvedValueOnce({
       ok: false,
       json: async () => ({}),
+    });
+
+    // Mock original message API response (for quote HTML)
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: {
+          body: '<div>Original message HTML</div>',
+          from: [{ name: 'Test Sender', email: 'sender@example.com' }],
+          date: 1704067200, // Jan 1, 2024
+        },
+      }),
     });
 
     // Mock draft creation response
@@ -184,7 +277,8 @@ describe('POST /api/drafts/save', () => {
     await POST(request);
 
     // Verify draft creation was called with ALL CC recipients (no filtering)
-    const draftCall = (fetch as any).mock.calls[1];
+    // Index 2 because: 0=grant, 1=original message, 2=draft creation
+    const draftCall = (fetch as any).mock.calls[2];
     const draftBody = JSON.parse(draftCall[1].body);
 
     expect(draftBody.cc).toHaveLength(2);

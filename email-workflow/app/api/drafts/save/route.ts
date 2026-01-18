@@ -31,11 +31,73 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
-// Helper to build Gmail-native quoted reply HTML
-// Structure based on how Gmail natively formats replies:
-// - gmail_extra: wraps the entire quote section (used by quote detection libraries)
-// - gmail_attr: marks the attribution line ("On [date] wrote:")
-// - gmail_quote: marks the quoted content blockquote
+// Extract just the reply text from draft body (before any quoted section)
+export function extractReplyText(draftBody: string): string {
+  const lines = draftBody.split('\n');
+  const replyLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Stop when we hit the quote attribution line
+    if (trimmed.startsWith('On ') && trimmed.includes('wrote:')) {
+      break;
+    }
+
+    // Stop when we hit quoted lines (> prefix)
+    if (trimmed.startsWith('>')) {
+      break;
+    }
+
+    replyLines.push(line);
+  }
+
+  return replyLines.join('\n').trim();
+}
+
+// Build Gmail-native quoted reply HTML
+// Uses the ORIGINAL message HTML in the blockquote (not markdown-converted text)
+// This is critical for email clients to properly collapse quotes
+export function buildGmailQuotedReplyWithHtml(
+  replyText: string,
+  originalMessageHtml: string,
+  originalSender: { name?: string; email: string },
+  originalDate: number
+): string {
+  // Convert reply to HTML via markdown (handles escaping)
+  // breaks: true preserves single newlines (e.g., "Thanks,\nPaul")
+  const replyHtml = marked.parse(replyText, { breaks: true }) as string;
+
+  // Format the attribution line
+  const date = new Date(originalDate * 1000);
+  const dateStr = date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const timeStr = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  const senderName = originalSender.name || originalSender.email;
+  const attribution = `On ${dateStr} at ${timeStr}, ${senderName} &lt;${originalSender.email}&gt;`;
+
+  // Build Gmail-native HTML structure with ORIGINAL message HTML
+  // This structure is recognized by email clients (Gmail, Superhuman, etc.) for quote collapsing
+  return `<div dir="ltr">${replyHtml}</div>
+<div class="gmail_extra"><br>
+<div class="gmail_quote"><div dir="ltr" class="gmail_attr">${attribution} wrote:<br></div>
+<blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex">
+${originalMessageHtml}
+</blockquote>
+</div>
+</div>`;
+}
+
+// Legacy function for backward compatibility (used by tests)
+// Note: This produces escaped text, not original HTML - may not collapse in all clients
 export function buildGmailQuotedReply(draftBody: string): string {
   const lines = draftBody.split('\n');
   const replyLines: string[] = [];
@@ -46,7 +108,6 @@ export function buildGmailQuotedReply(draftBody: string): string {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Detect quote attribution line (e.g., "On Jan 10, 2024 at 3:45 PM John Doe <john@example.com> wrote:")
     if (trimmed.startsWith('On ') && trimmed.includes('wrote:')) {
       inQuotedSection = true;
       quoteAttribution = trimmed.replace(' wrote:', '');
@@ -55,27 +116,20 @@ export function buildGmailQuotedReply(draftBody: string): string {
 
     if (trimmed.startsWith('>')) {
       inQuotedSection = true;
-      quotedLines.push(trimmed.slice(1).trim()); // Remove > prefix
+      quotedLines.push(trimmed.slice(1).trim());
     } else if (inQuotedSection) {
-      // Still in quoted section, but no > prefix (blank line or continuation)
       quotedLines.push(trimmed);
     } else {
-      // Reply content (before quoted section) - keep original line for markdown
       replyLines.push(line);
     }
   }
 
-  // Convert reply to HTML via markdown (handles escaping)
-  // breaks: true preserves single newlines (e.g., "Thanks,\nPaul")
   const replyHtml = marked.parse(replyLines.join('\n'), { breaks: true }) as string;
 
-  // Quoted content: escape HTML manually (it's original email text, not markdown)
   const escapedQuoted = quotedLines
     .map(line => escapeHtml(line) || '&nbsp;')
     .join('<br>\n');
 
-  // Build Gmail-native HTML structure
-  // This structure is recognized by email clients (Gmail, Superhuman, etc.) for quote collapsing
   if (quotedLines.length > 0) {
     const attributionHtml = quoteAttribution
       ? `<div dir="ltr" class="gmail_attr">${escapeHtml(quoteAttribution)} wrote:<br></div>`
@@ -91,7 +145,6 @@ export function buildGmailQuotedReply(draftBody: string): string {
 </div>`;
   }
 
-  // No quoted content, just return reply
   return `<div dir="ltr">${replyHtml}</div>`;
 }
 
@@ -154,8 +207,45 @@ export async function POST(request: Request) {
       ? cc.filter((recipient) => recipient.email !== userEmail)
       : cc;
 
-    // Convert to Gmail-native HTML format for proper rendering
-    const htmlBody = buildGmailQuotedReply(draftBody);
+    // Fetch the original message to get its HTML body for proper quote collapsing
+    const originalMsgRes = await fetch(
+      `https://api.us.nylas.com/v3/grants/${process.env.NYLAS_GRANT_ID}/messages/${latestMessageId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.NYLAS_API_KEY}`,
+        },
+      }
+    );
+
+    let htmlBody: string;
+
+    if (originalMsgRes.ok) {
+      const originalMsg = await originalMsgRes.json();
+      const originalHtml = originalMsg.data?.body || '';
+      const originalSender = originalMsg.data?.from?.[0] || { email: 'unknown@example.com' };
+      const originalDate = originalMsg.data?.date || Math.floor(Date.now() / 1000);
+
+      // Extract just the reply text (before quoted section)
+      const replyText = extractReplyText(draftBody);
+
+      // Build HTML with original message HTML in blockquote
+      htmlBody = buildGmailQuotedReplyWithHtml(
+        replyText,
+        originalHtml,
+        originalSender,
+        originalDate
+      );
+
+      console.log('Using original message HTML for quote collapsing:', {
+        originalMessageId: latestMessageId,
+        originalSender: originalSender.email,
+        originalHtmlLength: originalHtml.length,
+      });
+    } else {
+      // Fallback to legacy method if we can't fetch original message
+      console.warn('Could not fetch original message, using legacy quote method');
+      htmlBody = buildGmailQuotedReply(draftBody);
+    }
 
     console.log('Saving draft to Nylas:', {
       threadId,
