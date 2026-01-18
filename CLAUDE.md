@@ -725,15 +725,27 @@ Available tables: `function_logs` (console output), `function_edge_logs` (HTTP s
 
 ### Nylas API Email Rendering
 
-**Always use Nylas `/messages/clean` endpoint for email content:**
+**Use Nylas `/messages/clean` endpoint with defaults - don't fight the API.**
 
-1. **Use `ignore_images: false`** - Setting `ignore_images: true` causes the API to replace `<img>` tags with literal 'span' text, breaking email rendering. Always set to `false` to preserve proper content.
+**Key learnings:**
 
-2. **Enable `html_as_markdown: true`** - Convert HTML emails to markdown for easier parsing and rendering.
+1. **Use Nylas defaults** - Don't override `ignore_links` or `ignore_images`. The defaults (`true`) are designed to strip signature junk (URLs, images, tables).
 
-3. **Preserve line breaks** - Split email content by `\n` and render each line as a separate paragraph element to maintain proper formatting.
+2. **Only set `html_as_markdown: true`** - This converts HTML to readable text. Let Nylas handle all other cleanup.
 
-4. **Style quoted replies** - Detect lines starting with `>` and style them with gray text, italic font, left padding, and a left border to visually distinguish quoted content.
+3. **Don't add custom regex** - Earlier attempts added 25+ regex patterns to clean email content. This is wrong. Trust the API to do its job.
+
+4. **Render with CSS** - Use `whitespace-pre-wrap` and `break-words` to display content. No need to split lines or parse markdown.
+
+**Nylas Clean defaults:**
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `ignore_links` | `true` | Removes URLs from signatures |
+| `ignore_images` | `true` | Removes images from signatures |
+| `ignore_tables` | `true` | Removes table elements |
+| `remove_conclusion_phrases` | `true` | Removes "Best", "Regards" |
+
+**Note:** Nylas does NOT strip signature text entirely (name, title, company). It only removes links/images/tables from signatures. This is acceptable for quick-glance email viewing.
 
 **Example:**
 ```typescript
@@ -747,11 +759,16 @@ const res = await fetch(
     },
     body: JSON.stringify({
       message_id: messageIds,
-      ignore_images: false, // Don't ignore images - prevents 'span' text
+      // Use defaults - don't override ignore_links or ignore_images
       html_as_markdown: true,
     }),
   }
 );
+
+// Render simply:
+<div className="whitespace-pre-wrap break-words">
+  {content.trim()}
+</div>
 ```
 
 ---
